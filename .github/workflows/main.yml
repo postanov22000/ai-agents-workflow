@@ -1,8 +1,8 @@
 name: Auto-Responder
 on:
   schedule:
-    - cron: '*/5 * * * *'  # Runs every 5 minutes
-  workflow_dispatch:  # Must be at root level
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 jobs:
   respond:
@@ -15,6 +15,7 @@ jobs:
           python-version: '3.9'
       - name: Install dependencies
         run: |
+          pip install --upgrade pip
           pip install -r requirements.txt
           python -m spacy download en_core_web_sm
           python -m nltk.downloader vader_lexicon
