@@ -22,17 +22,29 @@ jobs:
           python -m spacy download en_core_web_sm
           python -m nltk.downloader vader_lexicon
       
-      - name: Create and validate token.json
+      - name: Create and validate token
         run: |
-          # Create token file without jq validation
-          echo '${{ secrets.GMAIL_TOKEN_JSON }}' > token.json
+          # Write token with proper newlines
+          cat <<EOF > token.json
+          ${{ secrets.GMAIL_TOKEN_JSON }}
+          EOF
           
-          # Python-based JSON validation
-          if python -c "import json, sys; json.load(open('token.json')); print('Token is valid JSON')"; then
-            echo "Token created successfully"
-            echo "Token size: $(wc -c < token.json) bytes"
+          # Strict validation
+          if python -c "
+import json, sys
+try:
+    with open('token.json') as f:
+        data = json.load(f)
+    assert 'token' in data or 'refresh_token' in data
+    print('Token validation passed')
+except Exception as e:
+    print(f'Token validation failed: {str(e)}')
+    sys.exit(1)
+          "; then
+            echo "Token is valid"
+            echo "First 50 chars: $(head -c 50 token.json)"
           else
-            echo "ERROR: Invalid token.json"
+            echo "ERROR: Invalid token"
             exit 1
           fi
       
