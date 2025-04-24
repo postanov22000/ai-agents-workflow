@@ -32,37 +32,35 @@ jobs:
           echo '${{ secrets.GMAIL_TOKEN_JSON }}' > token.json
           
           # Enhanced validation
-          if python -c "
-import json, sys, os
-try:
-    if not os.path.exists('token.json'):
-        print('Error: token.json not created')
-        sys.exit(1)
-        
-    with open('token.json') as f:
-        content = f.read().strip()
-        if not content:
-            print('Error: token.json is empty')
-            sys.exit(1)
-            
-        data = json.loads(content)
-        
-    required_fields = {'token', 'refresh_token', 'client_id', 'client_secret', 'scopes'}
-    if not all(field in data for field in required_fields):
-        print(f'Error: Missing required fields. Found: {list(data.keys())}')
-        sys.exit(1)
-        
-    print('Token validation successful')
-except json.JSONDecodeError as e:
-    print(f'Invalid JSON: {str(e)}')
-    print('File content:')
-    with open('token.json') as f:
-        print(f.read())
-    sys.exit(1)
-except Exception as e:
-    print(f'Validation error: {str(e)}')
-    sys.exit(1)
-          "; then
+          if python -c "import json, sys, os
+          try:
+              if not os.path.exists('token.json'):
+                  print('Error: token.json not created')
+                  sys.exit(1)
+                  
+              with open('token.json') as f:
+                  content = f.read().strip()
+                  if not content:
+                      print('Error: token.json is empty')
+                      sys.exit(1)
+                      
+                  data = json.loads(content)
+                  
+              required_fields = {'token', 'refresh_token', 'client_id', 'client_secret', 'scopes'}
+              if not all(field in data for field in required_fields):
+                  print(f'Error: Missing required fields. Found: {list(data.keys())}')
+                  sys.exit(1)
+                  
+              print('Token validation successful')
+          except json.JSONDecodeError as e:
+              print(f'Invalid JSON: {str(e)}')
+              print('File content:')
+              with open('token.json') as f:
+                  print(f.read())
+              sys.exit(1)
+          except Exception as e:
+              print(f'Validation error: {str(e)}')
+              sys.exit(1)"; then
             echo "✅ Token is valid"
             echo "ℹ️ Token info:"
             python -c "import json; d=json.load(open('token.json')); print(f'Scopes: {d['scopes']}\nExpires: {d.get('expiry')}')"
