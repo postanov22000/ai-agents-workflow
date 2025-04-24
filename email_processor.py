@@ -1,5 +1,9 @@
 import base64
 from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials  # <-- Add this import
+
+# Your existing SCOPES definition
+SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 
 def get_unread_emails():
     creds = Credentials.from_authorized_user_file('token.json', SCOPES)
