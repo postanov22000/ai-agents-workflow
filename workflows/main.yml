@@ -1,4 +1,26 @@
-# First-time authentication
+name: Run Responder
+on: [workflow_dispatch]
+jobs:
+  respond:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          python -m spacy download en_core_web_sm
+      - name: Run Responder
+        env:
+          GMAIL_CREDS: ${{ secrets.GMAIL_CREDS }}  # Store credentials.json as secret
+        run: python src/responder.py
+        
+        
+        
+        # First-time authentication
 python -c "from auth import authenticate; authenticate()"
 
 # Run the responder
