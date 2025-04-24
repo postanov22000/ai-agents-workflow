@@ -1,5 +1,9 @@
-name: Run Responder
-on: [workflow_dispatch]
+name: Auto-Responder
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # Runs every 5 minutes
+  workflow_dispatch:
+
 jobs:
   respond:
     runs-on: ubuntu-latest
@@ -15,13 +19,8 @@ jobs:
           python -m spacy download en_core_web_sm
       - name: Run Responder
         env:
-          GMAIL_CREDS: ${{ secrets.GMAIL_CREDS }}  # Store credentials.json as secret
-        run: python src/responder.py
-        
-        
-        
-        # First-time authentication
-python -c "from auth import authenticate; authenticate()"
-
-# Run the responder
-python responder.py
+          GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+          GITHUB_ACTIONS: "true"
+        run: python responder.py
