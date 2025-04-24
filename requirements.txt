@@ -1,0 +1,4 @@
+google-auth-oauthlib==1.0.0
+google-api-python-client==2.104.0
+spacy==3.7.2
+nltk==3.8.1
