@@ -1,9 +1,11 @@
-import os  # Add this line at the very top
-from nltk.sentiment import SentimentIntensityAnalyzer
+import os
 import spacy
-if os.getenv("GITHUB_ACTIONS") == "true":
-    respond_to_emails()  # Run once
-else:
-    while True:  # Local testing
-        respond_to_emails()
-        time.sleep(300)
+from nltk.sentiment import SentimentIntensityAnalyzer
+
+nlp = spacy.load("en_core_web_sm")
+sia = SentimentIntensityAnalyzer()
+
+def generate_response(email_text):
+    # Your existing response generation logic here
+    doc = nlp(email_text)
+    # ... rest of your function
