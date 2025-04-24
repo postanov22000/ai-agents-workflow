@@ -5,8 +5,7 @@ flow = InstalledAppFlow.from_client_secrets_file(
     scopes=['https://www.googleapis.com/auth/gmail.modify']
 )
 creds = flow.run_local_server(port=0)
-print('Copy ALL content between === lines:')
-print('=== START TOKEN ===')
+print('=== COPY BELOW THIS LINE ===')
 print(creds.to_json())
-print('=== END TOKEN ===')
+print('=== END OF TOKEN ===')
 "
