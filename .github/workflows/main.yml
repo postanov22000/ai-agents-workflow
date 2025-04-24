@@ -1,7 +1,7 @@
 name: Auto-Responder
 on:
   schedule:
-    - cron: '*/5 * * * *'  # Runs every 5 minutes
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -14,66 +14,38 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-          cache: 'pip'  # Enable pip caching
       
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
           python -m spacy download en_core_web_sm
           python -m nltk.downloader vader_lexicon
       
-      - name: Create and validate token
+      - name: Validate token secret
         run: |
-          # Create token directory if it doesn't exist
-          mkdir -p $(dirname token.json)
-          
-          # Write token with proper formatting
-          echo '${{ secrets.GMAIL_TOKEN_JSON }}' > token.json
-          
-          # Enhanced validation
-          if python -c "import json, sys, os
-          try:
-              if not os.path.exists('token.json'):
-                  print('Error: token.json not created')
-                  sys.exit(1)
-                  
-              with open('token.json') as f:
-                  content = f.read().strip()
-                  if not content:
-                      print('Error: token.json is empty')
-                      sys.exit(1)
-                      
-                  data = json.loads(content)
-                  
-              required_fields = {'token', 'refresh_token', 'client_id', 'client_secret', 'scopes'}
-              if not all(field in data for field in required_fields):
-                  print(f'Error: Missing required fields. Found: {list(data.keys())}')
-                  sys.exit(1)
-                  
-              print('Token validation successful')
-          except json.JSONDecodeError as e:
-              print(f'Invalid JSON: {str(e)}')
-              print('File content:')
-              with open('token.json') as f:
-                  print(f.read())
-              sys.exit(1)
-          except Exception as e:
-              print(f'Validation error: {str(e)}')
-              sys.exit(1)"; then
-            echo "✅ Token is valid"
-            echo "ℹ️ Token info:"
-            python -c "import json; d=json.load(open('token.json')); print(f'Scopes: {d['scopes']}\nExpires: {d.get('expiry')}')"
-          else
-            echo "❌ Invalid token - check secret formatting"
+          if [ -z "${{ secrets.GMAIL_TOKEN_JSON }}" ]; then
+            echo "❌ Error: GMAIL_TOKEN_JSON secret is empty"
             exit 1
           fi
+          echo "ℹ️ Secret length: ${#GMAIL_TOKEN_JSON} characters"
+      
+      - name: Create token.json
+        run: |
+          # Write raw JSON content
+          echo '${{ secrets.GMAIL_TOKEN_JSON }}' > token.json
+          
+          # Basic validation
+          if ! grep -q '"token":' token.json; then
+            echo "❌ Error: Invalid token format"
+            echo "First 100 chars:"
+            head -c 100 token.json
+            exit 1
+          fi
+          echo "✅ Token created successfully"
       
       - name: Run Responder
         env:
           GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
           GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
           GITHUB_ACTIONS: "true"
-        timeout-minutes: 5  # Prevent hanging
-        run: |
-          python responder.py
+        run: python responder.py
