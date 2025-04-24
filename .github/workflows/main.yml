@@ -14,11 +14,10 @@ jobs:
         with:
           python-version: '3.9'
       - name: Install dependencies
-      - name: Install dependencies
-  run: |
-    pip install -r requirements.txt
-    python -m spacy download en_core_web_sm
-    python -m nltk.downloader vader_lexicon
+        run: |
+          pip install -r requirements.txt
+          python -m spacy download en_core_web_sm
+          python -m nltk.downloader vader_lexicon
       - name: Run Responder
         env:
           GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
