@@ -26,3 +26,5 @@ jobs:
           GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
           GITHUB_ACTIONS: "true"
         run: python responder.py
+    ls -la token.json  # Verify file creation
+    
