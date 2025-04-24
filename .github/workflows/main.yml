@@ -22,12 +22,15 @@ jobs:
           python -m spacy download en_core_web_sm
           python -m nltk.downloader vader_lexicon
       
-      - name: Create and verify token.json
+      - name: Create and validate token.json
         run: |
-          echo '${{ secrets.GMAIL_TOKEN_JSON }}' > token.json
+          # Create token file with proper formatting
+          echo '${{ secrets.GMAIL_TOKEN_JSON }}' | jq empty > token.json
+          
+          # Verify token
           if [ -s token.json ]; then
             echo "Token created successfully"
-            echo "First few chars of token: $(head -c 30 token.json)..."
+            echo "Token preview: $(head -c 40 token.json)..."
           else
             echo "ERROR: Token creation failed"
             exit 1
@@ -39,5 +42,4 @@ jobs:
           GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
           GITHUB_ACTIONS: "true"
         run: |
-          echo "Starting responder..."
           python responder.py
