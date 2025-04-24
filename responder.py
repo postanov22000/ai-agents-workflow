@@ -2,24 +2,20 @@ from email_processor import get_unread_emails, decode_email
 from ai_response import generate_response
 from auth import authenticate
 import time
+import os
 
-def main():
+def respond_to_emails():
     creds = authenticate()
-    while True:
-        messages = get_unread_emails()
-        for msg in messages:
-            email_text = decode_email(msg)
-            response = generate_response(email_text)
-            
-            # Create reply
-            raw_response = f"From: your_email@gmail.com\nTo: {msg['from']}\nSubject: Re: {msg['subject']}\n\n{response}"
-            
-            # Send email
-            service = build('gmail', 'v1', credentials=creds)
-            message = {'raw': base64.urlsafe_b64encode(raw_response.encode()).decode()}
-            service.users().messages().send(userId='me', body=message).execute()
-            
-        time.sleep(300)  # Check every 5 minutes
+    messages = get_unread_emails()
+    for msg in messages:
+        email_text = decode_email(msg)
+        response = generate_response(email_text)
+        # ... rest of your email sending logic
 
 if __name__ == "__main__":
-    main()
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        respond_to_emails()  # Run once
+    else:
+        while True:  # Local testing
+            respond_to_emails()
+            time.sleep(300)
