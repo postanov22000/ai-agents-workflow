@@ -1,0 +1,5 @@
+# First-time authentication
+python -c "from auth import authenticate; authenticate()"
+
+# Run the responder
+python responder.py
