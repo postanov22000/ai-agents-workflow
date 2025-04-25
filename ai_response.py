@@ -1,11 +1,16 @@
-import os
-import spacy
-from nltk.sentiment import SentimentIntensityAnalyzer
+from google_auth_oauthlib.flow import InstalledAppFlow
 
-nlp = spacy.load("en_core_web_sm")
-sia = SentimentIntensityAnalyzer()
+SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 
-def generate_response(email_text):
-    # Your existing response generation logic here
-    doc = nlp(email_text)
-    # ... rest of your function
+flow = InstalledAppFlow.from_client_secrets_file(
+    'credentials.json',
+    scopes=SCOPES
+)
+creds = flow.run_local_server(port=0)
+
+# Save token to file (optional)
+with open('token.json', 'w') as token_file:
+    token_file.write(creds.to_json())
+
+# Print token JSON string (to copy into GitHub secrets)
+print(creds.to_json())
