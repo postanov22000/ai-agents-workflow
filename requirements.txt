@@ -4,3 +4,4 @@ spacy==3.7.2
 nltk==3.8.1
 python-dotenv==1.0.0
 google-auth==2.23.0
+supabase-py==0.0.6
