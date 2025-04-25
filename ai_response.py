@@ -1,16 +1,17 @@
-from google_auth_oauthlib.flow import InstalledAppFlow
+import spacy
+from nltk.sentiment import SentimentIntensityAnalyzer
 
-SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
+nlp = spacy.load("en_core_web_sm")
+sia = SentimentIntensityAnalyzer()
 
-flow = InstalledAppFlow.from_client_secrets_file(
-    'credentials.json',
-    scopes=SCOPES
-)
-creds = flow.run_local_server(port=0)
+def generate_response(email_text):
+    doc = nlp(email_text)
+    sentiment = sia.polarity_scores(email_text)
 
-# Save token to file (optional)
-with open('token.json', 'w') as token_file:
-    token_file.write(creds.to_json())
-
-# Print token JSON string (to copy into GitHub secrets)
-print(creds.to_json())
+    # Just an example response logic
+    if sentiment["compound"] >= 0.5:
+        return "Thank you for your kind message! I'll get back to you shortly."
+    elif sentiment["compound"] <= -0.5:
+        return "I'm sorry to hear that. Let me know how I can help."
+    else:
+        return "Thanks for your email. I'll respond to you as soon as possible."
