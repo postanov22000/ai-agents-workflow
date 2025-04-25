@@ -96,68 +96,51 @@
 <body>
     <div class="login-container">
         <h1>Welcome Back</h1>
+        <div id="success-message" class="success-message"></div>
         <form id="login-form">
             <div class="form-group">
                 <label for="email">Email</label>
                 <input type="email" id="email" name="email" required>
             </div>
-            
             <div class="form-group">
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" required>
             </div>
-            
             <div class="forgot-password">
                 <a href="#" id="reset-password">Forgot password?</a>
             </div>
-            
             <button type="submit">Log In</button>
-            
             <div id="error-message" class="error-message"></div>
-            
             <div class="signup-link">
                 Don't have an account? <a href="signup.html">Sign up</a>
             </div>
         </form>
     </div>
 
-    <!-- Load Supabase SDK at the end of body -->
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script>
-        // Protective initialization wrapper
-        function initApp() {
-            // Verify Supabase is loaded
-            if (typeof supabase === 'undefined') {
-                document.getElementById('error-message').textContent = 'Error: Authentication service not available';
-                console.error('Supabase SDK not loaded');
-                return;
-            }
-
-            // Initialize client
+        document.addEventListener('DOMContentLoaded', () => {
             const supabaseUrl = 'https://skxzfkudduqrubtgtodp.supabase.co';
             const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODAwNzMsImV4cCI6MjA2MTE1NjA3M30.Wj3V5-swysAz8xAbA4lKmo-NNu_mv1UW_X4BgFNq0ag';
             const sb = supabase.createClient(supabaseUrl, supabaseKey);
 
-            // Safe DOM element access
-            function getElement(id) {
-                const el = document.getElementById(id);
-                if (!el) console.error('Element not found:', id);
-                return el;
+            const loginForm = document.getElementById('login-form');
+            const errorMessage = document.getElementById('error-message');
+            const successMessage = document.getElementById('success-message');
+            const resetPasswordLink = document.getElementById('reset-password');
+
+            // Check for successful confirmation redirect
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('confirmed')) {
+                successMessage.textContent = 'Email confirmed successfully! You can now login.';
             }
 
-            const loginForm = getElement('login-form');
-            const errorMessage = getElement('error-message');
-            const resetPasswordLink = getElement('reset-password');
-
-            if (!loginForm || !errorMessage || !resetPasswordLink) return;
-
-            // Login handler
             loginForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 errorMessage.textContent = '';
                 
-                const email = getElement('email').value;
-                const password = getElement('password').value;
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
 
                 try {
                     const { error } = await sb.auth.signInWithPassword({
@@ -166,40 +149,46 @@
                     });
 
                     if (error) throw error;
-                    
                     window.location.href = 'dashboard.html';
                 } catch (error) {
-                    errorMessage.textContent = error.message || 'Login failed';
-                    console.error('Login error:', error);
+                    if (error.message.includes('Email not confirmed')) {
+                        errorMessage.innerHTML = `
+                            Email not verified. <a href="#" id="resend-confirmation">Resend confirmation email</a>
+                        `;
+                        document.getElementById('resend-confirmation').addEventListener('click', async (e) => {
+                            e.preventDefault();
+                            const { error } = await sb.auth.resend({
+                                type: 'signup',
+                                email: email
+                            });
+                            if (error) {
+                                alert('Error: ' + error.message);
+                            } else {
+                                alert('Confirmation email resent! Check your inbox.');
+                            }
+                        });
+                    } else {
+                        errorMessage.textContent = error.message;
+                    }
                 }
             });
 
-            // Password reset handler
             resetPasswordLink.addEventListener('click', async (e) => {
                 e.preventDefault();
-                const email = prompt("Please enter your email address for password reset:");
-                
+                const email = prompt("Enter your email for password reset:");
                 if (email) {
                     try {
                         const { error } = await sb.auth.resetPasswordForEmail(email, {
                             redirectTo: window.location.origin + '/update-password.html'
                         });
-                        
                         if (error) throw error;
-                        alert("Password reset email sent!");
+                        alert("Password reset link sent to your email!");
                     } catch (error) {
                         alert("Error: " + error.message);
                     }
                 }
             });
-        }
-
-        // Start initialization when both DOM and Supabase are ready
-        if (document.readyState === 'complete') {
-            initApp();
-        } else {
-            window.addEventListener('DOMContentLoaded', initApp);
-        }
+        });
     </script>
 </body>
 </html>
