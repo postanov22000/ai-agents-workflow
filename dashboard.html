@@ -1,0 +1,27 @@
+<!-- Basic protected page example -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>Welcome to your Dashboard</h1>
+    <button id="logout-btn">Log Out</button>
+    
+    <script>
+        const supabase = supabase.createClient('https://your-project-ref.supabase.co', 'your-anon-key');
+        
+        // Check auth state
+        supabase.auth.getUser().then(({ data: { user } }) => {
+            if (!user) window.location.href = '/signup.html';
+        });
+        
+        // Logout
+        document.getElementById('logout-btn').addEventListener('click', async () => {
+            await supabase.auth.signOut();
+            window.location.href = '/signup.html';
+        });
+    </script>
+</body>
+</html>
