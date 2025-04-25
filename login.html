@@ -123,54 +123,57 @@
         </form>
     </div>
 
-    <script>
-        // Initialize Supabase
-        const supabaseUrl = 'https://skxzfkudduqrubtgtodp.supabase.co';
-        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODAwNzMsImV4cCI6MjA2MTE1NjA3M30.Wj3V5-swysAz8xAbA4lKmo-NNu_mv1UW_X4BgFNq0ag';
-        const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+  <script>
+        // Wait for the page to fully load before executing
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize Supabase client
+            const supabaseUrl = 'https://skxzfkudduqrubtgtodp.supabase.co';
+            const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODAwNzMsImV4cCI6MjA2MTE1NjA3M30.Wj3V5-swysAz8xAbA4lKmo-NNu_mv1UW_X4BgFNq0ag';
+            const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
-        // DOM elements
-        const loginForm = document.getElementById('login-form');
-        const errorMessage = document.getElementById('error-message');
-        const resetPasswordLink = document.getElementById('reset-password');
+            // Get DOM elements
+            const loginForm = document.getElementById('login-form');
+            const errorMessage = document.getElementById('error-message');
+            const resetPasswordLink = document.getElementById('reset-password');
 
-        // Handle login
-        loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            errorMessage.textContent = '';
-            
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-
-            try {
-                const { data, error } = await supabase.auth.signInWithPassword({
-                    email,
-                    password
-                });
-
-                if (error) throw error;
+            // Login handler
+            loginForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                errorMessage.textContent = '';
                 
-                // Redirect to dashboard on successful login
-                window.location.href = 'dashboard.html';
-            } catch (error) {
-                errorMessage.textContent = error.message;
-            }
-        });
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
 
-        // Handle password reset
-        resetPasswordLink.addEventListener('click', async (e) => {
-            e.preventDefault();
-            const email = prompt("Please enter your email address for password reset:");
-            
-            if (email) {
                 try {
-                    const { error } = await supabase.auth.resetPasswordForEmail(email);
+                    const { error } = await supabase.auth.signInWithPassword({
+                        email,
+                        password
+                    });
+
                     if (error) throw error;
-                    alert("Password reset link sent to your email!");
+                    
+                    window.location.href = 'dashboard.html';
                 } catch (error) {
-                    alert("Error sending reset link: " + error.message);
+                    errorMessage.textContent = error.message;
+                    console.error('Login error:', error);
                 }
-            }
+            });
+
+            // Password reset handler
+            resetPasswordLink.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const email = prompt("Please enter your email address for password reset:");
+                
+                if (email) {
+                    try {
+                        const { error } = await supabase.auth.resetPasswordForEmail(email);
+                        if (error) throw error;
+                        alert("Password reset link sent to your email!");
+                    } catch (error) {
+                        alert("Error sending reset link: " + error.message);
+                    }
+                }
+            });
         });
     </script>
 </body>
