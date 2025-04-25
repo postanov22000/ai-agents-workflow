@@ -96,82 +96,50 @@
                 <label for="name">Full Name</label>
                 <input type="text" id="name" name="name">
             </div>
-            
             <div class="form-group">
                 <label for="email">Email</label>
                 <input type="email" id="email" name="email" required>
             </div>
-            
             <div class="form-group">
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" required minlength="6">
             </div>
-            
             <div class="form-group">
                 <label for="confirm-password">Confirm Password</label>
                 <input type="password" id="confirm-password" name="confirm-password" required>
             </div>
-            
             <button type="submit">Sign Up</button>
-            
             <div id="error-message" class="error-message"></div>
             <div id="success-message" class="success-message"></div>
-            
             <div class="login-link">
                 Already have an account? <a href="login.html">Log in</a>
             </div>
         </form>
     </div>
 
-    <!-- Load Supabase at the end of body -->
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script>
-        // Safe initialization function
-        function initApp() {
-            // Verify Supabase is loaded
-            if (typeof supabase === 'undefined') {
-                document.getElementById('error-message').textContent = 'Authentication service unavailable';
-                console.error('Supabase SDK not loaded');
-                return;
-            }
-
-            // Initialize client
+        document.addEventListener('DOMContentLoaded', () => {
             const supabaseUrl = 'https://skxzfkudduqrubtgtodp.supabase.co';
             const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODAwNzMsImV4cCI6MjA2MTE1NjA3M30.Wj3V5-swysAz8xAbA4lKmo-NNu_mv1UW_X4BgFNq0ag';
             const sb = supabase.createClient(supabaseUrl, supabaseKey);
 
-            // Safe DOM element access
-            function getElement(id) {
-                const el = document.getElementById(id);
-                if (!el) console.error('Element not found:', id);
-                return el;
-            }
+            const signupForm = document.getElementById('signup-form');
+            const errorMessage = document.getElementById('error-message');
+            const successMessage = document.getElementById('success-message');
 
-            const signupForm = getElement('signup-form');
-            const errorMessage = getElement('error-message');
-            const successMessage = getElement('success-message');
-
-            if (!signupForm || !errorMessage || !successMessage) return;
-
-            // Handle signup
             signupForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 errorMessage.textContent = '';
                 successMessage.textContent = '';
                 
-                const email = getElement('email').value;
-                const password = getElement('password').value;
-                const confirmPassword = getElement('confirm-password').value;
-                const name = getElement('name').value;
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const confirmPassword = document.getElementById('confirm-password').value;
+                const name = document.getElementById('name').value;
 
-                // Client-side validation
                 if (password !== confirmPassword) {
                     errorMessage.textContent = 'Passwords do not match';
-                    return;
-                }
-
-                if (password.length < 6) {
-                    errorMessage.textContent = 'Password must be at least 6 characters';
                     return;
                 }
 
@@ -180,30 +148,26 @@
                         email,
                         password,
                         options: {
-                            data: {
-                                full_name: name,
-                                email_redirect_to: window.location.origin
-                            }
+                            data: { full_name: name },
+                            emailRedirectTo: window.location.origin + '/login.html?confirmed=true'
                         }
                     });
 
                     if (error) throw error;
                     
-                    successMessage.textContent = 'Signup successful! Please check your email for confirmation.';
+                    successMessage.innerHTML = `
+                        Signup successful!<br>
+                        We've sent a confirmation email to <strong>${email}</strong>.<br>
+                        Please verify your email before logging in.
+                    `;
                     signupForm.reset();
                 } catch (error) {
-                    errorMessage.textContent = error.message || 'Signup failed';
-                    console.error('Signup error:', error);
+                    errorMessage.textContent = error.message.includes('already registered') 
+                        ? 'This email is already registered. Try logging in or resetting your password.' 
+                        : error.message;
                 }
             });
-        }
-
-        // Start initialization when ready
-        if (document.readyState === 'complete') {
-            initApp();
-        } else {
-            document.addEventListener('DOMContentLoaded', initApp);
-        }
+        });
     </script>
 </body>
 </html>
