@@ -1,21 +1,18 @@
-from email_processor import get_unread_emails, decode_email
-from ai_response import generate_response
-from auth import authenticate
-import time
-import os
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
-def respond_to_emails():
-    creds = authenticate()
-    messages = get_unread_emails()
-    for msg in messages:
-        email_text = decode_email(msg)
-        response = generate_response(email_text)
-        # ... rest of your email sending logic
+def send_email(creds, to, subject, body_text):
+    service = build('gmail', 'v1', credentials=creds)
+    from email.mime.text import MIMEText
+    import base64
 
-if __name__ == "__main__":
-    if os.getenv("GITHUB_ACTIONS") == "true":
-        respond_to_emails()  # Run once
-    else:
-        while True:  # Local testing
-            respond_to_emails()
-            time.sleep(300)
+    message = MIMEText(body_text)
+    message['to'] = to
+    message['subject'] = subject
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+
+    try:
+        message = service.users().messages().send(userId="me", body={'raw': raw}).execute()
+        print(f"✅ Sent email to {to}, ID: {message['id']}")
+    except HttpError as error:
+        print(f"❌ Failed to send email: {error}")
