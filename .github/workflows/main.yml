@@ -49,3 +49,18 @@ jobs:
           GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
           GITHUB_ACTIONS: "true"
         run: python responder.py
+        run: deploy-edge-fns:
+  needs: test
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - name: Install Deno
+      run: curl -fsSL https://deno.land/x/install/install.sh | sh
+    - name: Deploy Edge Functions
+      env:
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      run: |
+        supabase login --service-role $SUPABASE_SERVICE_ROLE_KEY
+        supabase functions deploy email-processor --project-ref $SUPABASE_PROJECT_REF
+        supabase functions deploy generate-response --project-ref $SUPABASE_PROJECT_REF
