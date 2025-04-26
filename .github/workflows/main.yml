@@ -13,10 +13,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Setup Deno (specific version)
-        uses: denoland/setup-deno@v1
-        with:
-          deno-version: 1.39.2  # ✅ Pin to 1.39.2 (not latest!)
+    - name: Setup Deno
+  uses: denoland/setup-deno@v1
+  with:
+    deno-version: 1.37.2
+
 
       - name: Install Supabase CLI
         run: |
