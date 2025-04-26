@@ -80,7 +80,7 @@ def send_email_via_gmail(email):
 def mark_email_complete(email_id):
     headers = {
         "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-        "apikey": SUPABASE_SERVICE_ROLE_KEY,           # ← must include
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,           # ← must includ
         "Content-Type": "application/json",
     }
     resp = requests.patch(
