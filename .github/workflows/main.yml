@@ -1,66 +1,39 @@
-name: Auto-Responder
+name: Deploy Supabase Edge Functions
+
 on:
-  schedule:
-    - cron: '*/5 * * * *'
-  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
-  respond:
+  deploy-edge-fns:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
         with:
-          python-version: '3.9'
-      
-      - name: Install dependencies
+          deno-version: v1.x
+
+      - name: Setup Supabase CLI
         run: |
-          pip install -r requirements.txt
-          python -m spacy download en_core_web_sm
-          python -m nltk.downloader vader_lexicon
-      
-      - name: Validate token secret
-        run: |
-          if [ -z "${{ secrets.GMAIL_TOKEN_JSON }}" ]; then
-            echo "❌ Error: GMAIL_TOKEN_JSON secret is empty"
-            exit 1
-          fi
-          echo "ℹ️ Secret length: ${#GMAIL_TOKEN_JSON} characters"
-      
-      - name: Create token.json
-        run: |
-          # Write raw JSON content
-          echo '${{ secrets.GMAIL_TOKEN_JSON }}' > token.json
-          
-          # Basic validation
-          if ! grep -q '"token":' token.json; then
-            echo "❌ Error: Invalid token format"
-            echo "First 100 chars:"
-            head -c 100 token.json
-            exit 1
-          fi
-          echo "✅ Token created successfully"
-      
-      - name: Run Responder
+          curl -sL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+          npm install -g supabase
+
+      - name: Deploy email-processor function
         env:
-          GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
-          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
-          GITHUB_ACTIONS: "true"
-        run: python responder.py
-        run: deploy-edge-fns:
-  needs: test
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - name: Install Deno
-      run: curl -fsSL https://deno.land/x/install/install.sh | sh
-    - name: Deploy Edge Functions
-      env:
-        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-      run: |
-        supabase login --service-role $SUPABASE_SERVICE_ROLE_KEY
-        supabase functions deploy email-processor --project-ref $SUPABASE_PROJECT_REF
-        supabase functions deploy generate-response --project-ref $SUPABASE_PROJECT_REF
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: |
+          supabase functions deploy email-processor --project-ref $SUPABASE_PROJECT_ID
+
+      - name: Deploy generate-response function
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: |
+          supabase functions deploy generate-response --project-ref $SUPABASE_PROJECT_ID
