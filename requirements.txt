@@ -5,5 +5,10 @@ nltk==3.8.1
 python-dotenv==1.0.0
 google-auth==2.23.0
 npm install @supabase/supabase-js
+requests
+google-api-python-client
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
 
 
