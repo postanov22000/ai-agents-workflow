@@ -10,24 +10,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Setup Deno
-      - name: Setup Deno
+      - name: Setup Deno (specific version)
         uses: denoland/setup-deno@v1
         with:
-          deno-version: v1.x
+          deno-version: 1.39.2  # ✅ Pin to 1.39.2 (not latest!)
 
-      # Install Supabase CLI from GitHub release
       - name: Install Supabase CLI
         run: |
           curl -sSL https://github.com/supabase/cli/releases/download/v1.0.0/supabase_1.0.0_linux_amd64.tar.gz -o supabase-cli.tar.gz
           tar -xvzf supabase-cli.tar.gz
           sudo mv supabase /usr/local/bin/
 
-      # Deploy email-processor function
       - name: Deploy email-processor function
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -35,7 +31,6 @@ jobs:
         run: |
           supabase functions deploy email-processor --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
 
-      # Deploy generate-response function
       - name: Deploy generate-response function
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
