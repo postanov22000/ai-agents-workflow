@@ -20,12 +20,12 @@ jobs:
         with:
           deno-version: v1.x
 
-      # Setup Supabase CLI
-      - name: Setup Supabase CLI
+      # Install Supabase CLI using the recommended method
+      - name: Install Supabase CLI
         run: |
-          curl -sL https://deb.nodesource.com/setup_18.x | sudo -E bash -  # Installs Node.js 18.x
-          sudo apt-get install -y nodejs  # Installs Node.js
-          npm install -g supabase  # Installs the Supabase CLI
+          curl -sL https://github.com/supabase/cli/releases/download/v1.0.0/supabase_1.0.0_amd64.deb -o supabase.deb
+          sudo dpkg -i supabase.deb
+          sudo apt-get install -f  # This installs any missing dependencies
 
       # Deploy email-processor function
       - name: Deploy email-processor function
