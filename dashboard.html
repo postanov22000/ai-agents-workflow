@@ -1,37 +1,50 @@
-<!-- Basic protected page example -->
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AristoMail AI - Luxury Gmail Assistant</title>
+    <title>Luminai - AI Email Dashboard</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Lato:wght@300;400;700&display=swap">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
-            --navy: #0A1A35;
+            --navy: #0a192f;
+            --teal: #64ffda;
+            --cream: #f5f5f5;
+            --dark-navy: #020c1b;
+            --surface: #112240;
             --gold: #D4AF37;
-            --cream: #F5F5F5;
-            --charcoal: #333333;
-            --emerald: #50C878;
-            --light-gold: rgba(212, 175, 55, 0.1);
-            --gmail-red: #D44638;
+            --glass: rgba(255, 255, 255, 0.05);
         }
-        
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             font-family: 'Lato', sans-serif;
-            background-color: var(--cream);
-            color: var(--charcoal);
+            background: var(--navy);
+            color: var(--cream);
             line-height: 1.6;
+            min-height: 100vh;
         }
-        
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--dark-navy);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--teal);
+            border-radius: 4px;
+        }
+
         .container {
             display: grid;
             grid-template-columns: 1fr 300px;
@@ -39,479 +52,361 @@
             margin: 0 auto;
             min-height: 100vh;
         }
-        
-        /* Header Styles */
+
+        /* Luxurious Header */
         header {
             grid-column: 1 / -1;
-            background-color: var(--navy);
-            padding: 1rem 2rem;
+            background: linear-gradient(135deg, rgba(10, 25, 47, 0.95) 0%, rgba(2, 12, 27, 0.95) 100%);
+            padding: 1.5rem 3rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid var(--gold);
+            border-bottom: 1px solid rgba(100, 255, 218, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
         }
-        
+
         .logo {
             font-family: 'Playfair Display', serif;
-            font-size: 1.8rem;
-            color: var(--gold);
-            font-weight: 700;
+            font-size: 2.2rem;
+            color: var(--teal);
             letter-spacing: 1px;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.8rem;
         }
-        
-        .logo .gmail-badge {
-            background-color: var(--gmail-red);
-            color: white;
-            font-size: 0.7rem;
-            padding: 0.2rem 0.5rem;
-            border-radius: 4px;
-            font-family: 'Lato', sans-serif;
-            margin-left: 0.5rem;
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--teal);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        
+
         .user-nav {
             display: flex;
             align-items: center;
             gap: 1.5rem;
         }
-        
-        .user-nav i {
+
+        .nav-icon {
             color: var(--cream);
-            font-size: 1.2rem;
+            font-size: 1.3rem;
+            padding: 0.8rem;
+            background: rgba(100, 255, 218, 0.05);
+            border-radius: 8px;
             cursor: pointer;
-            transition: color 0.3s;
+            transition: all 0.3s;
         }
-        
-        .user-nav i:hover {
-            color: var(--gold);
+
+        .nav-icon:hover {
+            background: rgba(100, 255, 218, 0.1);
+            transform: translateY(-2px);
         }
-        
+
         .user-avatar {
-            width: 40px;
-            height: 40px;
+            width: 45px;
+            height: 45px;
             border-radius: 50%;
-            border: 2px solid var(--gold);
-            background-color: var(--cream);
+            border: 2px solid var(--teal);
+            background: var(--surface);
             display: flex;
             align-items: center;
             justify-content: center;
-            color: var(--navy);
+            color: var(--teal);
             font-weight: bold;
-            cursor: pointer;
         }
-        
+
         /* Main Content */
         main {
-            padding: 2rem;
-            background-color: white;
-            border-right: 1px solid rgba(10, 26, 53, 0.1);
+            padding: 3rem;
+            background: linear-gradient(45deg, rgba(17, 34, 64, 0.8) 0%, rgba(10, 25, 47, 0.8) 100%);
+            backdrop-filter: blur(20px);
         }
-        
-        /* Hero Section */
+
         .hero {
             text-align: center;
-            padding: 2rem 0;
-            margin-bottom: 2rem;
-            border-bottom: 1px solid var(--gold);
+            padding: 4rem 0;
+            margin-bottom: 3rem;
+            position: relative;
         }
-        
+
+        .hero::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, 
+                transparent 40%, 
+                rgba(100, 255, 218, 0.05) 50%, 
+                transparent 60%
+            );
+            animation: shine 8s infinite;
+        }
+
+        @keyframes shine {
+            0% { transform: translateX(-50%) rotate(45deg); }
+            100% { transform: translateX(50%) rotate(45deg); }
+        }
+
         .hero h1 {
             font-family: 'Playfair Display', serif;
-            font-size: 2.5rem;
-            color: var(--navy);
-            margin-bottom: 1rem;
+            font-size: 3.5rem;
+            color: var(--teal);
+            margin-bottom: 1.5rem;
+            position: relative;
+            z-index: 1;
         }
-        
+
         .hero p {
             font-size: 1.2rem;
-            color: var(--charcoal);
-            margin-bottom: 2rem;
+            color: var(--cream);
+            max-width: 700px;
+            margin: 0 auto 2.5rem;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
         }
-        
+
+        .btn-group {
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+            position: relative;
+            z-index: 1;
+        }
+
         .btn {
-            padding: 0.8rem 1.8rem;
-            border-radius: 4px;
+            padding: 1rem 2rem;
+            border-radius: 8px;
             font-weight: bold;
             text-transform: uppercase;
             letter-spacing: 1px;
             cursor: pointer;
             transition: all 0.3s;
             border: none;
-            font-size: 0.9rem;
         }
-        
+
         .btn-primary {
-            background-color: var(--gold);
+            background: var(--teal);
             color: var(--navy);
-            margin-right: 1rem;
+            box-shadow: 0 5px 15px rgba(100, 255, 218, 0.2);
         }
-        
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(100, 255, 218, 0.3);
+        }
+
         .btn-secondary {
-            background-color: transparent;
-            color: var(--navy);
-            border: 2px solid var(--gold);
+            background: transparent;
+            color: var(--teal);
+            border: 2px solid var(--teal);
         }
-        
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+
+        .btn-secondary:hover {
+            background: rgba(100, 255, 218, 0.1);
         }
-        
-        /* Metrics Cards */
+
+        /* Metrics Grid */
         .metrics {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 1.5rem;
-            margin-bottom: 3rem;
+            gap: 2rem;
+            margin-bottom: 4rem;
         }
-        
+
         .metric-card {
-            background-color: white;
-            border-radius: 8px;
-            padding: 1.5rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-            border-top: 4px solid var(--gold);
-            transition: transform 0.3s;
+            background: linear-gradient(135deg, rgba(17, 34, 64, 0.8) 0%, rgba(10, 25, 47, 0.8) 100%);
+            border-radius: 16px;
+            padding: 2rem;
+            border: 1px solid rgba(100, 255, 218, 0.1);
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
         }
-        
+
         .metric-card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.3);
         }
-        
-        .metric-card h3 {
-            font-size: 0.9rem;
-            color: var(--charcoal);
-            margin-bottom: 1rem;
+
+        .metric-card::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, 
+                transparent 40%, 
+                rgba(100, 255, 218, 0.05) 50%, 
+                transparent 60%
+            );
+            animation: shine 8s infinite;
+        }
+
+        .metric-value {
+            font-size: 2.8rem;
+            color: var(--teal);
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }
+
+        .metric-label {
+            color: rgba(245, 245, 245, 0.8);
+            font-size: 0.95rem;
             text-transform: uppercase;
             letter-spacing: 1px;
         }
-        
-        .metric-value {
-            font-family: 'Montserrat', sans-serif;
-            font-size: 2.5rem;
-            font-weight: bold;
-            margin-bottom: 0.5rem;
+
+        /* Activity Feed */
+        .activity-feed {
+            background: linear-gradient(135deg, rgba(17, 34, 64, 0.8) 0%, rgba(10, 25, 47, 0.8) 100%);
+            border-radius: 16px;
+            padding: 2rem;
+            border: 1px solid rgba(100, 255, 218, 0.1);
         }
-        
-        .metric-card.gold .metric-value {
-            color: var(--gold);
-        }
-        
-        .metric-card.emerald .metric-value {
-            color: var(--emerald);
-        }
-        
-        .metric-card.navy .metric-value {
-            color: var(--navy);
-        }
-        
-        .metric-trend {
-            height: 40px;
-            background-color: var(--light-gold);
-            border-radius: 4px;
-            margin-top: 1rem;
-            position: relative;
-        }
-        
-        .trend-line {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 80%;
-            background: linear-gradient(90deg, var(--gold), transparent);
-            border-radius: 4px;
-        }
-        
-        .stars {
-            color: var(--gold);
-            margin-top: 0.5rem;
-        }
-        
-        /* Recent Activity */
-        .activity {
-            margin-bottom: 3rem;
-        }
-        
-        .activity h2 {
-            font-family: 'Playfair Display', serif;
-            color: var(--navy);
-            margin-bottom: 1.5rem;
-            font-size: 1.8rem;
-        }
-        
+
         .activity-item {
-            display: flex;
             padding: 1.5rem;
-            margin-bottom: 1rem;
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            margin-bottom: 1.5rem;
+            background: rgba(17, 34, 64, 0.5);
+            border-radius: 12px;
             transition: all 0.3s;
-            border-left: 3px solid var(--gold);
         }
-        
-        .activity-item:nth-child(even) {
-            background-color: var(--cream);
-        }
-        
+
         .activity-item:hover {
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            transform: translateX(10px);
+            background: rgba(17, 34, 64, 0.7);
         }
-        
-        .avatar {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            background-color: var(--navy);
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            margin-right: 1.5rem;
-            flex-shrink: 0;
-        }
-        
-        .activity-content {
-            flex-grow: 1;
-        }
-        
+
         .activity-header {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 0.5rem;
+            margin-bottom: 1rem;
         }
-        
-        .contact-name {
+
+        .activity-contact {
+            color: var(--teal);
             font-weight: bold;
-            color: var(--navy);
         }
-        
+
         .activity-time {
-            color: var(--charcoal);
+            color: rgba(245, 245, 245, 0.7);
             font-size: 0.9rem;
         }
-        
-        .email-subject {
-            font-weight: bold;
-            margin-bottom: 0.5rem;
-            color: var(--navy);
+
+        .activity-content {
+            color: rgba(245, 245, 245, 0.9);
+            margin-bottom: 1rem;
         }
-        
-        .email-preview {
-            color: var(--charcoal);
-            font-size: 0.95rem;
-            margin-bottom: 0.5rem;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-        
+
         .activity-actions {
             display: flex;
             gap: 1rem;
         }
-        
+
         .action-btn {
             background: none;
             border: none;
-            color: var(--navy);
+            color: var(--teal);
             cursor: pointer;
-            font-size: 0.9rem;
             display: flex;
             align-items: center;
-            gap: 0.3rem;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            transition: all 0.3s;
         }
-        
-        .action-btn i {
-            color: var(--gold);
+
+        .action-btn:hover {
+            background: rgba(100, 255, 218, 0.1);
         }
-        
+
         /* Sidebar */
         aside {
-            padding: 2rem 1.5rem;
-            background-color: white;
+            padding: 3rem 2rem;
+            background: linear-gradient(135deg, rgba(17, 34, 64, 0.8) 0%, rgba(10, 25, 47, 0.8) 100%);
+            border-left: 1px solid rgba(100, 255, 218, 0.1);
+            backdrop-filter: blur(20px);
         }
-        
+
+        .ai-status {
+            background: rgba(17, 34, 64, 0.5);
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            border: 1px solid var(--teal);
+        }
+
+        .status-text {
+            color: var(--teal);
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .status-subtext {
+            color: rgba(245, 245, 245, 0.8);
+            font-size: 0.9rem;
+        }
+
         .sidebar-section {
             margin-bottom: 2.5rem;
         }
-        
+
         .sidebar-section h3 {
-            font-family: 'Playfair Display', serif;
-            color: var(--navy);
+            color: var(--teal);
             margin-bottom: 1.5rem;
-            font-size: 1.3rem;
-            position: relative;
-            padding-bottom: 0.5rem;
-        }
-        
-        .sidebar-section h3::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 50px;
-            height: 2px;
-            background-color: var(--gold);
-        }
-        
-        .recommendation {
-            display: flex;
-            align-items: flex-start;
-            gap: 1rem;
-            padding: 0.8rem 0;
-            border-bottom: 1px solid rgba(10, 26, 53, 0.1);
-        }
-        
-        .recommendation i {
-            color: var(--gold);
-            margin-top: 0.2rem;
-        }
-        
-        .recommendation-content {
-            font-size: 0.95rem;
-        }
-        
-        .recommendation-content p:first-child {
-            font-weight: bold;
-            color: var(--navy);
-            margin-bottom: 0.2rem;
-        }
-        
-        .recommendation-content p:last-child {
-            color: var(--charcoal);
-            font-size: 0.85rem;
-        }
-        
-        .tone-selector {
-            width: 100%;
-            padding: 0.8rem;
-            border: 1px solid rgba(10, 26, 53, 0.2);
-            border-radius: 4px;
-            background-color: white;
-            color: var(--navy);
-            font-family: 'Lato', sans-serif;
-            margin-top: 0.5rem;
-        }
-        
-        .tone-selector:focus {
-            outline: none;
-            border-color: var(--gold);
-        }
-        
-        .ai-status {
-            background-color: var(--light-gold);
-            padding: 1rem;
-            border-radius: 8px;
-            margin-bottom: 2rem;
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-        
-        .ai-status i {
-            color: var(--gold);
-            font-size: 1.5rem;
-        }
-        
-        .ai-status p {
-            font-size: 0.9rem;
-        }
-        
-        .ai-status p strong {
-            color: var(--navy);
-        }
-        
-        /* Footer */
-        footer {
-            grid-column: 1 / -1;
-            padding: 1.5rem 2rem;
-            background-color: var(--navy);
-            color: white;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-top: 1px solid var(--gold);
-        }
-        
-        .footer-links {
-            display: flex;
-            gap: 1.5rem;
-        }
-        
-        .footer-links a {
-            color: white;
-            text-decoration: none;
-            font-size: 0.9rem;
-            transition: color 0.3s;
-        }
-        
-        .footer-links a:hover {
-            color: var(--gold);
-        }
-        
-        .social-icons {
-            display: flex;
-            gap: 1rem;
-        }
-        
-        .social-icons i {
-            color: white;
-            cursor: pointer;
-            transition: color 0.3s;
-        }
-        
-        .social-icons i:hover {
-            color: var(--gold);
-        }
-        
-        .copyright {
-            font-size: 0.85rem;
-            color: rgba(255, 255, 255, 0.7);
-        }
-        
-        .tagline {
             font-family: 'Playfair Display', serif;
-            color: var(--gold);
-            font-size: 0.95rem;
-            letter-spacing: 1px;
         }
-        
-        /* Responsive Adjustments */
-        @media (max-width: 1024px) {
+
+        .quick-action {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background: rgba(17, 34, 64, 0.5);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .quick-action:hover {
+            background: rgba(17, 34, 64, 0.7);
+            transform: translateX(5px);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1200px) {
             .container {
                 grid-template-columns: 1fr;
             }
-            
+
             aside {
                 display: none;
             }
         }
-        
+
         @media (max-width: 768px) {
             .metrics {
                 grid-template-columns: 1fr;
             }
-            
+
             .hero h1 {
-                font-size: 2rem;
+                font-size: 2.5rem;
             }
-            
-            .btn {
-                display: block;
-                width: 100%;
-                margin-bottom: 1rem;
-            }
-            
-            .btn-primary {
-                margin-right: 0;
+
+            .btn-group {
+                flex-direction: column;
             }
         }
     </style>
@@ -520,186 +415,115 @@
     <div class="container">
         <header>
             <div class="logo">
-                AristoMail AI <span class="gmail-badge">GMAIL</span>
+                <div class="logo-icon">L</div>
+                Luminai
             </div>
             <div class="user-nav">
-                <i class="fas fa-bell"></i>
-                <i class="fas fa-cog"></i>
+                <i class="fas fa-bell nav-icon"></i>
+                <i class="fas fa-cog nav-icon"></i>
                 <div class="user-avatar">JD</div>
             </div>
         </header>
-        
+
         <main>
             <section class="hero">
-                <h1>Your AI-Powered Gmail Assistant</h1>
-                <p>Automatic, intelligent responses with executive polish</p>
-                <div>
-                    <button class="btn btn-primary">Configure Auto-Responder</button>
-                    <button class="btn btn-secondary">Review Recent Replies</button>
+                <h1>AI-Powered Email Excellence</h1>
+                <p>Transform your communication with intelligent, context-aware email responses</p>
+                <div class="btn-group">
+                    <button class="btn btn-primary">Start Free Trial</button>
+                    <button class="btn btn-secondary">View Demo</button>
                 </div>
             </section>
-            
+
             <section class="metrics">
-                <div class="metric-card gold">
-                    <h3>Emails Processed Today</h3>
-                    <div class="metric-value">42</div>
-                    <div class="metric-trend">
-                        <div class="trend-line"></div>
-                    </div>
-                </div>
-                
-                <div class="metric-card emerald">
-                    <h3>Time Saved</h3>
-                    <div class="metric-value">3.2 hours</div>
-                    <div>+15% from yesterday</div>
-                </div>
-                
-                <div class="metric-card navy">
-                    <h3>Response Accuracy</h3>
+                <div class="metric-card">
                     <div class="metric-value">97.3%</div>
-                    <div class="stars">
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star-half-alt"></i>
-                    </div>
+                    <div class="metric-label">Response Accuracy</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">3.2h</div>
+                    <div class="metric-label">Daily Time Saved</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">42</div>
+                    <div class="metric-label">Emails Processed</div>
                 </div>
             </section>
-            
-            <section class="activity">
-                <h2>Recent Automated Responses</h2>
-                
+
+            <section class="activity-feed">
+                <h2>Recent Activity</h2>
                 <div class="activity-item">
-                    <div class="avatar">SM</div>
+                    <div class="activity-header">
+                        <div class="activity-contact">Sarah Johnson</div>
+                        <div class="activity-time">2 hours ago</div>
+                    </div>
                     <div class="activity-content">
-                        <div class="activity-header">
-                            <span class="contact-name">Sarah Montgomery</span>
-                            <span class="activity-time">Today, 10:45 AM</span>
-                        </div>
-                        <div class="email-subject">Quarterly Strategy Meeting</div>
-                        <div class="email-preview"><strong>AI Response:</strong> Thank you for your thoughtful email about the upcoming strategy session. I've reviewed your proposed agenda and would like to suggest a few additions regarding our...</div>
-                        <div class="activity-actions">
-                            <button class="action-btn"><i class="fas fa-eye"></i> View in Gmail</button>
-                            <button class="action-btn"><i class="fas fa-copy"></i> Save as Template</button>
-                        </div>
+                        AI generated response to partnership inquiry
+                    </div>
+                    <div class="activity-actions">
+                        <button class="action-btn">
+                            <i class="fas fa-eye"></i> Review
+                        </button>
+                        <button class="action-btn">
+                            <i class="fas fa-copy"></i> Save Template
+                        </button>
                     </div>
                 </div>
-                
-                <div class="activity-item">
-                    <div class="avatar">TJ</div>
-                    <div class="activity-content">
-                        <div class="activity-header">
-                            <span class="contact-name">Thomas Jacobs</span>
-                            <span class="activity-time">Today, 9:22 AM</span>
-                        </div>
-                        <div class="email-subject">Investment Opportunity</div>
-                        <div class="email-preview"><strong>AI Response:</strong> I appreciate you reaching out about this potential investment. After automated analysis of the proposal, I've identified several key points that require further discussion...</div>
-                        <div class="activity-actions">
-                            <button class="action-btn"><i class="fas fa-eye"></i> View in Gmail</button>
-                            <button class="action-btn"><i class="fas fa-copy"></i> Save as Template</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="activity-item">
-                    <div class="avatar">ER</div>
-                    <div class="activity-content">
-                        <div class="activity-header">
-                            <span class="contact-name">Eleanor Rothschild</span>
-                            <span class="activity-time">Today, 8:15 AM</span>
-                        </div>
-                        <div class="email-subject">Charity Gala Invitation</div>
-                        <div class="email-preview"><strong>AI Response:</strong> Thank you for the kind invitation to your annual charity gala. Based on my calendar analysis, I'm tentatively available and will confirm my attendance by...</div>
-                        <div class="activity-actions">
-                            <button class="action-btn"><i class="fas fa-eye"></i> View in Gmail</button>
-                            <button class="action-btn"><i class="fas fa-copy"></i> Save as Template</button>
-                        </div>
-                    </div>
-                </div>
+                <!-- More activity items -->
             </section>
         </main>
-        
+
         <aside>
             <div class="ai-status">
-                <i class="fas fa-robot"></i>
-                <div>
-                    <p><strong>AI Responder Status:</strong> Active</p>
-                    <p>Monitoring your Gmail inbox for new messages</p>
-                </div>
+                <div class="status-text">AI Responder Active</div>
+                <div class="status-subtext">Monitoring inbox in real-time</div>
             </div>
-            
-            <div class="sidebar-section">
-                <h3>Response Settings</h3>
-                
-                <div class="recommendation">
-                    <i class="fas fa-sliders-h"></i>
-                    <div class="recommendation-content">
-                        <p>Auto-Response Rules</p>
-                        <p>3 active rules configured</p>
-                    </div>
-                </div>
-                
-                <div class="recommendation">
-                    <i class="fas fa-user-tag"></i>
-                    <div class="recommendation-content">
-                        <p>VIP Contacts</p>
-                        <p>12 contacts in priority list</p>
-                    </div>
-                </div>
-                
-                <div class="recommendation">
-                    <i class="fas fa-clock"></i>
-                    <div class="recommendation-content">
-                        <p>Response Delay</p>
-                        <p>Average 18 minute delay</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="sidebar-section">
-                <h3>Tone Adjustments</h3>
-                <select class="tone-selector">
-                    <option>Executive Formal</option>
-                    <option>Warm Professional</option>
-                    <option>Concise Technical</option>
-                    <option>Friendly Casual</option>
-                </select>
-            </div>
-            
+
             <div class="sidebar-section">
                 <h3>Quick Actions</h3>
-                <div class="recommendation">
-                    <i class="fas fa-plus-circle"></i>
-                    <div class="recommendation-content">
-                        <p>Create New Rule</p>
-                    </div>
+                <div class="quick-action">
+                    <i class="fas fa-plus"></i>
+                    Create New Rule
                 </div>
-                <div class="recommendation">
-                    <i class="fas fa-pause-circle"></i>
-                    <div class="recommendation-content">
-                        <p>Pause Auto-Responder</p>
-                    </div>
-                </div>
-                <div class="recommendation">
-                    <i class="fas fa-chart-line"></i>
-                    <div class="recommendation-content">
-                        <p>View Response Analytics</p>
-                    </div>
+                <div class="quick-action">
+                    <i class="fas fa-pause"></i>
+                    Pause Responder
                 </div>
             </div>
         </aside>
-        
-        <footer>
-            <div class="copyright">© 2023 AristoMail AI. Gmail integration powered by Google API.</div>
-            <div class="tagline">Intelligent Email Automation</div>
-            <div class="social-icons">
-                <i class="fab fa-google"></i>
-                <i class="fab fa-twitter"></i>
-                <i class="fab fa-linkedin"></i>
-            </div>
-        </footer>
     </div>
+
+    <script>
+        // Add hover effect to metric cards
+        document.querySelectorAll('.metric-card').forEach(card => {
+            card.addEventListener('mousemove', (e) => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                card.style.transform = `perspective(1000px) rotateX(${(y - rect.height/2)/20}deg) rotateY(${-(x - rect.width/2)/20}deg)`;
+            });
+
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = 'perspective(1000px) rotateX(0) rotateY(0)';
+            });
+        });
+
+        // Add scroll animations
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = 1;
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        });
+
+        document.querySelectorAll('.metric-card, .activity-item').forEach(element => {
+            element.style.opacity = 0;
+            element.style.transform = 'translateY(20px)';
+            observer.observe(element);
+        });
+    </script>
     <script>
         const supabase = supabase.createClient('https://skxzfkudduqrubtgtodp.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODAwNzMsImV4cCI6MjA2MTE1NjA3M30.Wj3V5-swysAz8xAbA4lKmo-NNu_mv1UW_X4BgFNq0ag');
         
