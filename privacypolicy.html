@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luminai - Privacy Policy</title>
+    <style>
+        :root {
+            --primary: #64ffda;
+            --primary-dark: #52e0c4;
+            --background: #0a192f;
+            --surface: #112240;
+            --surface-light: #233554;
+            --text: #ccd6f6;
+            --secondary-text: #8892b0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+
+        body {
+            background-color: var(--background);
+            color: var(--text);
+            line-height: 1.8;
+            font-size: 1.1rem;
+        }
+
+        /* Enhanced Navigation */
+        .nav {
+            padding: 1.5rem 8%;
+            background: linear-gradient(135deg, rgba(10, 25, 47, 0.98) 0%, rgba(17, 34, 64, 0.98) 100%);
+            backdrop-filter: blur(10px);
+            position: fixed;
+            width: 100%;
+            z-index: 1000;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s;
+        }
+
+        .nav-scrolled {
+            box-shadow: 0 5px 30px rgba(0,0,0,0.2);
+        }
+
+        .logo {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+            transition: all 0.3s;
+        }
+
+        .logo:hover {
+            text-shadow: 0 0 15px rgba(100, 255, 218, 0.5);
+        }
+
+        .nav-button {
+            background: transparent;
+            color: var(--primary);
+            padding: 0.8rem 1.8rem;
+            border-radius: 50px;
+            border: 2px solid var(--primary);
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+            position: relative;
+            overflow: hidden;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .nav-button:hover {
+            background: rgba(100, 255, 218, 0.15);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(100, 255, 218, 0.15);
+        }
+
+        .nav-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(120deg,
+                transparent,
+                rgba(100, 255, 218, 0.1),
+                transparent
+            );
+            transition: 0.6s;
+        }
+
+        .nav-button:hover::before {
+            left: 100%;
+        }
+
+        /* Main Content */
+        .privacy-container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 12rem 5% 4rem;
+        }
+
+        .legal-header {
+            text-align: center;
+            margin-bottom: 4rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid rgba(100, 255, 218, 0.2);
+        }
+
+        /* Premium Section Styling */
+        .privacy-section {
+            background: linear-gradient(145deg, var(--surface) 0%, var(--surface-light) 100%);
+            border-left: 4px solid var(--primary);
+            transform: perspective(1000px) rotateX(5deg) translateZ(0);
+            transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+            margin: 3rem 0;
+            padding: 2.5rem;
+            border-radius: 8px;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.1);
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        .privacy-section.visible {
+            opacity: 1;
+            transform: perspective(1000px) rotateX(0) translateY(0);
+        }
+
+        .privacy-section:hover {
+            transform: perspective(1000px) rotateX(0) translateY(-10px);
+            box-shadow: 0 15px 45px rgba(0,0,0,0.3);
+        }
+
+        .privacy-section h2 {
+            color: var(--primary);
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            position: relative;
+            padding-left: 1.5rem;
+        }
+
+        .privacy-section h2:before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0.6rem;
+            height: 1.8rem;
+            width: 4px;
+            background: var(--primary);
+        }
+
+        /* Data Categories */
+        .data-category {
+            margin: 2rem 0;
+            padding: 1.5rem;
+            background: rgba(100, 255, 218, 0.05);
+            border-radius: 8px;
+            border: 1px solid rgba(100, 255, 218, 0.1);
+        }
+
+        .data-category li {
+            padding-left: 1.5rem;
+            position: relative;
+            margin-bottom: 0.8rem;
+            color: var(--secondary-text);
+        }
+
+        .data-category li::before {
+            content: '▹';
+            position: absolute;
+            left: 0;
+            color: var(--primary);
+        }
+
+        /* Enhanced Data Tables */
+        .data-table {
+            width: 100%;
+            margin: 2rem 0;
+            border-collapse: collapse;
+            border: 1px solid rgba(100, 255, 218, 0.1);
+            background: var(--background);
+            overflow: hidden;
+            border-radius: 8px;
+        }
+
+        .data-table th, .data-table td {
+            padding: 1.2rem;
+            text-align: left;
+            border-bottom: 1px solid var(--surface);
+        }
+
+        .data-table th {
+            background: linear-gradient(135deg, var(--surface) 0%, var(--surface-light) 100%);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .data-table tr {
+            transition: all 0.3s;
+        }
+
+        .data-table tr:hover {
+            background: rgba(100, 255, 218, 0.03);
+            transform: translateX(5px);
+        }
+
+        /* Glowing GDPR Box */
+        .gdpr-box {
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(100, 255, 218, 0.2);
+            padding: 2rem;
+            border-radius: 8px;
+            margin: 2rem 0;
+        }
+
+        .gdpr-box::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, 
+                transparent 40%, 
+                rgba(100, 255, 218, 0.05) 50%, 
+                transparent 60%
+            );
+            animation: shine 8s infinite;
+        }
+
+        @keyframes shine {
+            0% { transform: translateX(-50%) rotate(45deg); }
+            100% { transform: translateX(50%) rotate(45deg); }
+        }
+
+        /* Highlight Box */
+        .highlight {
+            background: rgba(100, 255, 218, 0.05);
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin: 1.5rem 0;
+            border: 1px solid rgba(100, 255, 218, 0.1);
+        }
+
+        /* Floating Animation */
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+
+        .legal-header h1 {
+            animation: float 4s ease-in-out infinite;
+            font-size: 3.2rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Enhanced Footer */
+        footer {
+            border-top: 2px solid var(--surface);
+            background: linear-gradient(180deg, var(--background) 0%, #020c1b 100%);
+            padding: 3rem 0;
+            margin-top: 4rem;
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 8%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        footer a {
+            color: var(--primary);
+            text-decoration: none;
+            position: relative;
+            transition: all 0.3s;
+        }
+
+        footer a::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 0;
+            height: 1px;
+            background: var(--primary);
+            transition: width 0.3s;
+        }
+
+        footer a:hover::after {
+            width: 100%;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 1.5rem;
+        }
+
+        .social-links a {
+            font-size: 1.2rem;
+        }
+
+        @media (max-width: 768px) {
+            .privacy-container {
+                padding: 10rem 5% 3rem;
+            }
+            
+            .footer-content {
+                flex-direction: column;
+                text-align: center;
+                gap: 1.5rem;
+            }
+            
+            .privacy-section {
+                padding: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav" id="mainNav">
+        <div class="logo">Luminai</div>
+        <div>
+            <a href="index.html" class="nav-button">← Back to Home</a>
+        </div>
+    </nav>
+
+    <div class="privacy-container">
+        <div class="legal-header">
+            <h1>Privacy Center</h1>
+            <p class="effective-date">Last Updated: January 1, 2024</p>
+        </div>
+
+        <div class="privacy-section">
+            <h2>1. Introduction</h2>
+            <p>Luminai ("we", "us") respects your privacy. This policy explains how we handle data for our AI-powered email response service.</p>
+            <div class="gdpr-box">
+                <h3>GDPR/CCPA Compliance</h3>
+                <p>We adhere to global data protection regulations including GDPR and CCPA. EU residents have specific rights outlined in Section 5.</p>
+            </div>
+        </div>
+
+        <div class="privacy-section">
+            <h2>2. Data We Collect</h2>
+            <div class="data-category">
+                <h3>2.1 Account Data</h3>
+                <ul>
+                    <li>Name & contact information</li>
+                    <li>Payment details (processed by Stripe)</li>
+                    <li>Account credentials</li>
+                    <li>Company information</li>
+                </ul>
+            </div>
+
+            <div class="data-category">
+                <h3>2.2 Email Content</h3>
+                <ul>
+                    <li>Email text and metadata</li>
+                    <li>AI-generated responses</li>
+                    <li>User feedback on AI suggestions</li>
+                    <li>Communication patterns</li>
+                </ul>
+            </div>
+
+            <div class="data-category">
+                <h3>2.3 Technical Data</h3>
+                <ul>
+                    <li>IP addresses</li>
+                    <li>Browser/device information</li>
+                    <li>Usage patterns</li>
+                    <li>Error reports</li>
+                </ul>
+            </div>
+
+            <table class="data-table">
+                <tr>
+                    <th>Data Type</th>
+                    <th>Purpose</th>
+                    <th>Legal Basis</th>
+                </tr>
+                <tr>
+                    <td>Email Content</td>
+                    <td>AI Processing & Response Generation</td>
+                    <td>Contractual Necessity</td>
+                </tr>
+                <tr>
+                    <td>Usage Data</td>
+                    <td>Service Improvement & Analytics</td>
+                    <td>Legitimate Interest</td>
+                </tr>
+                <tr>
+                    <td>Account Data</td>
+                    <td>Service Provision & Billing</td>
+                    <td>Contractual Obligation</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="privacy-section">
+            <h2>3. AI Data Processing</h2>
+            <p>Our AI system processes email content to:</p>
+            <ul class="data-category">
+                <li>Generate contextual responses</li>
+                <li>Improve language models</li>
+                <li>Personalize suggestions</li>
+                <li>Detect communication patterns</li>
+            </ul>
+            <div class="highlight">
+                <p>⚠️ <strong>Training Data:</strong> We anonymize and aggregate data for model training. You may opt-out of data collection for training purposes in your account settings.</p>
+            </div>
+        </div>
+
+        <div class="privacy-section">
+            <h2>4. Data Sharing & Disclosure</h2>
+            <p>We only share data under these circumstances:</p>
+            <div class="data-category">
+                <h3>4.1 Service Providers</h3>
+                <ul>
+                    <li>Payment processors (Stripe, PayPal)</li>
+                    <li>Cloud infrastructure (AWS, Google Cloud)</li>
+                    <li>Customer support platforms</li>
+                </ul>
+            </div>
+
+            <div class="data-category">
+                <h3>4.2 Legal Requirements</h3>
+                <ul>
+                    <li>When required by law</li>
+                    <li>To protect our rights</li>
+                    <li>For fraud prevention</li>
+                </ul>
+            </div>
+
+            <div class="highlight">
+                <p>🔒 <strong>No Data Selling:</strong> We never sell personal data to third parties.</p>
+            </div>
+        </div>
+
+        <div class="privacy-section">
+            <h2>5. Your Rights</h2>
+            <div class="gdpr-box">
+                <h3>For EU/UK Residents (GDPR)</h3>
+                <ul class="data-category">
+                    <li><strong>Right to Access:</strong> Request copies of your data</li>
+                    <li><strong>Right to Rectification:</strong> Correct inaccurate data</li>
+                    <li><strong>Right to Erasure:</strong> Request deletion under certain conditions</li>
+                    <li><strong>Right to Restrict Processing:</strong> Limit how we use your data</li>
+                    <li><strong>Right to Data Portability:</strong> Receive your data in a structured format</li>
+                    <li><strong>Right to Object:</strong> Object to certain processing</li>
+                </ul>
+            </div>
+
+            <div class="data-category" style="margin-top: 2rem;">
+                <h3>For California Residents (CCPA)</h3>
+                <ul>
+                    <li>Right to know what personal information is collected</li>
+                    <li>Right to delete personal information</li>
+                    <li>Right to opt-out of sale of personal information</li>
+                    <li>Right to non-discrimination for exercising CCPA rights</li>
+                </ul>
+            </div>
+
+            <p style="margin-top: 2rem;">To exercise these rights, please contact us at <a href="mailto:privacy@luminai.com" style="color: var(--primary);">privacy@luminai.com</a>.</p>
+        </div>
+
+        <div class="privacy-section">
+            <h2>6. Security Measures</h2>
+            <p>We implement enterprise-grade security including:</p>
+            <ul class="data-category">
+                <li>End-to-end encryption for all communications</li>
+                <li>Regular third-party security audits</li>
+                <li>Role-based access controls</li>
+                <li>GDPR-compliant Data Processing Agreements</li>
+                <li>Annual staff security training</li>
+                <li>Bug bounty program</li>
+            </ul>
+        </div>
+
+        <div class="privacy-section">
+            <h2>7. Data Retention</h2>
+            <p>We retain data only as long as necessary:</p>
+            <table class="data-table">
+                <tr>
+                    <th>Data Type</th>
+                    <th>Retention Period</th>
+                </tr>
+                <tr>
+                    <td>Account Data</td>
+                    <td>3 years after account closure</td>
+                </tr>
+                <tr>
+                    <td>Email Content</td>
+                    <td>12 months from processing</td>
+                </tr>
+                <tr>
+                    <td>Technical Logs</td>
+                    <td>90 days</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="privacy-section">
+            <h2>8. International Transfers</h2>
+            <p>Data may be transferred to and processed in:</p>
+            <ul class="data-category">
+                <li>United States (Primary servers)</li>
+                <li>Germany (EU backup center)</li>
+                <li>Singapore (APAC backup center)</li>
+            </ul>
+            <p>All transfers are protected through Standard Contractual Clauses or equivalent mechanisms.</p>
+        </div>
+
+        <div class="privacy-section">
+            <h2>9. Policy Updates</h2>
+            <p>We may update this policy periodically. Significant changes will be communicated via:</p>
+            <ul class="data-category">
+                <li>Email notification to account holders</li>
+                <li>In-service announcements</li>
+                <li>Updated "Last Updated" date</li>
+            </ul>
+            <p>Your continued use after changes constitutes acceptance.</p>
+        </div>
+
+        <div class="privacy-section">
+            <h2>10. Contact Information</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin-top: 1.5rem;">
+                <div>
+                    <h3 style="color: var(--primary); margin-bottom: 1rem;">Data Protection Officer</h3>
+                    <p>Alexandra Chen<br>
+                    <a href="mailto:dpo@luminai.com" style="color: var(--primary);">dpo@luminai.com</a></p>
+                </div>
+                <div>
+                    <h3 style="color: var(--primary); margin-bottom: 1rem;">EU Representative</h3>
+                    <p>Luminai EU Ltd.<br>
+                    Dublin, Ireland<br>
+                    <a href="mailto:eu-rep@luminai.com" style="color: var(--primary);">eu-rep@luminai.com</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-content">
+            <div>
+                <p>© 2023 Luminai. All rights reserved.</p>
+                <p style="margin-top: 1rem;"><a href="#do-not-sell">Do Not Sell My Personal Information</a></p>
+            </div>
+            <div class="social-links">
+                <a href="#">Twitter</a>
+                <a href="#">LinkedIn</a>
+                <a href="#">GitHub</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Navigation scroll effect
+        window.addEventListener('scroll', () => {
+            const nav = document.getElementById('mainNav');
+            if (window.scrollY > 50) {
+                nav.classList.add('nav-scrolled');
+            } else {
+                nav.classList.remove('nav-scrolled');
+            }
+        });
+
+        // Intersection Observer for scroll animations
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('.privacy-section').forEach(section => {
+            observer.observe(section);
+        });
+
+        // Table row hover effect
+        document.querySelectorAll('.data-table tr').forEach(row => {
+            row.addEventListener('mouseenter', () => {
+                row.style.transform = 'translateX(5px)';
+            });
+            row.addEventListener('mouseleave', () => {
+                row.style.transform = 'translateX(0)';
+            });
+        });
+
+        // Initialize first section
+        document.querySelector('.privacy-section').classList.add('visible');
+    </script>
+</body>
+</html>
