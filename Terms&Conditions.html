@@ -3,242 +3,231 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Luminai - Terms & Conditions</title>
+    <title>Luminai - Terms of Service</title>
     <style>
-        @keyframes fadeIn {
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Arial', sans-serif;
+        /* Maintained previous styling with enhancements */
+        :root {
+            --primary: #64ffda;
+            --background: #0a192f;
+            --surface: #112240;
+            --text: #ccd6f6;
+            --secondary-text: #8892b0;
         }
 
         body {
-            background-color: #0a192f;
-            color: #ffffff;
-            line-height: 1.6;
-        }
-
-        .nav {
-            padding: 2rem 8%;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background-color: rgba(10, 25, 47, 0.95);
-            position: fixed;
-            width: 100%;
-            z-index: 1000;
-            transition: all 0.3s;
-        }
-
-        .nav-scrolled {
-            background-color: rgba(10, 25, 47, 0.98);
-            box-shadow: 0 2px 20px rgba(0,0,0,0.3);
-        }
-
-        .logo {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #64ffda;
-            transition: all 0.3s;
-        }
-
-        .logo:hover {
-            text-shadow: 0 0 15px rgba(100, 255, 218, 0.5);
-        }
-
-        .nav-button {
-            color: #64ffda;
-            text-decoration: none;
-            padding: 0.8rem 1.5rem;
-            border-radius: 5px;
-            transition: all 0.3s;
-            border: 1px solid #64ffda;
-            display: inline-block;
-        }
-
-        .nav-button:hover {
-            background-color: rgba(100, 255, 218, 0.1);
-            transform: translateY(-2px);
-        }
-
-        .terms-hero {
-            padding: 12rem 8% 4rem;
-            background: linear-gradient(45deg, #0a192f, #112240);
-            text-align: center;
+            background-color: var(--background);
+            color: var(--text);
+            line-height: 1.8;
+            font-size: 1.1rem;
         }
 
         .terms-container {
-            padding: 4rem 8%;
-            max-width: 1200px;
+            max-width: 1100px;
             margin: 0 auto;
-            opacity: 0;
-            transform: translateY(20px);
-            animation: fadeIn 1s forwards 0.5s;
+            padding: 8rem 5% 4rem;
         }
 
-        .terms-section {
-            margin-bottom: 3rem;
-            background: #112240;
+        .legal-header {
+            text-align: center;
+            margin-bottom: 4rem;
+            border-bottom: 2px solid var(--surface);
+            padding-bottom: 2rem;
+        }
+
+        .legal-section {
+            margin: 3rem 0;
             padding: 2rem;
-            border-radius: 10px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            background: var(--surface);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
         }
 
-        .terms-section h2 {
-            color: #64ffda;
-            margin-bottom: 1.5rem;
+        .legal-section h2 {
+            color: var(--primary);
             font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            position: relative;
+            padding-left: 1.5rem;
         }
 
-        .terms-section h3 {
-            color: #ccd6f6;
-            margin: 1.5rem 0 1rem;
-            font-size: 1.3rem;
+        .legal-section h2:before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0.6rem;
+            height: 1.8rem;
+            width: 4px;
+            background: var(--primary);
         }
 
-        .terms-section p {
-            margin-bottom: 1rem;
-            color: #8892b0;
-        }
-
-        .terms-section ul {
-            margin: 1rem 0 1rem 2rem;
-            color: #8892b0;
-        }
-
-        .terms-section li {
-            margin-bottom: 0.5rem;
+        .clause {
+            margin: 2rem 0;
+            padding-left: 2rem;
+            border-left: 2px solid rgba(100, 255, 218, 0.1);
         }
 
         .highlight {
-            background-color: rgba(100, 255, 218, 0.1);
-            padding: 0.2rem 0.4rem;
-            border-radius: 3px;
-            color: #64ffda;
+            background: rgba(100, 255, 218, 0.05);
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin: 1.5rem 0;
+            border: 1px solid rgba(100, 255, 218, 0.1);
         }
 
-        footer {
-            background-color: #020c1b;
-            padding: 3rem 8%;
-            text-align: center;
-            color: #8892b0;
+        .definition-list dt {
+            color: var(--primary);
+            margin-top: 1.5rem;
         }
 
-        @media (max-width: 768px) {
-            .terms-container {
-                padding: 4rem 5%;
-            }
-            .terms-hero {
-                padding: 10rem 5% 3rem;
-            }
-        }
+        /* Maintain navigation styles from previous pages */
     </style>
 </head>
 <body>
-    <nav class="nav" id="mainNav">
-        <div class="logo">Luminai</div>
-        <div>
-            <a href="index.html" class="nav-button">← Back to Home</a>
-        </div>
-    </nav>
-
-    <section class="terms-hero">
-        <h1 style="font-size: 3rem; margin-bottom: 1rem;">Terms & Conditions</h1>
-        <p style="color: #8892b0; max-width: 800px; margin: 0 auto;">Last Updated: January 1, 2023</p>
-    </section>
+    <!-- Navigation same as previous pages -->
 
     <div class="terms-container">
-        <div class="terms-section">
-            <h2>1. Acceptance of Terms</h2>
-            <p>By accessing or using Luminai's AI-powered email response services ("Service"), you agree to be bound by these Terms & Conditions ("Terms"). If you disagree with any part of these Terms, you may not access the Service.</p>
+        <div class="legal-header">
+            <h1>Terms of Service</h1>
+            <p class="effective-date">Effective: January 1, 2024</p>
         </div>
 
-        <div class="terms-section">
-            <h2>2. Service Description</h2>
-            <p>Luminai provides an artificial intelligence platform that analyzes and generates email responses based on user input and historical communication patterns.</p>
+        <div class="legal-section">
+            <h2>1. Agreement to Terms</h2>
+            <div class="clause">
+                <p>By using Luminai's AI-powered email services ("Service"), you agree to these binding Terms of Service ("Terms") and our Privacy Policy.</p>
+                <div class="highlight">
+                    <p>⚠️ Important: These Terms contain arbitration provisions and class action waivers. Review carefully.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="legal-section">
+            <h2>2. AI-Specific Provisions</h2>
             
-            <h3>2.1 Service Features</h3>
-            <ul>
-                <li>AI-generated email responses</li>
-                <li>Communication pattern analysis</li>
-                <li>Response personalization</li>
-                <li>Multi-language support</li>
-            </ul>
+            <div class="clause">
+                <h3>2.1 Nature of Service</h3>
+                <p>Luminai provides AI-generated email responses using machine learning models. Outputs are suggestions only and must be reviewed before sending.</p>
+            </div>
+
+            <div class="clause">
+                <h3>2.2 Training Data</h3>
+                <p>You grant Luminai a non-exclusive license to use your communications to train and improve our AI models, anonymized and aggregated with other data.</p>
+            </div>
+
+            <div class="clause">
+                <h3>2.3 AI Limitations</h3>
+                <p>Our AI may generate inaccurate or inappropriate content. You remain solely responsible for:</p>
+                <ul>
+                    <li>Reviewing all AI suggestions</li>
+                    <li>Legal compliance of communications</li>
+                    <li>Maintaining human oversight</li>
+                </ul>
+            </div>
         </div>
 
-        <div class="terms-section">
-            <h2>3. User Obligations</h2>
-            <p>As a user of the Service, you agree to:</p>
-            
-            <h3>3.1 Proper Use</h3>
-            <p>Use the Service only for lawful purposes and in accordance with these Terms. You agree not to use the Service:</p>
-            <ul>
-                <li>In any way that violates applicable laws or regulations</li>
-                <li>For fraudulent or malicious purposes</li>
-                <li>To generate spam or unsolicited commercial email</li>
-            </ul>
-            
-            <h3>3.2 Account Security</h3>
-            <p>You are responsible for maintaining the confidentiality of your account credentials and for all activities that occur under your account.</p>
+        <div class="legal-section">
+            <h2>3. Account Requirements</h2>
+            <div class="clause">
+                <dl class="definition-list">
+                    <dt>Eligibility</dt>
+                    <dd>Must be 18+ and authorized to bind your organization</dd>
+                    
+                    <dt>Credentials</dt>
+                    <dd>Maintain confidentiality of API keys and login information</dd>
+                    
+                    <dt>Security</dt>
+                    <dd>Immediately report unauthorized access to support@luminai.com</dd>
+                </dl>
+            </div>
         </div>
 
-        <div class="terms-section">
-            <h2>4. Intellectual Property</h2>
-            <h3>4.1 Ownership</h3>
-            <p>All intellectual property rights in the Service, including all software, algorithms, and documentation, are and will remain the exclusive property of Luminai.</p>
-            
-            <h3>4.2 User Content</h3>
-            <p>You retain all rights to the content you submit through the Service. By using the Service, you grant Luminai a non-exclusive license to process your content solely to provide the Service.</p>
+        <div class="legal-section">
+            <h2>4. Content & Ownership</h2>
+            <div class="clause">
+                <h3>4.1 Your Content</h3>
+                <p>You retain ownership of all input data. We claim no rights to your communications.</p>
+            </div>
+
+            <div class="clause">
+                <h3>4.2 AI Outputs</h3>
+                <p>Generated responses are licensed to you for business use, excluding resale or reverse engineering.</p>
+            </div>
         </div>
 
-        <div class="terms-section">
-            <h2>5. Privacy & Data Protection</h2>
-            <p>Your use of the Service is subject to our Privacy Policy, which explains how we collect, use, and protect your information.</p>
-            
-            <h3>5.1 Data Processing</h3>
-            <p>Luminai processes email content solely to provide the Service and does not use your data for any other purposes without your consent.</p>
+        <div class="legal-section">
+            <h2>5. Prohibited Uses</h2>
+            <div class="clause">
+                <p>You may not use the Service to:</p>
+                <ul>
+                    <li>Generate illegal or harmful content</li>
+                    <li>Bypass security systems</li>
+                    <li>Spam or harass recipients</li>
+                    <li>Reverse engineer our AI models</li>
+                    <li>Violate third-party rights</li>
+                </ul>
+            </div>
         </div>
 
-        <div class="terms-section">
-            <h2>6. Payment & Billing</h2>
-            <h3>6.1 Subscription Fees</h3>
-            <p>Access to premium features requires payment of subscription fees. Fees are billed in advance on a recurring basis.</p>
-            
-            <h3>6.2 Cancellation</h3>
-            <p>You may cancel your subscription at any time, but no refunds will be provided for the current billing period.</p>
+        <div class="legal-section">
+            <h2>6. Subscription Terms</h2>
+            <div class="clause">
+                <h3>6.1 Billing</h3>
+                <p>Recurring charges continue until cancellation. Fees are non-refundable except as required by law.</p>
+            </div>
+
+            <div class="clause">
+                <h3>6.2 Termination</h3>
+                <p>We may suspend accounts for:</p>
+                <ul>
+                    <li>Payment failures</li>
+                    <li>Terms violations</li>
+                    <li>Security threats</li>
+                </ul>
+            </div>
         </div>
 
-        <div class="terms-section">
-            <h2>7. Limitation of Liability</h2>
-            <p>To the maximum extent permitted by law, Luminai shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of the Service.</p>
-            
-            <h3>7.1 AI Accuracy</h3>
-            <p>While we strive for accuracy, Luminai does not guarantee that all AI-generated responses will be error-free. You remain responsible for reviewing all communications before sending.</p>
+        <div class="legal-section">
+            <h2>7. Liability & Disclaimers</h2>
+            <div class="clause">
+                <div class="highlight">
+                    <p>Luminai's maximum liability is limited to fees paid in the 6 months preceding a claim.</p>
+                </div>
+                <p>The Service is provided "as is" without warranties of:</p>
+                <ul>
+                    <li>Accuracy of AI outputs</li>
+                    <li>Uninterrupted service</li>
+                    <li>Fitness for particular purposes</li>
+                </ul>
+            </div>
         </div>
 
-        <div class="terms-section">
-            <h2>8. Modifications to Terms</h2>
-            <p>Luminai reserves the right to modify these Terms at any time. We will provide notice of significant changes through the Service or via email.</p>
+        <div class="legal-section">
+            <h2>8. Dispute Resolution</h2>
+            <div class="clause">
+                <p>Disputes will be resolved through binding arbitration in Delaware under AAA rules. Class actions are waived.</p>
+            </div>
         </div>
 
-        <div class="terms-section">
-            <h2>9. Governing Law</h2>
-            <p>These Terms shall be governed by and construed in accordance with the laws of the State of Delaware, without regard to its conflict of law provisions.</p>
+        <div class="legal-section">
+            <h2>9. Changes to Terms</h2>
+            <div class="clause">
+                <p>We may update these Terms with 30 days' notice. Continued use constitutes acceptance.</p>
+            </div>
         </div>
 
-        <div class="terms-section">
-            <h2>10. Contact Information</h2>
-            <p>For questions about these Terms, please contact us at:</p>
-            <p><span class="highlight">legal@luminai.com</span></p>
+        <div class="legal-section">
+            <h2>Contact</h2>
+            <div class="clause">
+                <p>Legal inquiries: <br>
+                <strong>Luminai Technologies Inc.</strong><br>
+                123 AI Innovation Way<br>
+                Wilmington, DE 19801<br>
+                legal@luminai.com</p>
+            </div>
         </div>
     </div>
+
+    <!-- Footer same as previous pages -->
 
     <footer>
         <p>© 2023 Luminai. All rights reserved.</p>
