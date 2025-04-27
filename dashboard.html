@@ -2,13 +2,112 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Luminai - AI Email Dashboard</title>
+  <title>Luminai – AI Email Dashboard</title>
+
+  <!-- Inject these in your host (Netlify/Vercel/Replit) as environment variables -->
+  <meta name="supabase-url" content="https://skxzfkudduqrubtgtodp.supabase.co" />
+  <meta name="supabase-anon-key" content="SUPABASE_ANON_KEY" />
+
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Lato:wght@300;400;700&display=swap" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+
   <style>
-    /* … your existing CSS … */
-    /* add a pointer cursor on logout btn */
-    #logout-btn { cursor: pointer; color: var(--teal); }
+    :root {
+      --navy: #0a192f;
+      --teal: #64ffda;
+      --cream: #f5f5f5;
+      --dark-navy: #020c1b;
+      --surface: #112240;
+      --gold: #D4AF37;
+      --glass: rgba(255, 255, 255, 0.05);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: 'Lato', sans-serif;
+      background: var(--navy);
+      color: var(--cream);
+      line-height:1.6;
+      min-height:100vh;
+    }
+    ::-webkit-scrollbar { width:8px; }
+    ::-webkit-scrollbar-track { background: var(--dark-navy); }
+    ::-webkit-scrollbar-thumb { background: var(--teal); border-radius:4px; }
+
+    .container { display:grid; grid-template-columns:1fr 300px; max-width:1400px; margin:0 auto; min-height:100vh; }
+
+    header {
+      grid-column:1/-1;
+      background: linear-gradient(135deg, rgba(10,25,47,0.95), rgba(2,12,27,0.95));
+      padding:1.5rem 3rem;
+      display:flex; justify-content:space-between; align-items:center;
+      border-bottom:1px solid rgba(100,255,218,0.1);
+      position:sticky; top:0; z-index:1000; backdrop-filter:blur(10px);
+    }
+    .logo { font-family:'Playfair Display', serif; font-size:2.2rem; color:var(--teal); letter-spacing:1px; display:flex; align-items:center; gap:0.8rem; }
+    .logo-icon { width:40px; height:40px; background:var(--teal); border-radius:8px; display:flex; align-items:center; justify-content:center; }
+    .user-nav { display:flex; align-items:center; gap:1.5rem; }
+    .nav-icon { color:var(--cream); font-size:1.3rem; padding:0.8rem; background:rgba(100,255,218,0.05); border-radius:8px; cursor:pointer; transition:all 0.3s; }
+    .nav-icon:hover { background:rgba(100,255,218,0.1); transform:translateY(-2px); }
+    .user-avatar { width:45px; height:45px; border-radius:50%; border:2px solid var(--teal); background:var(--surface); display:flex; align-items:center; justify-content:center; color:var(--teal); font-weight:bold; cursor:pointer; }
+
+    main {
+      padding:3rem;
+      background: linear-gradient(45deg, rgba(17,34,64,0.8), rgba(10,25,47,0.8));
+      backdrop-filter:blur(20px);
+    }
+    .hero { text-align:center; padding:4rem 0; margin-bottom:3rem; position:relative; }
+    .hero::after {
+      content:''; position:absolute; top:0; left:0; width:100%; height:100%;
+      background: linear-gradient(45deg, transparent 40%, rgba(100,255,218,0.05) 50%, transparent 60%);
+      animation:shine 8s infinite;
+    }
+    @keyframes shine { 0%{transform:translateX(-50%) rotate(45deg);} 100%{transform:translateX(50%) rotate(45deg);} }
+    .hero h1 { font-family:'Playfair Display', serif; font-size:3.5rem; color:var(--teal); margin-bottom:1.5rem; position:relative; z-index:1; }
+    .hero p { font-size:1.2rem; color:var(--cream); max-width:700px; margin:0 auto 2.5rem; opacity:0.9; position:relative; z-index:1; }
+    .btn-group { display:flex; gap:1.5rem; justify-content:center; position:relative; z-index:1; }
+    .btn { padding:1rem 2rem; border-radius:8px; font-weight:bold; text-transform:uppercase; letter-spacing:1px; cursor:pointer; transition:all 0.3s; border:none; }
+    .btn-primary { background:var(--teal); color:var(--navy); box-shadow:0 5px 15px rgba(100,255,218,0.2); }
+    .btn-primary:hover { transform:translateY(-3px); box-shadow:0 8px 25px rgba(100,255,218,0.3); }
+    .btn-secondary { background:transparent; color:var(--teal); border:2px solid var(--teal); }
+    .btn-secondary:hover { background:rgba(100,255,218,0.1); }
+
+    .metrics { display:grid; grid-template-columns:repeat(3,1fr); gap:2rem; margin-bottom:4rem; }
+    .metric-card {
+      background: linear-gradient(135deg, rgba(17,34,64,0.8), rgba(10,25,47,0.8));
+      border-radius:16px; padding:2rem; border:1px solid rgba(100,255,218,0.1);
+      transition:all 0.3s; position:relative; overflow:hidden;
+    }
+    .metric-card:hover { transform:translateY(-5px); box-shadow:0 15px 30px rgba(0,0,0,0.3); }
+    .metric-card::after {
+      content:''; position:absolute; top:-50%; left:-50%; width:200%; height:200%;
+      background: linear-gradient(45deg, transparent 40%, rgba(100,255,218,0.05) 50%, transparent 60%);
+      animation:shine 8s infinite;
+    }
+    .metric-value { font-size:2.8rem; color:var(--teal); margin-bottom:0.5rem; font-weight:bold; }
+    .metric-label { color:rgba(245,245,245,0.8); font-size:0.95rem; text-transform:uppercase; letter-spacing:1px; }
+
+    .activity-feed { background: linear-gradient(135deg, rgba(17,34,64,0.8), rgba(10,25,47,0.8)); border-radius:16px; padding:2rem; border:1px solid rgba(100,255,218,0.1); }
+    .activity-item { padding:1.5rem; margin-bottom:1.5rem; background:rgba(17,34,64,0.5); border-radius:12px; transition:all 0.3s; }
+    .activity-item:hover { transform:translateX(10px); background:rgba(17,34,64,0.7); }
+    .activity-header { display:flex; justify-content:space-between; margin-bottom:1rem; }
+    .activity-contact { color:var(--teal); font-weight:bold; }
+    .activity-time { color:rgba(245,245,245,0.7); font-size:0.9rem; }
+    .activity-content { color:rgba(245,245,245,0.9); margin-bottom:1rem; }
+    .activity-actions { display:flex; gap:1rem; }
+    .action-btn { background:none; border:none; color:var(--teal); cursor:pointer; display:flex; align-items:center; gap:0.5rem; padding:0.5rem 1rem; border-radius:8px; transition:all 0.3s; }
+    .action-btn:hover { background:rgba(100,255,218,0.1); }
+
+    aside { padding:3rem 2rem; background: linear-gradient(135deg, rgba(17,34,64,0.8), rgba(10,25,47,0.8)); border-left:1px solid rgba(100,255,218,0.1); backdrop-filter:blur(20px); }
+    .ai-status { background:rgba(17,34,64,0.5); padding:1.5rem; border-radius:12px; margin-bottom:2rem; border:1px solid var(--teal); }
+    .status-text { color:var(--teal); font-weight:bold; margin-bottom:0.5rem; }
+    .status-subtext { color:rgba(245,245,245,0.8); font-size:0.9rem; }
+    .sidebar-section { margin-bottom:2.5rem; }
+    .sidebar-section h3 { color:var(--teal); margin-bottom:1.5rem; font-family:'Playfair Display', serif; }
+    .quick-action { display:flex; align-items:center; gap:1rem; padding:1rem; margin-bottom:1rem; background:rgba(17,34,64,0.5); border-radius:8px; cursor:pointer; transition:all 0.3s; }
+    .quick-action:hover { background:rgba(17,34,64,0.7); transform:translateX(5px); }
+
+    @media (max-width:1200px) { .container { grid-template-columns:1fr; } aside { display:none; } }
+    @media (max-width:768px) { .metrics { grid-template-columns:1fr; } .hero h1 { font-size:2.5rem; } .btn-group { flex-direction:column; } }
   </style>
 </head>
 <body>
@@ -33,25 +132,14 @@
       </section>
 
       <section class="metrics">
-        <div class="metric-card">
-          <div id="metric-processed" class="metric-value">--</div>
-          <div class="metric-label">Emails Processed Today</div>
-        </div>
-        <div class="metric-card">
-          <div id="metric-time" class="metric-value">--</div>
-          <div class="metric-label">Daily Time Saved</div>
-        </div>
-        <div class="metric-card">
-          <div id="metric-accuracy" class="metric-value">--</div>
-          <div class="metric-label">Response Accuracy</div>
-        </div>
+        <div class="metric-card"><div id="metric-processed" class="metric-value">—</div><div class="metric-label">Emails Processed Today</div></div>
+        <div class="metric-card"><div id="metric-time" class="metric-value">—</div><div class="metric-label">Daily Time Saved</div></div>
+        <div class="metric-card"><div id="metric-accuracy" class="metric-value">—</div><div class="metric-label">Response Accuracy</div></div>
       </section>
 
       <section class="activity-feed">
         <h2>Recent Automated Replies</h2>
-        <div id="activity-container">
-          <!-- populated by JS -->
-        </div>
+        <div id="activity-container"></div>
       </section>
     </main>
 
@@ -68,85 +156,56 @@
     </aside>
   </div>
 
-  <!-- supabase-js and your script -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    (async () => {
-      // 1) initialize
-      const SUPABASE_URL = 'https://skxzfkudduqrubtgtodp.supabase.co';
-      const SUPABASE_ANON = 'SUPABASE_ANON_KEY';
-      const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+  (async()=>{
+    const SUPABASE_URL = document.querySelector('meta[name="supabase-url"]').content;
+    const SUPABASE_ANON = document.querySelector('meta[name="supabase-anon-key"]').content;
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-      // 2) protect page
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return window.location.href = 'signup.html';
+    const { data:{ user }} = await supabase.auth.getUser();
+    if(!user) return window.location.href='signup.html';
 
-      document.getElementById('logout-btn').addEventListener('click', async () => {
-        await supabase.auth.signOut();
-        window.location.href = 'signup.html';
-      });
+    document.getElementById('logout-btn').onclick = async ()=>{
+      await supabase.auth.signOut();
+      window.location.href='signup.html';
+    };
 
-      // helpers
-      const startOfToday = new Date();
-      startOfToday.setHours(0,0,0,0);
-      const isoToday = startOfToday.toISOString();
+    const startOfToday=new Date(); startOfToday.setHours(0,0,0,0);
+    const isoToday=startOfToday.toISOString();
 
-      // 3) fetch metrics
-      // a) processed today
-      let { count: processed } = await supabase
-        .from('emails')
-        .select('id', { count: 'exact' })
-        .gte('created_at', isoToday);
-      document.getElementById('metric-processed').innerText = processed;
+    let { count: processed } = await supabase
+      .from('emails').select('id',{count:'exact'}).gte('created_at',isoToday);
+    document.getElementById('metric-processed').innerText=processed;
 
-      // b) time saved — assume each AI reply saves 5 minutes
-      const hoursSaved = ((processed * 5) / 60).toFixed(1) + 'h';
-      document.getElementById('metric-time').innerText = hoursSaved;
+    document.getElementById('metric-time').innerText=((processed*5/60).toFixed(1))+'h';
 
-      // c) accuracy = completed / processed
-      let { count: completed } = await supabase
-        .from('emails')
-        .select('id', { count: 'exact' })
-        .eq('status', 'complete')
-        .gte('created_at', isoToday);
-      const accuracy = processed > 0 ? ((completed/processed)*100).toFixed(1) + '%' : '—';
-      document.getElementById('metric-accuracy').innerText = accuracy;
+    let { count: completed } = await supabase
+      .from('emails').select('id',{count:'exact'}).eq('status','complete').gte('created_at',isoToday);
+    document.getElementById('metric-accuracy').innerText=
+      processed>0?((completed/processed*100).toFixed(1)+'%'):'—';
 
-      // 4) recent activity (last 5)
-      let { data: recent } = await supabase
-        .from('emails')
-        .select('id, sender_email, subject, ai_response, created_at')
-        .eq('status','complete')
-        .order('created_at',{ ascending: false })
-        .limit(5);
-      const container = document.getElementById('activity-container');
-      recent.forEach(e => {
-        const item = document.createElement('div');
-        item.className = 'activity-item';
-        item.innerHTML = `
-          <div class="activity-header">
-            <div class="activity-contact">${e.sender_email}</div>
-            <div class="activity-time">${new Date(e.created_at).toLocaleString()}</div>
-          </div>
-          <div class="activity-content">${e.ai_response}</div>
-          <div class="activity-actions">
-            <button class="action-btn" onclick="viewReply(${e.id})"><i class="fas fa-eye"></i>View</button>
-            <button class="action-btn" onclick="saveTemplate(${e.id})"><i class="fas fa-copy"></i>Template</button>
-          </div>`;
-        container.appendChild(item);
-      });
+    let { data: recent } = await supabase
+      .from('emails').select('id,sender_email,subject,ai_response,created_at')
+      .eq('status','complete').order('created_at',{ascending:false}).limit(5);
+    const container=document.getElementById('activity-container');
+    recent.forEach(e=>{
+      const d=document.createElement('div'); d.className='activity-item';
+      d.innerHTML=`
+        <div class="activity-header">
+          <div class="activity-contact">${e.sender_email}</div>
+          <div class="activity-time">${new Date(e.created_at).toLocaleString()}</div>
+        </div>
+        <div class="activity-content">${e.ai_response}</div>
+        <div class="activity-actions">
+          <button class="action-btn"><i class="fas fa-eye"></i>Review</button>
+          <button class="action-btn"><i class="fas fa-copy"></i>Template</button>
+        </div>`;
+      container.appendChild(d);
+    });
 
-      function viewReply(id) {
-        alert('Open Gmail thread for email id='+id);
-      }
-      function saveTemplate(id) {
-        alert('Save template for email id='+id);
-      }
-
-      // 5) responder status
-      document.getElementById('responder-status').innerText = 'Active';
-
-    })();
+    document.getElementById('responder-status').innerText='Active';
+  })();
   </script>
 </body>
 </html>
