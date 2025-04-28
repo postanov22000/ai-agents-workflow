@@ -168,6 +168,57 @@
   console.log('Server Response:', data);
 }
 
+                    signupForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorMessage.textContent = '';
+    successMessage.textContent = '';
+
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    const confirmPassword = document.getElementById('confirm-password').value;
+    const name = document.getElementById('name').value;
+
+    if (password !== confirmPassword) {
+        errorMessage.textContent = 'Passwords do not match';
+        return;
+    }
+
+    try {
+        // 1. Sign up the user
+        const { data, error } = await sb.auth.signUp({
+            email,
+            password,
+            options: {
+                data: { full_name: name },
+                emailRedirectTo: window.location.origin + '/login.html?confirmed=true'
+            }
+        });
+
+        if (error) throw error;
+
+        // 2. Insert into your custom users table AFTER signup
+        const userId = data.user.id;  // the new user's ID
+        const { error: insertError } = await sb.from('users').insert([
+            { id: userId, email: email, full_name: name }
+        ]);
+
+        if (insertError) throw insertError;
+
+        // 3. Show success message
+        successMessage.innerHTML = `
+            Signup successful!<br>
+            We've sent a confirmation email to <strong>${email}</strong>.<br>
+            Please verify your email before logging in.
+        `;
+        signupForm.reset();
+
+    } catch (error) {
+        errorMessage.textContent = error.message.includes('already registered') 
+            ? 'This email is already registered. Try logging in or resetting your password.' 
+            : error.message;
+    }
+});
+
 
                     if (error) throw error;
                     
