@@ -219,61 +219,92 @@
         </div>
     </section>
 
-    <script>
-        // 3D Card Motion
-        const card = document.querySelector('.waitlist-card');
-        let bounds;
+<script>
+    // Smoother 3D Motion with Damping
+    const card = document.querySelector('.waitlist-card');
+    let currentX = 0;
+    let currentY = 0;
+    let targetX = 0;
+    let targetY = 0;
+    const damping = 0.2;
+    let animationFrameId;
+
+    function lerp(start, end, factor) {
+        return start * (1 - factor) + end * factor;
+    }
+
+    function animate() {
+        currentX = lerp(currentX, targetX, damping);
+        currentY = lerp(currentY, targetY, damping);
         
-        function rotateToMouse(e) {
-            const mouseX = e.clientX;
-            const mouseY = e.clientY;
-            const leftX = mouseX - bounds.x;
-            const topY = mouseY - bounds.y;
-            const center = {
-                x: leftX - bounds.width / 2,
-                y: topY - bounds.height / 2
-            };
+        const limitedX = Math.min(Math.max(currentX, -10), 10);
+        const limitedY = Math.min(Math.max(currentY, -10), 10);
+        
+        card.style.transform = `
+            perspective(1000px)
+            rotateX(${limitedY * 0.5}deg)
+            rotateY(${limitedX * 0.5}deg)
+            translateZ(20px)
+        `;
+        
+        card.style.boxShadow = `
+            ${-limitedX * 2}px ${-limitedY * 2}px 30px
+            rgba(100, 255, 218, 0.1)
+        `;
+        
+        animationFrameId = requestAnimationFrame(animate);
+    }
+
+    function handleMouseMove(e) {
+        const rect = card.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        
+        targetX = (e.clientX - centerX) / 15; // Reduced sensitivity
+        targetY = (e.clientY - centerY) / 15;
+    }
+
+    card.addEventListener('mouseenter', () => {
+        card.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+        window.addEventListener('mousemove', handleMouseMove);
+        animate();
+    });
+
+    card.addEventListener('mouseleave', () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        
+        // Smooth reset with spring animation
+        const startTime = Date.now();
+        const initialX = currentX;
+        const initialY = currentY;
+        
+        function resetAnimation() {
+            const progress = (Date.now() - startTime) / 300;
             
-            card.style.transform = `
-                scale(1.01)
-                rotateX(${center.y / 8}deg)
-                rotateY(${-center.x / 8}deg)
-                translateZ(20px)
-            `;
-            
-            card.style.boxShadow = `
-                ${-center.x / 15}px ${-center.y / 15}px 30px
-                rgba(100, 255, 218, 0.1)
-            `;
-            
-            card.style.setProperty('--gradient-opacity', Math.min(Math.abs(center.x/50), 0.3));
+            if (progress < 1) {
+                currentX = initialX * (1 - progress);
+                currentY = initialY * (1 - progress);
+                card.style.transform = `
+                    perspective(1000px)
+                    rotateX(${currentY * 0.5}deg)
+                    rotateY(${currentX * 0.5}deg)
+                    translateZ(20px)
+                `;
+                requestAnimationFrame(resetAnimation);
+            } else {
+                currentX = 0;
+                currentY = 0;
+                card.style.transform = 'none';
+                card.style.boxShadow = '0 20px 50px rgba(0,0,0,0.3)';
+                cancelAnimationFrame(animationFrameId);
+            }
         }
+        
+        resetAnimation();
+    });
 
-        card.addEventListener('mouseenter', () => {
-            bounds = card.getBoundingClientRect();
-            card.style.transition = 'transform 0.1s';
-            card.addEventListener('mousemove', rotateToMouse);
-        });
-
-        card.addEventListener('mouseleave', () => {
-            card.style.transition = 'transform 0.3s, box-shadow 0.3s';
-            card.style.transform = 'scale(1) rotateX(0) rotateY(0) translateZ(0)';
-            card.style.boxShadow = '0 20px 50px rgba(0,0,0,0.3)';
-            card.removeEventListener('mousemove', rotateToMouse);
-        });
-
-        // Nav Scroll Effect
-        window.addEventListener('scroll', () => {
-            const nav = document.getElementById('mainNav');
-            nav.classList.toggle('nav-scrolled', window.scrollY > 50);
-        });
-
-        // Form Submission
-        document.getElementById('waitlistForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            // Add your form submission logic
-            alert('Thank you! Redirecting to secure checkout...');
-        });
-    </script>
+    // Hardware acceleration optimization
+    card.style.willChange = 'transform, box-shadow';
+</script>
 </body>
 </html>
