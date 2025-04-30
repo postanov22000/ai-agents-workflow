@@ -183,14 +183,29 @@ body {
                 <span style="color: var(--primary);">Join</span> the Elite Waitlist
             </h1>
             
-            <div class="form-container">
-                <iframe src="https://docs.google.com/forms/d/e/1FAIpQLSc-09X7kigrCqFGz8sGI6f86zlMLevFDJoOlGR8MMp4SSyGQw/viewform?embedded=true" 
-                        class="google-form" 
-                        frameborder="0" 
-                        marginheight="0" 
-                        marginwidth="0">
-                    Loading…
-                </iframe>
+            <!-- Replace Google Form with Supabase Signup Form -->
+            <div class="form-container" style="height: auto; padding: 2rem;">
+                <form id="signup-form" class="supabase-form">
+                    <div style="margin-bottom: 1.5rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; color: var(--text-primary);">Email</label>
+                        <input type="email" id="email" required 
+                               style="width: 100%; padding: 0.8rem; background: rgba(255,255,255,0.05); 
+                                      border: 1px solid var(--border); border-radius: 6px; color: white;">
+                    </div>
+                    
+                    <div style="margin-bottom: 2rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; color: var(--text-primary);">Password</label>
+                        <input type="password" id="password" required 
+                               style="width: 100%; padding: 0.8rem; background: rgba(255,255,255,0.05); 
+                                      border: 1px solid var(--border); border-radius: 6px; color: white;">
+                    </div>
+
+                    <button type="submit" class="cta-button" style="width: 100%; justify-content: center;">
+                        Join Waitlist
+                    </button>
+                </form>
+
+                <div id="message" style="margin-top: 1.5rem; text-align: center;"></div>
             </div>
 
             <div style="margin-top: 3rem;">
@@ -203,6 +218,65 @@ body {
             </div>
         </div>
     </section>
+
+    <!-- Add Supabase CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <script>
+    // Supabase initialization
+    const supabase = createClient(
+        'YOUR_SUPABASE_URL',
+        'YOUR_SUPABASE_ANON_KEY'
+    )
+
+    // Form submission handler
+    document.getElementById('signup-form').addEventListener('submit', async (e) => {
+        e.preventDefault()
+        const email = document.getElementById('email').value
+        const password = document.getElementById('password').value
+        const messageEl = document.getElementById('message')
+        
+        messageEl.textContent = 'Processing...'
+        messageEl.style.color = 'var(--text-primary)'
+
+        try {
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password,
+                options: {
+                    emailRedirectTo: window.location.href,
+                    data: { provider: 'email' }
+                }
+            })
+
+            if (error) throw error
+
+            // Insert into users table
+            const { error: dbError } = await supabase
+                .from('users')
+                .insert([{
+                    uid: data.user.id,
+                    email: data.user.email,
+                    provider: 'email',
+                    created_at: new Date().toISOString()
+                }])
+
+            if (dbError) throw dbError
+
+            messageEl.innerHTML = `
+                <span style="color: var(--primary);">Success!</span> 
+                Check your email for confirmation.
+            `
+            document.getElementById('signup-form').reset()
+        } catch (error) {
+            messageEl.textContent = error.message
+            messageEl.style.color = '#ff5555'
+        }
+    })
+
+    // Keep existing 3D animation script
+    // ... (original animation script remains unchanged) ...
+    </script>
 
     <script>
     // Original 3D hover animation script remains unchanged
