@@ -117,7 +117,7 @@
         </form>
     </div>
 
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+       <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const supabaseUrl = 'https://skxzfkudduqrubtgtodp.supabase.co';
@@ -132,103 +132,51 @@
                 e.preventDefault();
                 errorMessage.textContent = '';
                 successMessage.textContent = '';
-                
+
                 const email = document.getElementById('email').value;
                 const password = document.getElementById('password').value;
                 const confirmPassword = document.getElementById('confirm-password').value;
                 const name = document.getElementById('name').value;
 
+                // Basic validation
                 if (password !== confirmPassword) {
                     errorMessage.textContent = 'Passwords do not match';
                     return;
                 }
 
                 try {
-                    const { error } = await sb.auth.signUp({
+                    // Create auth user
+                    const { data: authData, error: authError } = await sb.auth.signUp({
                         email,
                         password,
                         options: {
                             data: { full_name: name },
-                            emailRedirectTo: window.location.origin + '/login.html?confirmed=true'
+                            emailRedirectTo: window.location.origin + '/login.html'
                         }
                     });
-                    async function callSecureFunction() {
-  const { data: { session } } = await supabase.auth.getSession();
 
-  const response = await fetch('https://YOUR_PROJECT_ID.supabase.co/functions/v1/secure-function', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ yourCustomField: 'yourValue' })
-  });
+                    if (authError) throw authError;
 
-  const data = await response.json();
-  console.log('Server Response:', data);
-}
+                    // Insert user data into public.users table
+                    const { error: dbError } = await sb.from('users').insert([{
+                        id: authData.user.id,
+                        email: email,
+                        full_name: name,
+                        created_at: new Date().toISOString()
+                    }]);
 
-                    signupForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    errorMessage.textContent = '';
-    successMessage.textContent = '';
+                    if (dbError) throw dbError;
 
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    const confirmPassword = document.getElementById('confirm-password').value;
-    const name = document.getElementById('name').value;
-
-    if (password !== confirmPassword) {
-        errorMessage.textContent = 'Passwords do not match';
-        return;
-    }
-
-    try {
-        // 1. Sign up the user
-        const { data, error } = await sb.auth.signUp({
-            email,
-            password,
-            options: {
-                data: { full_name: name },
-                emailRedirectTo: window.location.origin + '/login.html?confirmed=true'
-            }
-        });
-
-        if (error) throw error;
-
-        // 2. Insert into your custom users table AFTER signup
-        const userId = data.user.id;  // the new user's ID
-        const { error: insertError } = await sb.from('users').insert([
-            { id: userId, email: email, full_name: name }
-        ]);
-
-        if (insertError) throw insertError;
-
-        // 3. Show success message
-        successMessage.innerHTML = `
-            Signup successful!<br>
-            We've sent a confirmation email to <strong>${email}</strong>.<br>
-            Please verify your email before logging in.
-        `;
-        signupForm.reset();
-
-    } catch (error) {
-        errorMessage.textContent = error.message.includes('already registered') 
-            ? 'This email is already registered. Try logging in or resetting your password.' 
-            : error.message;
-    }
-});
-
-
-                    if (error) throw error;
-                    
+                    // Success handling
                     successMessage.innerHTML = `
                         Signup successful!<br>
                         We've sent a confirmation email to <strong>${email}</strong>.<br>
                         Please verify your email before logging in.
                     `;
                     signupForm.reset();
+
                 } catch (error) {
+                    console.error('Signup error:', error);
                     errorMessage.textContent = error.message.includes('already registered') 
                         ? 'This email is already registered. Try logging in or resetting your password.' 
                         : error.message;
