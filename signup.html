@@ -118,71 +118,99 @@
     </div>
 
        <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const supabaseUrl = 'https://skxzfkudduqrubtgtodp.supabase.co';
-            const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODAwNzMsImV4cCI6MjA2MTE1NjA3M30.Wj3V5-swysAz8xAbA4lKmo-NNu_mv1UW_X4BgFNq0ag';
-            const sb = supabase.createClient(supabaseUrl, supabaseKey);
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const supabaseUrl = 'https://skxzfkudduqrubtgtodp.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODAwNzMsImV4cCI6MjA2MTE1NjA3M30.Wj3V5-swysAz8xAbA4lKmo-NNu_mv1UW_X4BgFNq0ag';
+        const sb = supabase.createClient(supabaseUrl, supabaseKey);
 
-            const signupForm = document.getElementById('signup-form');
-            const errorMessage = document.getElementById('error-message');
-            const successMessage = document.getElementById('success-message');
+        const signupForm = document.getElementById('signup-form');
+        const errorMessage = document.getElementById('error-message');
+        const successMessage = document.getElementById('success-message');
 
-            signupForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                errorMessage.textContent = '';
-                successMessage.textContent = '';
+        // Check for email confirmation redirect
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('confirmed')) {
+            successMessage.textContent = 'Email confirmed successfully! You can now login.';
+        }
 
-                const email = document.getElementById('email').value;
-                const password = document.getElementById('password').value;
-                const confirmPassword = document.getElementById('confirm-password').value;
-                const name = document.getElementById('name').value;
+        signupForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorMessage.textContent = '';
+            successMessage.textContent = '';
 
-                // Basic validation
-                if (password !== confirmPassword) {
-                    errorMessage.textContent = 'Passwords do not match';
-                    return;
-                }
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirm-password').value;
+            const name = document.getElementById('name').value;
 
-                try {
-                    // Create auth user
-                    const { data: authData, error: authError } = await sb.auth.signUp({
-                        email,
-                        password,
-                        options: {
-                            data: { full_name: name },
-                            emailRedirectTo: window.location.origin + '/login.html'
+            // Basic validation
+            if (password !== confirmPassword) {
+                errorMessage.textContent = 'Passwords do not match';
+                return;
+            }
+
+            try {
+                // Create auth user
+                const { data: authData, error: authError } = await sb.auth.signUp({
+                    email,
+                    password,
+                    options: {
+                        data: { full_name: name },
+                        emailRedirectTo: window.location.origin + '/login.html?confirmed=true'
+                    }
+                });
+
+                if (authError) throw authError;
+
+                // Insert into public.users table
+                const { error: dbError } = await sb.from('users').insert({
+                    id: authData.user.id,
+                    email: email,
+                    full_name: name
+                });
+
+                if (dbError) throw dbError;
+
+                // Success handling
+                successMessage.innerHTML = `<br>
+                    Signup successful!
+                    We've sent a confirmation email to <strong>${email}</strong>.</br>
+                   <br> Please verify your email before logging in.</br>
+                `;
+                signupForm.reset();
+
+            } catch (error) {
+                console.error('Signup error:', error);
+                
+                if (error.message.includes('already registered')) {
+                    errorMessage.innerHTML = `
+                        Account already exists. <a href="login.html">Try logging in</a> or 
+                        <a href="#" id="reset-password">reset your password</a>
+                    `;
+                    
+                    document.getElementById('reset-password').addEventListener('click', async (e) => {
+                        e.preventDefault();
+                        const { error } = await sb.auth.resetPasswordForEmail(email);
+                        if (error) {
+                            alert('Error: ' + error.message);
+                        } else {
+                            alert('Password reset email sent! Check your inbox.');
                         }
                     });
-
-                    if (authError) throw authError;
-
-                    // Insert user data into public.users table
-                    const { error: dbError } = await sb.from('users').insert([{
-                        id: authData.user.id,
-                        email: email,
-                        full_name: name,
-                        created_at: new Date().toISOString()
-                    }]);
-
-                    if (dbError) throw dbError;
-
-                    // Success handling
-                    successMessage.innerHTML = `
-                        Signup successful!<br>
-                        We've sent a confirmation email to <strong>${email}</strong>.<br>
-                        Please verify your email before logging in.
-                    `;
-                    signupForm.reset();
-
-                } catch (error) {
-                    console.error('Signup error:', error);
-                    errorMessage.textContent = error.message.includes('already registered') 
-                        ? 'This email is already registered. Try logging in or resetting your password.' 
+                } else {
+                    errorMessage.textContent = error.message.includes('duplicate key value')
+                        ? 'User already exists with this email'
                         : error.message;
                 }
-            });
+                
+                // Cleanup auth user if DB insert failed
+                if (error.message.includes('insert') && authData?.user?.id) {
+                    await sb.auth.admin.deleteUser(authData.user.id);
+                }
+            }
         });
-    </script>
+    });
+</script>
 </body>
 </html>
