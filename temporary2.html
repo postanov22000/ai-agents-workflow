@@ -50,12 +50,12 @@ body {
 }
 
 .waitlist-hero {
-    padding: 8rem 8% 2rem; /* Reduced top padding */
+    padding: 8rem 8% 2rem;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: flex-start; /* Changed from center */
+    justify-content: flex-start;
 }
 
 .waitlist-card {
@@ -63,7 +63,7 @@ body {
     padding: 3rem;
     border-radius: 16px;
     max-width: 600px;
-    margin: 4rem auto 2rem; /* Increased top margin */
+    margin: 4rem auto 2rem;
     border: 1px solid var(--border);
     position: relative;
     overflow: hidden;
@@ -84,6 +84,25 @@ body {
     animation: borderFlow 20s linear infinite;
 }
 
+/* Google Form Styling */
+.form-container {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 640px;
+    overflow: hidden;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.05);
+}
+
+.google-form {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    border: none;
+}
+
 @keyframes borderFlow {
     0% { transform: rotate(45deg) translateX(-50%); }
     100% { transform: rotate(45deg) translateX(50%); }
@@ -102,50 +121,6 @@ body {
     position: relative;
     overflow: hidden;
     box-shadow: 0 4px 20px rgba(100, 255, 218, 0.2);
-}
-
-.cta-button::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 200%;
-    height: 100%;
-    background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255,255,255,0.2),
-        transparent
-    );
-    transition: 0.5s;
-}
-
-.cta-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 30px rgba(100, 255, 218, 0.4);
-}
-
-.cta-button:hover::before {
-    left: 100%;
-}
-
-.waitlist-input {
-    padding: 1rem;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text-primary);
-    font-size: 1rem;
-    transition: all 0.3s;
-    backdrop-filter: blur(5px);
-    width: 100%;
-    margin-bottom: 1.5rem;
-}
-
-.waitlist-input:focus {
-    outline: none;
-    border-color: var(--primary);
-    box-shadow: 0 0 20px rgba(100, 255, 218, 0.1);
 }
 
 .trust-badge {
@@ -186,6 +161,10 @@ body {
         padding: 2rem;
         margin: 2rem auto;
     }
+
+    .form-container {
+        height: 500px;
+    }
 }
     </style>
 </head>
@@ -204,13 +183,15 @@ body {
                 <span style="color: var(--primary);">Join</span> the Elite Waitlist
             </h1>
             
-            <form class="waitlist-form" id="waitlistForm">
-                <input type="email" class="waitlist-input" placeholder="Professional Email" required>
-                <input type="text" class="waitlist-input" placeholder="Company Name" style="margin: 1.5rem 0;">
-                <button type="submit" class="cta-button" style="width: 100%; font-size: 1.1rem;">
-                    🔒 Secure Founder's Access
-                </button>
-            </form>
+            <div class="form-container">
+                <iframe src="https://docs.google.com/forms/d/e/1FAIpQLSc-09X7kigrCqFGz8sGI6f86zlMLevFDJoOlGR8MMp4SSyGQw/viewform?embedded=true" 
+                        class="google-form" 
+                        frameborder="0" 
+                        marginheight="0" 
+                        marginwidth="0">
+                    Loading…
+                </iframe>
+            </div>
 
             <div style="margin-top: 3rem;">
                 <div class="trust-badge">
@@ -221,10 +202,10 @@ body {
                 </div>
             </div>
         </div>
-    </section> 
+    </section>
 
-   <script>
-    // Smoother 3D Motion with Damping
+    <script>
+    // Original 3D hover animation script remains unchanged
     const card = document.querySelector('.waitlist-card');
     let currentX = 0;
     let currentY = 0;
@@ -264,7 +245,7 @@ body {
         const centerX = rect.left + rect.width / 2;
         const centerY = rect.top + rect.height / 2;
         
-        targetX = (e.clientX - centerX) / 15; // Reduced sensitivity
+        targetX = (e.clientX - centerX) / 15;
         targetY = (e.clientY - centerY) / 15;
     }
 
@@ -277,7 +258,6 @@ body {
     card.addEventListener('mouseleave', () => {
         window.removeEventListener('mousemove', handleMouseMove);
         
-        // Smooth reset with spring animation
         const startTime = Date.now();
         const initialX = currentX;
         const initialY = currentY;
@@ -307,7 +287,6 @@ body {
         resetAnimation();
     });
 
-    // Hardware acceleration optimization
     card.style.willChange = 'transform, box-shadow';
 </script>
 </body>
