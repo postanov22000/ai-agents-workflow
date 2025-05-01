@@ -218,61 +218,63 @@ body {
     </section>
 
     <!-- Supabase Client -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
-    <script>
-        // Initialize Supabase
-         const supabase = supabase.createClient(  // Changed from createClient() to supabase.createClient()
-        'https://skxzfkudduqrubtgtodp.supabase.co',
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODAwNzMsImV4cCI6MjA2MTE1NjA3M30.Wj3V5-swysAz8xAbA4lKmo-NNu_mv1UW_X4BgFNq0ag'
-    )
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const supabaseUrl = 'https://skxzfkudduqrubtgtodp.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODAwNzMsImV4cCI6MjA2MTE1NjA3M30.Wj3V5-swysAz8xAbA4lKmo-NNu_mv1UW_X4BgFNq0ag';
+        const sb = supabase.createClient(supabaseUrl, supabaseKey);
 
-        // Handle form submission
-        document.getElementById('signup-form').addEventListener('submit', async (e) => {
-            e.preventDefault()
-            const email = document.getElementById('email').value
-            const password = document.getElementById('password').value
-            const messageEl = document.getElementById('message')
-            
-            messageEl.textContent = 'Processing...'
-            messageEl.style.color = 'var(--text-primary)'
+        const signupForm = document.getElementById('signup-form');
+        const errorMessage = document.getElementById('error-message');
+        const successMessage = document.getElementById('success-message');
+
+        signupForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorMessage.textContent = '';
+            successMessage.textContent = '';
+
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirm-password').value;
+            const name = document.getElementById('name').value;
+
+            if (password !== confirmPassword) {
+                errorMessage.textContent = 'Passwords do not match';
+                return;
+            }
 
             try {
-                // Create user in Supabase Auth
-                const { data, error } = await supabase.auth.signUp({
+                // This automatically creates the user in auth.users
+                const { data, error } = await sb.auth.signUp({
                     email,
                     password,
                     options: {
-                        emailRedirectTo: window.location.href,
-                        data: { provider: 'email' }
+                        data: { 
+                            full_name: name,
+                        },
+                        emailRedirectTo: window.location.origin + '/login.html?confirmed=true'
                     }
-                })
+                });
 
-                if (error) throw error
+                if (error) throw error;
 
-                // Insert user data into database
-                const { error: dbError } = await supabase
-                    .from('users')
-                    .insert([{
-                        uid: data.user.id,
-                        email: data.user.email,
-                        provider: 'email',
-                        created_at: new Date().toISOString()
-                    }])
+                // Success - user is already in auth.users
+                successMessage.innerHTML = `
+                    Signup successful!<br>
+                    Confirmation email sent to <strong>${email}</strong>.<br>
+                    Verify your email before logging in.
+                `;
+                signupForm.reset();
 
-                if (dbError) throw dbError
-
-                // Success message
-                messageEl.innerHTML = `
-                    <span style="color: var(--primary);">Success!</span> 
-                    Check your email for confirmation.
-                `
-                document.getElementById('signup-form').reset()
             } catch (error) {
-                messageEl.textContent = error.message
-                messageEl.style.color = '#ff5555'
+                console.error('Signup error:', error);
+                errorMessage.textContent = error.message.includes('already registered') 
+                    ? 'Email already registered. Try logging in or resetting password.'
+                    : error.message;
             }
-        })
+        });
+    });
 
         // Original 3D animation script
         const card = document.querySelector('.waitlist-card');
