@@ -4,14 +4,14 @@
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ReplyzeAI – AI Email Dashboard</title>
 
-  <!-- Environment Variables -->
+  <!-- Supabase Config -->
   <meta name="supabase-url" content="https://skxzfkudduqrubtgtodp.supabase.co" />
   <meta name="supabase-anon-key" content="SUPABASE_ANON_KEY" />
 
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Lato:wght@300;400;700&display=swap" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
   <style>
-    /* [CSS styles unchanged - skipped for brevity, same as your current version] */
+    /* Omitted for brevity: same styling as before, assumed already present */
   </style>
 </head>
 <body>
@@ -77,12 +77,9 @@
         window.location.href = 'signup.html';
       };
 
-      // Calculate start of day
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
+      const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
       const isoToday = startOfToday.toISOString();
 
-      // Emails processed today by user
       const { count: processed } = await supabase
         .from('emails')
         .select('id', { count: 'exact' })
@@ -90,11 +87,8 @@
         .gte('created_at', isoToday);
 
       document.getElementById('metric-processed').innerText = processed;
-
-      // Time saved
       document.getElementById('metric-time').innerText = ((processed * 5 / 60).toFixed(1)) + 'h';
 
-      // Accuracy = completed / total
       const { count: completed } = await supabase
         .from('emails')
         .select('id', { count: 'exact' })
@@ -105,7 +99,6 @@
       document.getElementById('metric-accuracy').innerText =
         processed > 0 ? ((completed / processed * 100).toFixed(1) + '%') : '—';
 
-      // Recent Replies
       const { data: recent } = await supabase
         .from('emails')
         .select('id,sender_email,subject,ai_response,created_at')
