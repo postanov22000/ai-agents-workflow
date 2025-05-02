@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ReplyzeAI – AI Email Dashboard</title>
 
   <!-- Supabase Config -->
@@ -131,14 +132,23 @@
       </section>
 
       <section class="metrics">
-        <div class="metric-card"><div id="metric-processed" class="metric-value">—</div><div class="metric-label">Emails Processed Today</div></div>
-        <div class="metric-card"><div id="metric-time" class="metric-value">—</div><div class="metric-label">Daily Time Saved</div></div>
-        <div class="metric-card"><div id="metric-accuracy" class="metric-value">—</div><div class="metric-label">Response Accuracy</div></div>
+        <div class="metric-card">
+          <div id="processed-count" class="metric-value" aria-live="polite">—</div>
+          <div class="metric-label">Emails Processed Today</div>
+        </div>
+        <div class="metric-card">
+          <div id="time-saved" class="metric-value" aria-live="polite">—</div>
+          <div class="metric-label">Daily Time Saved</div>
+        </div>
+        <div class="metric-card">
+          <div id="response-accuracy" class="metric-value" aria-live="polite">—</div>
+          <div class="metric-label">Response Accuracy</div>
+        </div>
       </section>
 
       <section class="activity-feed">
         <h2>Recent Automated Replies</h2>
-        <div id="activity-container"></div>
+        <div id="activity-container" aria-busy="true"></div>
       </section>
     </main>
 
@@ -155,75 +165,6 @@
     </aside>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script>
-    (async () => {
-      const SUPABASE_URL = document.querySelector('meta[name="supabase-url"]').content;
-      const SUPABASE_ANON = document.querySelector('meta[name="supabase-anon-key"]').content;
-      const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
-
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (!user || error) return window.location.href = 'signup.html';
-
-      const userId = user.id;
-
-      document.getElementById('logout-btn').onclick = async () => {
-        await supabase.auth.signOut();
-        window.location.href = 'signup.html';
-      };
-
-      const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
-      const isoToday = startOfToday.toISOString();
-
-      const { count: processed } = await supabase
-        .from('emails')
-        .select('id', { count: 'exact' })
-        .eq('user_id', userId)
-        .gte('created_at', isoToday);
-
-      document.getElementById('metric-processed').innerText = processed;
-      document.getElementById('metric-time').innerText = ((processed * 5 / 60).toFixed(1)) + 'h';
-
-      const { count: completed } = await supabase
-        .from('emails')
-        .select('id', { count: 'exact' })
-        .eq('user_id', userId)
-        .eq('status', 'complete')
-        .gte('created_at', isoToday);
-
-      document.getElementById('metric-accuracy').innerText =
-        processed > 0 ? ((completed / processed * 100).toFixed(1) + '%') : '—';
-
-      const { data: recent } = await supabase
-        .from('emails')
-        .select('id,sender_email,subject,ai_response,created_at')
-        .eq('user_id', userId)
-        .eq('status', 'complete')
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      const container = document.getElementById('activity-container');
-      recent.forEach(e => {
-        const d = document.createElement('div');
-        d.className = 'activity-item';
-        d.innerHTML = `
-          <div class="activity-header">
-            <div class="activity-contact">${e.sender_email}</div>
-            <div class="activity-time">${new Date(e.created_at).toLocaleString()}</div>
-          </div>
-          <div class="activity-content">${e.ai_response}</div>
-          <div class="activity-actions">
-            <button class="action-btn"><i class="fas fa-eye"></i>Review</button>
-            <button class="action-btn"><i class="fas fa-copy"></i>Template</button>
-          </div>`;
-        container.appendChild(d);
-      });
-
-      document.getElementById('responder-status').innerText = 'Active';
-    })();
-  </script>
-
-<script type="module" src="dashboard.js"></script>
-
+  <script type="module" src="dashboard.js"></script>
 </body>
 </html>
