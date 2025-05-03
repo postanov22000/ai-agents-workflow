@@ -14,7 +14,7 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecretkey")
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 CLIENT_SECRETS_FILE = "credentials.json"
-REDIRECT_URI = "https://replyzeai.onrender.com/oauth2callback"  # hardcoded for safety
+REDIRECT_URI=REDIRECT_URI # hardcoded for safety
 
 @app.route("/")
 def index():
