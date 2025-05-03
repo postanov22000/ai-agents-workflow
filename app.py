@@ -13,7 +13,10 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecretkey")
 
-SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.modify"
+]
 CLIENT_SECRETS_FILE = "credentials.json"
 
 os.makedirs("tokens", exist_ok=True)
@@ -32,7 +35,7 @@ def authorize():
         )
         auth_url, state = flow.authorization_url(
             access_type="offline",
-            include_granted_scopes=False,
+            include_granted_scopes=True,
             prompt="consent"
         )
         session["state"] = state
@@ -56,7 +59,6 @@ def oauth2callback():
         flow.fetch_token(authorization_response=request.url)
         credentials = flow.credentials
 
-        # Use email hash as a safe filename
         service = build("oauth2", "v2", credentials=credentials)
         user_info = service.userinfo().get().execute()
         user_email = user_info["email"]
