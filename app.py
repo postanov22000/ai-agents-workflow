@@ -1,5 +1,6 @@
 import os
 import json
+import base64
 from flask import Flask, redirect, request, session, url_for
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
@@ -13,6 +14,7 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecretkey")
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 CLIENT_SECRETS_FILE = "credentials.json"
+REDIRECT_URI = "https://replyzeai.onrender.com/oauth2callback"  # hardcoded for safety
 
 @app.route("/")
 def index():
@@ -23,10 +25,13 @@ def authorize():
     flow = Flow.from_client_secrets_file(
         CLIENT_SECRETS_FILE,
         scopes=SCOPES,
-        redirect_uri="https://replyzeai.onrender.com/oauth2callback"
-
+        redirect_uri=REDIRECT_URI
     )
-    auth_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true')
+    auth_url, state = flow.authorization_url(
+        access_type='offline',
+        include_granted_scopes='true',
+        prompt='select_account'  # force account chooser
+    )
     session["state"] = state
     return redirect(auth_url)
 
@@ -37,23 +42,23 @@ def oauth2callback():
         CLIENT_SECRETS_FILE,
         scopes=SCOPES,
         state=state,
-        redirect_uri=url_for("oauth2callback", _external=True)
+        redirect_uri=REDIRECT_URI
     )
     flow.fetch_token(authorization_response=request.url)
     credentials = flow.credentials
 
-    # Store the user's credentials in a simple JSON file (you can use DB in production)
-    with open(f"tokens/{credentials.id_token}.json", "w") as f:
+    os.makedirs("tokens", exist_ok=True)
+    token_path = f"tokens/{credentials.id_token}.json"
+    with open(token_path, "w") as f:
         f.write(credentials.to_json())
 
-    return "Gmail connected successfully! You can now close this window."
+    return "✅ Gmail connected successfully! You can now close this window."
 
 @app.route("/send_test_email")
 def send_test_email():
-    # This uses the first saved token just for testing
     token_files = os.listdir("tokens")
     if not token_files:
-        return "No users connected yet."
+        return "⚠️ No users connected yet."
 
     with open(f"tokens/{token_files[0]}", "r") as f:
         creds_data = json.load(f)
@@ -61,15 +66,20 @@ def send_test_email():
 
     service = build("gmail", "v1", credentials=creds)
 
+    message_text = "This is a test email from your connected Gmail via ReplyzeAI."
+    message_bytes = base64.urlsafe_b64encode(
+        f"From: me\nTo: your@email.com\nSubject: Test Email\n\n{message_text}".encode("utf-8")
+    ).decode("utf-8")
+
     message = {
-        "raw": "SGVsbG8gd29ybGQ="  # base64 of "Hello world"
+        "raw": message_bytes
     }
 
     try:
         send = service.users().messages().send(userId="me", body=message).execute()
-        return f"Email sent! ID: {send['id']}"
+        return f"✅ Email sent! ID: {send['id']}"
     except Exception as e:
-        return f"Failed to send email: {e}"
+        return f"❌ Failed to send email: {e}"
 
 if __name__ == "__main__":
     os.makedirs("tokens", exist_ok=True)
