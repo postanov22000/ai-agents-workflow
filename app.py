@@ -23,7 +23,8 @@ def authorize():
     flow = Flow.from_client_secrets_file(
         CLIENT_SECRETS_FILE,
         scopes=SCOPES,
-        redirect_uri=url_for("oauth2callback", _external=True)
+        redirect_uri="https://replyzeai.onrender.com/oauth2callback"
+
     )
     auth_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true')
     session["state"] = state
