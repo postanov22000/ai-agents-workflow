@@ -18,18 +18,20 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 
-# Hardcode production settings for Render
-IS_PRODUCTION = True  # Force production mode
-REDIRECT_URI = 'https://replyzeai.onrender.com/oauth2callback'
+# Enhanced session security
+app.config.update(
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax'
+)
+
+# Production configuration
+IS_PRODUCTION = os.environ.get('ENVIRONMENT') == 'PRODUCTION'
+REDIRECT_URI = 'https://replyzeai.onrender.com/oauth2callback' if IS_PRODUCTION else 'http://localhost:5000/oauth2callback'
 SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 CLIENT_SECRETS_FILE = "credentials.json"
 
-# Security headers middleware
-@app.after_request
-def add_security_headers(response):
-    if IS_PRODUCTION:
-        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-    return response
+os.makedirs("tokens", exist_ok=True)
 
 @app.before_request
 def enforce_https():
@@ -45,36 +47,32 @@ def index():
 @app.route("/authorize")
 def authorize():
     try:
-        # Generate unique state with session ID binding
-        state = hashlib.sha256(
-            f"{os.urandom(1024)}{session.sid}".encode()
-        ).hexdigest()
-        
+        # Generate secure random state
+        state = hashlib.sha256(os.urandom(1024)).hexdigest()
+        session["oauth_state"] = state
+        session.modified = True
+
         flow = Flow.from_client_secrets_file(
             CLIENT_SECRETS_FILE,
             scopes=SCOPES,
             redirect_uri=REDIRECT_URI,
             state=state
         )
-        
+
         auth_url, _ = flow.authorization_url(
             access_type="offline",
             prompt="consent",
             include_granted_scopes="true"
         )
-        
-        session["oauth_state"] = state
-        session.modified = True
-        
+
         logger.debug(f"""
         Authorization initiated:
         - State: {state}
         - Auth URL: {auth_url}
-        - Session ID: {session.sid}
         """)
-        
+
         return redirect(auth_url)
-        
+
     except Exception as e:
         logger.error(f"Authorization error: {str(e)}", exc_info=True)
         return jsonify(error="OAuth initiation failed", details=str(e)), 500
@@ -82,50 +80,47 @@ def authorize():
 @app.route("/oauth2callback")
 def oauth2callback():
     try:
-        # Get state from session and request
         session_state = session.get("oauth_state")
         request_state = request.args.get('state')
         error = request.args.get('error')
-        
+
         logger.debug(f"""
         Callback received:
         - Session State: {session_state}
         - Request State: {request_state}
         - Error: {error}
-        - Full Args: {dict(request.args)}
         """)
-        
-        # Check for OAuth errors
+
         if error:
             return jsonify(error="OAuth provider error", details=error), 400
-            
-        # Validate state parameter
+
         if not session_state or session_state != request_state:
-            logger.error(f"State mismatch: Session({session_state}) vs Request({request_state})")
+            logger.error(f"State mismatch: {session_state} vs {request_state}")
             return jsonify(error="Invalid state parameter"), 400
-            
-        # Initialize flow with correct parameters
+
+        # Handle Render's proxy scheme
+        authorization_url = request.url
+        if IS_PRODUCTION:
+            authorization_url = authorization_url.replace('http://', 'https://', 1)
+
         flow = Flow.from_client_secrets_file(
             CLIENT_SECRETS_FILE,
             scopes=SCOPES,
             state=session_state,
             redirect_uri=REDIRECT_URI
         )
-        
-        # Full URL reconstruction for Render
-        authorization_response = request.url.replace('http://', 'https://')
-        flow.fetch_token(authorization_response=authorization_response)
-        
-        # Get user info
+
+        flow.fetch_token(authorization_response=authorization_url)
+
         credentials = flow.credentials
         service = build("oauth2", "v2", credentials=credentials)
         user_info = service.userinfo().get().execute()
         user_email = user_info['email']
-        
+
         # Secure token storage
         email_hash = hashlib.sha256(user_email.encode()).hexdigest()
         token_path = f"tokens/{email_hash}.json"
-        
+
         with open(token_path, "w") as f:
             json.dump({
                 "token": credentials.token,
@@ -135,10 +130,12 @@ def oauth2callback():
                 "client_secret": credentials.client_secret,
                 "scopes": credentials.scopes
             }, f)
-        
-        logger.info(f"Successful authentication for {user_email}")
+
+        # Clear session state
+        session.pop("oauth_state", None)
+
         return f"Gmail connected successfully for {user_email}!"
-        
+
     except Exception as e:
         logger.error(f"Callback error: {str(e)}", exc_info=True)
         return jsonify(error="Authentication failed", details=str(e)), 500
@@ -146,8 +143,31 @@ def oauth2callback():
 @app.route("/send_test_email")
 def send_test_email():
     try:
-        # Existing implementation
-        pass
+        token_files = os.listdir("tokens")
+        if not token_files:
+            return "No users connected yet."
+
+        with open(f"tokens/{token_files[0]}", "r") as f:
+            creds_data = json.load(f)
+
+        creds = Credentials.from_authorized_user_info(creds_data, SCOPES)
+        service = build("gmail", "v1", credentials=creds)
+
+        message = (
+            "From: me\n"
+            "To: me\n"
+            "Subject: Test from Render\n\n"
+            "This email was sent from Render.com!"
+        )
+        raw = base64.urlsafe_b64encode(message.encode("utf-8")).decode()
+
+        result = service.users().messages().send(
+            userId="me",
+            body={"raw": raw}
+        ).execute()
+
+        return f"Email sent! Message ID: {result['id']}"
+
     except Exception as e:
         logger.error(f"Email send error: {str(e)}", exc_info=True)
         return jsonify(error="Email failed", details=str(e)), 500
