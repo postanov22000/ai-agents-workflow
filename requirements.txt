@@ -1,9 +1,8 @@
-Flask
-python-dotenv
-google-auth-oauthlib
-google-api-python-client
-supabase
-gunicorn
-requests
-google-auth
-
+Flask==3.0.2
+python-dotenv==1.0.1
+google-auth-oauthlib==1.2.0
+google-api-python-client==2.123.0
+supabase==2.3.1
+gunicorn==21.2.0
+requests==2.31.0
+google-auth==2.27.0
