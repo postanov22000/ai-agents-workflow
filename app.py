@@ -1,16 +1,19 @@
 import os
 import json
-import hashlib
-import pickle
 from flask import Flask, redirect, request
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
-from google.auth.transport.requests import Request
+from supabase import create_client
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 
+# Supabase setup
+supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+
 # OAuth config
-CLIENT_SECRETS_FILE = "client_secrets.json"
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/userinfo.email",
@@ -18,10 +21,16 @@ SCOPES = [
 ]
 REDIRECT_URI = "https://replyzeai.onrender.com/oauth2callback"
 
+# Create client_secrets.json from environment variable
+CLIENT_SECRETS_JSON = os.getenv("CLIENT_SECRETS_JSON")
+if CLIENT_SECRETS_JSON:
+    with open("client_secrets.json", "w") as f:
+        f.write(CLIENT_SECRETS_JSON)
+
 @app.route("/")
 def index():
     flow = Flow.from_client_secrets_file(
-        CLIENT_SECRETS_FILE,
+        "client_secrets.json",
         scopes=SCOPES,
         redirect_uri=REDIRECT_URI,
     )
@@ -33,7 +42,7 @@ def index():
 @app.route("/oauth2callback")
 def oauth2callback():
     flow = Flow.from_client_secrets_file(
-        CLIENT_SECRETS_FILE,
+        "client_secrets.json",
         scopes=SCOPES,
         redirect_uri=REDIRECT_URI,
     )
@@ -44,16 +53,27 @@ def oauth2callback():
     profile = service.users().getProfile(userId="me").execute()
     user_email = profile["emailAddress"]
 
-    # Save token
-    os.makedirs("tokens", exist_ok=True)
-    filename = os.path.join("tokens", hashlib.sha256(user_email.encode()).hexdigest() + ".pickle")
-    with open(filename, "wb") as token:
-        pickle.dump(credentials, token)
+    # Save token to Supabase
+    supabase.table('gmail_tokens').upsert({
+        'user_email': user_email,
+        'credentials': {
+            'token': credentials.token,
+            'refresh_token': credentials.refresh_token,
+            'token_uri': credentials.token_uri,
+            'client_id': credentials.client_id,
+            'client_secret': credentials.client_secret,
+            'scopes': credentials.scopes
+        }
+    }).execute()
 
     return f"Gmail connected successfully for {user_email}!"
 
 @app.route("/process", methods=["GET"])
 def process_emails():
+    auth_token = request.args.get("token")
+    if auth_token != os.environ.get("PROCESS_SECRET_TOKEN"):
+        return "Unauthorized", 401
+        
     try:
         from main import run_worker
         result = run_worker()
@@ -63,3 +83,6 @@ def process_emails():
         traceback_str = traceback.format_exc()
         print("ERROR during processing:\n", traceback_str)
         return f"<pre>{traceback_str}</pre>", 500
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
