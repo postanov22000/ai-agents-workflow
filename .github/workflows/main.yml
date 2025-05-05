@@ -13,10 +13,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Setup Deno
-        uses: denoland/setup-deno@v1
-        with:
-          deno-version: 1.37.2
+    - name: Setup Deno
+  uses: denoland/setup-deno@v1
+  with:
+    deno-version: 1.37.2
+
 
       - name: Install Supabase CLI
         run: |
@@ -37,5 +38,3 @@ jobs:
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
         run: |
           supabase functions deploy generate-response --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
-
-          
