@@ -2,19 +2,18 @@ import os
 import json
 import hashlib
 import pickle
-import threading
 from flask import Flask, redirect, request
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
 app = Flask(__name__)
 
-# OAuth config
+# OAuth configuration
 CLIENT_SECRETS_FILE = "client_secrets.json"
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/userinfo.email",
-    "openid"
+    "openid",
 ]
 REDIRECT_URI = "https://replyzeai.onrender.com/oauth2callback"
 
@@ -57,23 +56,14 @@ def oauth2callback():
 @app.route("/process", methods=["GET"])
 def process_emails():
     try:
-        from main import run_worker
-        result = run_worker()
-        return f"Processed: {result}"
+        # Dynamic import inside route to avoid circular errors
+        import main
+        result = main.run_worker()
+        return f"Processed {result} emails."
     except Exception as e:
-        return f"Error: {e}", 500
-
-# Start background worker thread on startup
-def start_worker():
-    try:
-        from main import run_worker
-        threading.Thread(target=run_worker, daemon=True).start()
-    except Exception as e:
-        print(f"Failed to start background worker: {e}")
+        # Print error to logs for debugging
+        print(f"Error in /process: {e}")
+        return f"Internal Server Error: {str(e)}", 500
 
 if __name__ == "__main__":
-    start_worker()
     app.run(debug=True)
-else:
-    # Delayed start for production (Render)
-    threading.Timer(1.0, start_worker).start()
