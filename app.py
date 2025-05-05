@@ -5,15 +5,16 @@ import pickle
 from flask import Flask, redirect, request
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
+from google.auth.transport.requests import Request
 
 app = Flask(__name__)
 
-# OAuth configuration
+# OAuth config
 CLIENT_SECRETS_FILE = "client_secrets.json"
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/userinfo.email",
-    "openid",
+    "openid"
 ]
 REDIRECT_URI = "https://replyzeai.onrender.com/oauth2callback"
 
@@ -25,9 +26,7 @@ def index():
         redirect_uri=REDIRECT_URI,
     )
     auth_url, _ = flow.authorization_url(
-        prompt="consent",
-        access_type="offline",
-        include_granted_scopes="true"
+        prompt="consent", access_type="offline", include_granted_scopes="true"
     )
     return redirect(auth_url)
 
@@ -56,14 +55,11 @@ def oauth2callback():
 @app.route("/process", methods=["GET"])
 def process_emails():
     try:
-        # Dynamic import inside route to avoid circular errors
-        import main
-        result = main.run_worker()
-        return f"Processed {result} emails."
+        from main import run_worker
+        result = run_worker()
+        return f"Processed: {result}"
     except Exception as e:
-        # Print error to logs for debugging
-        print(f"Error in /process: {e}")
-        return f"Internal Server Error: {str(e)}", 500
+        return f"Error: {e}", 500
 
 if __name__ == "__main__":
     app.run(debug=True)
