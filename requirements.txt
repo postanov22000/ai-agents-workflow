@@ -2,7 +2,9 @@ Flask==3.0.2
 python-dotenv==1.0.1
 google-auth-oauthlib==1.2.0
 google-api-python-client==2.123.0
-supabase==2.3.1
+supabase==2.1.1  # Downgraded to stable version
 gunicorn==21.2.0
 requests==2.31.0
 google-auth==2.27.0
+postgrest-py==0.10.7  # Pinned compatible version
+httpx==0.24.1  # Pinned compatible version
