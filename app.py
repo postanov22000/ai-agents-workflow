@@ -7,6 +7,7 @@ from flask import Flask, redirect, request, session, jsonify
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -15,9 +16,12 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 
-# Configuration
+# Production configuration
 REDIRECT_URI = 'https://replyzeai.onrender.com/oauth2callback'
-SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/userinfo.email"
+]
 CLIENT_SECRETS_FILE = "credentials.json"
 
 # Security settings
@@ -56,10 +60,10 @@ def authorize():
         auth_url, _ = flow.authorization_url(
             access_type="offline",
             prompt="consent",
-            include_granted_scopes="false"  # Critical change
+            include_granted_scopes="false"
         )
 
-        logger.debug(f"Auth URL: {auth_url}")
+        logger.debug(f"Authorization URL: {auth_url}")
         return redirect(auth_url)
 
     except Exception as e:
@@ -72,12 +76,13 @@ def oauth2callback():
         session_state = session.get("oauth_state")
         request_state = request.args.get('state')
         
-        logger.debug(f"State check: {session_state} vs {request_state}")
+        logger.debug(f"State validation: Session({session_state}) vs Request({request_state})")
 
         if not session_state or session_state != request_state:
+            logger.error("State mismatch error")
             return jsonify(error="Invalid state parameter"), 400
 
-        # Force HTTPS
+        # Force HTTPS for Render
         authorization_url = request.url.replace('http://', 'https://')
         
         flow = Flow.from_client_secrets_file(
@@ -89,35 +94,46 @@ def oauth2callback():
         
         flow.fetch_token(authorization_response=authorization_url)
         credentials = flow.credentials
-        
-        # Scope validation
-        granted_scopes = credentials.scopes
-        if not set(SCOPES).issubset(granted_scopes):
-            logger.error(f"Scope mismatch: {granted_scopes}")
-            return jsonify(error="Insufficient permissions granted"), 403
 
-        # Get user info
+        # Validate and refresh credentials
+        if not credentials.valid:
+            if credentials.expired and credentials.refresh_token:
+                logger.debug("Refreshing expired credentials")
+                credentials.refresh(Request())
+            else:
+                raise ValueError("Invalid credentials")
+
+        # Verify credentials with userinfo endpoint
         service = build("oauth2", "v2", credentials=credentials)
         user_info = service.userinfo().get().execute()
-        user_email = user_info['email']
         
-        # Store credentials with enforced scopes
+        if 'email' not in user_info:
+            raise ValueError("Failed to retrieve user email")
+
+        user_email = user_info['email']
+        logger.debug(f"Authenticated user: {user_email}")
+
+        # Secure credential storage
         email_hash = hashlib.sha256(user_email.encode()).hexdigest()
-        with open(f"tokens/{email_hash}.json", "w") as f:
+        token_path = f"tokens/{email_hash}.json"
+        
+        with open(token_path, "w") as f:
             json.dump({
                 "token": credentials.token,
                 "refresh_token": credentials.refresh_token,
                 "token_uri": credentials.token_uri,
                 "client_id": credentials.client_id,
                 "client_secret": credentials.client_secret,
-                "scopes": SCOPES  # Enforce original scopes
+                "scopes": credentials.scopes,
+                "id_token": credentials.id_token,
+                "expiry": credentials.expiry.isoformat()
             }, f)
 
         session.pop("oauth_state", None)
         return f"Gmail connected successfully for {user_email}!"
 
     except Exception as e:
-        logger.error(f"Callback error: {str(e)}", exc_info=True)
+        logger.error(f"Authentication failed: {str(e)}", exc_info=True)
         return jsonify(error="Authentication failed", details=str(e)), 500
 
 @app.route("/send_test_email")
@@ -130,15 +146,22 @@ def send_test_email():
         with open(f"tokens/{token_files[0]}", "r") as f:
             creds_data = json.load(f)
 
-        # Enforce scopes when loading credentials
+        # Load credentials with validation
         creds = Credentials.from_authorized_user_info(creds_data, SCOPES)
+        if not creds.valid:
+            if creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                raise ValueError("Invalid stored credentials")
+
         service = build("gmail", "v1", credentials=creds)
 
+        # Proper MIME email construction
         message = (
             "From: me\n"
             "To: me\n"
-            "Subject: Test Email\n\n"
-            "This email was sent successfully!"
+            "Subject: Test Email from Render\n\n"
+            "This email was successfully sent from the Render deployment!"
         )
         raw = base64.urlsafe_b64encode(message.encode("utf-8")).decode()
         
@@ -147,10 +170,10 @@ def send_test_email():
             body={"raw": raw}
         ).execute()
 
-        return f"Email sent! ID: {result['id']}"
+        return f"Email sent! Message ID: {result['id']}"
 
     except Exception as e:
-        logger.error(f"Email error: {str(e)}", exc_info=True)
+        logger.error(f"Email sending failed: {str(e)}", exc_info=True)
         return jsonify(error="Email failed", details=str(e)), 500
 
 if __name__ == "__main__":
