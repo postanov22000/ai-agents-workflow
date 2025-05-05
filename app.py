@@ -11,14 +11,23 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecretkey")
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 
-SCOPES = [
-    "https://www.googleapis.com/auth/gmail.send"
-]
+# Configuration for production
+IS_PRODUCTION = os.environ.get('ENVIRONMENT') == 'PRODUCTION'
+REDIRECT_URI = 'https://replyzeai.onrender.com/oauth2callback' if IS_PRODUCTION else 'http://localhost:5000/oauth2callback'
+
+SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 CLIENT_SECRETS_FILE = "credentials.json"
 
 os.makedirs("tokens", exist_ok=True)
+
+# Middleware to enforce HTTPS in production
+@app.before_request
+def enforce_https():
+    if IS_PRODUCTION and request.headers.get('X-Forwarded-Proto') == 'http':
+        url = request.url.replace('http://', 'https://', 1)
+        return redirect(url, code=301)
 
 @app.route("/")
 def index():
@@ -30,46 +39,69 @@ def authorize():
         flow = Flow.from_client_secrets_file(
             CLIENT_SECRETS_FILE,
             scopes=SCOPES,
-            redirect_uri=url_for("oauth2callback", _external=True)
+            redirect_uri=REDIRECT_URI
         )
         auth_url, state = flow.authorization_url(
             access_type="offline",
             include_granted_scopes=True,
-            prompt="consent"
+            prompt="consent",
+            state=hashlib.sha256(os.urandom(1024)).hexdigest()  # Enhanced state security
         )
         session["state"] = state
+        session.modified = True
+        
+        # Debug logging
+        print(f"Generated auth URL: {auth_url}")
+        print(f"Session state stored: {state}")
+        
         return redirect(auth_url)
     except Exception as e:
-        return f"OAuth flow creation failed: {e}"
+        return f"OAuth flow creation failed: {str(e)}", 500
 
 @app.route("/oauth2callback")
 def oauth2callback():
     try:
         state = session.get("state")
-        if not state:
-            return "Missing session state"
+        stored_state = session.get("state")
+        
+        # Debug logging
+        print(f"Session state: {stored_state}")
+        print(f"Request args: {dict(request.args)}")
+        
+        if not state or state != request.args.get('state'):
+            return "Invalid state parameter", 400
 
         flow = Flow.from_client_secrets_file(
             CLIENT_SECRETS_FILE,
             scopes=SCOPES,
             state=state,
-            redirect_uri=url_for("oauth2callback", _external=True)
+            redirect_uri=REDIRECT_URI
         )
         flow.fetch_token(authorization_response=request.url)
+        
         credentials = flow.credentials
-
         service = build("oauth2", "v2", credentials=credentials)
         user_info = service.userinfo().get().execute()
         user_email = user_info["email"]
+        
+        # Secure token storage
         email_hash = hashlib.sha256(user_email.encode()).hexdigest()
         token_path = f"tokens/{email_hash}.json"
-
+        
         with open(token_path, "w") as f:
-            f.write(credentials.to_json())
-
+            f.write(json.dumps({
+                "token": credentials.token,
+                "refresh_token": credentials.refresh_token,
+                "token_uri": credentials.token_uri,
+                "client_id": credentials.client_id,
+                "client_secret": credentials.client_secret,
+                "scopes": credentials.scopes
+            }))
+        
         return f"Gmail connected successfully for {user_email}!"
     except Exception as e:
-        return f"OAuth2 callback failed: {e}"
+        print(f"OAuth2 callback error: {str(e)}")
+        return f"OAuth2 callback failed: {str(e)}", 500
 
 @app.route("/send_test_email")
 def send_test_email():
@@ -84,16 +116,24 @@ def send_test_email():
         creds = Credentials.from_authorized_user_info(creds_data, SCOPES)
         service = build("gmail", "v1", credentials=creds)
 
-        message = {
-            "raw": base64.urlsafe_b64encode(
-                b"From: me\nTo: me\nSubject: Hello\n\nHello world!"
-            ).decode()
-        }
-
-        result = service.users().messages().send(userId="me", body=message).execute()
+        # Proper MIME email formatting
+        message = (
+            "From: me\n"
+            "To: me\n"
+            "Subject: Hello from Render\n\n"
+            "This is a test email sent from Render.com!"
+        )
+        raw = base64.urlsafe_b64encode(message.encode("utf-8")).decode()
+        
+        result = service.users().messages().send(
+            userId="me",
+            body={"raw": raw}
+        ).execute()
+        
         return f"Email sent! ID: {result['id']}"
     except Exception as e:
-        return f"Failed to send test email: {e}"
+        print(f"Email send error: {str(e)}")
+        return f"Failed to send test email: {str(e)}", 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
