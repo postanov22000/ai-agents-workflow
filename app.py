@@ -59,7 +59,7 @@ def process_emails():
         result = run_worker()
         return f"Processed: {result}"
     except Exception as e:
-        return f"Error: {e}", 500
-
-if __name__ == "__main__":
-    app.run(debug=True)
+        import traceback
+        traceback_str = traceback.format_exc()
+        print("ERROR during processing:\n", traceback_str)
+        return f"<pre>{traceback_str}</pre>", 500
