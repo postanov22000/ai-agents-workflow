@@ -19,8 +19,9 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 # Configuration
 REDIRECT_URI = 'https://replyzeai.onrender.com/oauth2callback'
 REQUIRED_SCOPES = [
-    "https://www.googleapis.com/auth/gmail.send",
-    "https://www.googleapis.com/auth/userinfo.email"
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/gmail.send"
 ]
 CLIENT_SECRETS_FILE = "credentials.json"
 
@@ -30,11 +31,12 @@ app.config.update(
     SESSION_COOKIE_SAMESITE='Lax'
 )
 
+# Ensure token directory exists
 os.makedirs("tokens", exist_ok=True)
 
 @app.before_request
 def enforce_https():
-    if request.headers.get('X-Forwarded-Proto') == 'http':
+    if request.headers.get('X-Forwarded-Proto', 'https') == 'http':
         secure_url = request.url.replace('http://', 'https://', 1)
         logger.debug(f"Redirecting to HTTPS: {secure_url}")
         return redirect(secure_url, code=301)
@@ -77,7 +79,6 @@ def oauth2callback():
         if not session_state or session_state != request_state:
             return jsonify(error="Invalid state parameter"), 400
 
-        # Force HTTPS
         authorization_url = request.url.replace('http://', 'https://')
         
         flow = Flow.from_client_secrets_file(
@@ -90,20 +91,12 @@ def oauth2callback():
         flow.fetch_token(authorization_response=authorization_url)
         credentials = flow.credentials
 
-        # Validate required scopes are present
-        granted_scopes = credentials.scopes
-        missing_scopes = [s for s in REQUIRED_SCOPES if s not in granted_scopes]
-        
-        if missing_scopes:
-            logger.error(f"Missing scopes: {missing_scopes}")
-            return jsonify(error="Missing required permissions"), 403
-
         # Get user info
         service = build("oauth2", "v2", credentials=credentials)
         user_info = service.userinfo().get().execute()
         user_email = user_info['email']
 
-        # Store credentials with original scopes
+        # Save credentials securely
         email_hash = hashlib.sha256(user_email.encode()).hexdigest()
         with open(f"tokens/{email_hash}.json", "w") as f:
             json.dump({
@@ -112,8 +105,8 @@ def oauth2callback():
                 "token_uri": credentials.token_uri,
                 "client_id": credentials.client_id,
                 "client_secret": credentials.client_secret,
-                "scopes": REQUIRED_SCOPES,  # Store only what we requested
-                "expiry": credentials.expiry.isoformat()
+                "scopes": credentials.scopes,
+                "expiry": credentials.expiry.isoformat() if credentials.expiry else None
             }, f)
 
         session.pop("oauth_state", None)
@@ -133,7 +126,6 @@ def send_test_email():
         with open(f"tokens/{token_files[0]}", "r") as f:
             creds_data = json.load(f)
 
-        # Load with original scopes
         creds = Credentials.from_authorized_user_info(creds_data, REQUIRED_SCOPES)
         
         if not creds.valid:
