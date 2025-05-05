@@ -1,1 +1,30 @@
-{}
+services:
+  - type: web
+    name: replyzeai-web
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: SUPABASE_URL
+        value: https://skxzfkudduqrubtgtodp.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTU4MDA3MywiZXhwIjoyMDYxMTU2MDczfQ.rPp8bCaJsSqE6Ya9Z1mVrj3jaDvHcGsAj8bArTBqOc0
+      - key: HF_API_KEY
+        value: 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
+      - key: FLASK_SECRET_KEY
+        value: 00000001001100100001101110111001
+
+  - type: worker
+    name: replyzeai-worker
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: SUPABASE_URL
+        value: https://skxzfkudduqrubtgtodp.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTU4MDA3MywiZXhwIjoyMDYxMTU2MDczfQ.rPp8bCaJsSqE6Ya9Z1mVrj3jaDvHcGsAj8bArTBqOc0
+      - key: HF_API_KEY
+        value: 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
