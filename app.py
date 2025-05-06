@@ -2,6 +2,7 @@ import os
 import json
 import hashlib
 import logging
+import base64
 from flask import Flask, redirect, request, session
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
@@ -62,8 +63,7 @@ def authorize():
         auth_url, state = flow.authorization_url(
             access_type="offline",
             prompt="consent",
-            include_granted_scopes="false",
-            scope=' '.join(SCOPES)
+            include_granted_scopes="false"
         )
         session["state"] = state
         return redirect(auth_url)
@@ -84,8 +84,6 @@ def oauth2callback():
             redirect_uri=REDIRECT_URI
         )
         
-        # Force exact scope matching
-        flow.oauth2session.scope = SCOPES
         flow.fetch_token(authorization_response=request.url)
         
         # Validate received scopes
