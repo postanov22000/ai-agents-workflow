@@ -2,7 +2,7 @@ import os
 import json
 import hashlib
 import logging
-from flask import Flask, redirect, request, session, jsonify
+from flask import Flask, redirect, request, session
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
@@ -15,11 +15,13 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 
+# OAuth Configuration
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "openid",
     "https://www.googleapis.com/auth/gmail.send"
 ]
+REQUIRED_SCOPES = set(SCOPES)
 
 CLIENT_SECRETS_FILE = "client_secrets.json"
 REDIRECT_URI = "https://replyzeai.onrender.com/oauth2callback"
@@ -35,21 +37,15 @@ if not os.path.exists(CLIENT_SECRETS_FILE):
         logger.error("Missing client_secrets.json and GOOGLE_CLIENT_SECRETS environment variable")
 
 # Create token directory
-try:
-    os.makedirs(TOKEN_DIR, exist_ok=True)
-except Exception as e:
-    logger.error(f"Failed to create token directory: {str(e)}")
+os.makedirs(TOKEN_DIR, exist_ok=True)
 
 def get_token_path(user_email):
-    hashed = hashlib.sha256(user_email.encode()).hexdigest()
-    return os.path.join(TOKEN_DIR, f"{hashed}.json")
+    return os.path.join(TOKEN_DIR, hashlib.sha256(user_email.encode()).hexdigest() + ".json")
 
 @app.errorhandler(Exception)
 def handle_exception(e):
     logger.exception("An error occurred")
-    if isinstance(e, HTTPException):
-        return e
-    return jsonify(error=str(e)), 500
+    return "Internal Server Error", 500
 
 @app.route("/")
 def index():
@@ -66,7 +62,8 @@ def authorize():
         auth_url, state = flow.authorization_url(
             access_type="offline",
             prompt="consent",
-            include_granted_scopes="true"
+            include_granted_scopes="false",
+            scope=' '.join(SCOPES)
         )
         session["state"] = state
         return redirect(auth_url)
@@ -86,8 +83,21 @@ def oauth2callback():
             state=session["state"],
             redirect_uri=REDIRECT_URI
         )
+        
+        # Force exact scope matching
+        flow.oauth2session.scope = SCOPES
         flow.fetch_token(authorization_response=request.url)
         
+        # Validate received scopes
+        granted_scopes = set(flow.credentials.scopes)
+        if not REQUIRED_SCOPES.issubset(granted_scopes):
+            missing = REQUIRED_SCOPES - granted_scopes
+            raise ValueError(f"Missing required scopes: {missing}")
+            
+        if granted_scopes - REQUIRED_SCOPES:
+            extra = granted_scopes - REQUIRED_SCOPES
+            logger.warning(f"Received extra scopes: {extra}")
+
         credentials = flow.credentials
         user_info_service = build("oauth2", "v2", credentials=credentials)
         user_info = user_info_service.userinfo().get().execute()
@@ -96,6 +106,7 @@ def oauth2callback():
         if not user_email:
             return "Failed to retrieve user email", 400
             
+        # Store credentials
         token_path = get_token_path(user_email)
         with open(token_path, "w") as token_file:
             token_file.write(credentials.to_json())
@@ -113,30 +124,22 @@ def send_test_email(email):
             return "User not connected", 400
             
         with open(token_path, "r") as token_file:
-            creds_data = json.load(token_file)
-            creds = Credentials.from_authorized_user_info(creds_data, SCOPES)
+            creds = Credentials.from_authorized_user_info(
+                json.load(token_file), 
+                SCOPES
+            )
             
         service = build("gmail", "v1", credentials=creds)
         message = {
-            "raw": create_message("me", email, "Hello from ReplyzeAI", 
-                     "✅ Your Gmail integration is working.")
+            "raw": base64.urlsafe_b64encode(
+                f"From: me\nTo: {email}\nSubject: Test\n\nHello from ReplyzeAI".encode()
+            ).decode()
         }
         service.users().messages().send(userId="me", body=message).execute()
-        
         return "📨 Test email sent!"
     except Exception as e:
         logger.error(f"Test email error: {str(e)}")
         return "Failed to send test email", 500
-
-def create_message(sender, to, subject, message_text):
-    from email.mime.text import MIMEText
-    import base64
-    
-    message = MIMEText(message_text)
-    message["to"] = to
-    message["from"] = sender
-    message["subject"] = subject
-    return base64.urlsafe_b64encode(message.as_bytes()).decode()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
