@@ -3,11 +3,12 @@ import json
 import hashlib
 import logging
 import base64
-from flask import Flask, redirect, request, session
+from flask import Flask, redirect, request, session, jsonify
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from werkzeug.exceptions import HTTPException
+from main import run_worker  # Import worker function
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -46,7 +47,7 @@ def get_token_path(user_email):
 @app.errorhandler(Exception)
 def handle_exception(e):
     logger.exception("An error occurred")
-    return "Internal Server Error", 500
+    return jsonify(error=str(e)), 500
 
 @app.route("/")
 def index():
@@ -113,6 +114,27 @@ def oauth2callback():
     except Exception as e:
         logger.error(f"OAuth callback error: {str(e)}")
         return "Connection failed - please try again", 500
+
+@app.route("/process")
+def process_emails():
+    try:
+        # Verify security token
+        auth_token = request.args.get("token")
+        if auth_token != os.environ.get("PROCESS_SECRET_TOKEN"):
+            logger.warning("Invalid process token attempt")
+            return jsonify(error="Unauthorized"), 401
+            
+        result = run_worker()
+        return jsonify(
+            status="success",
+            processed=result
+        )
+    except Exception as e:
+        logger.error(f"Processing error: {str(e)}")
+        return jsonify(
+            status="error",
+            error=str(e)
+        ), 500
 
 @app.route("/send_test_email/<email>")
 def send_test_email(email):
