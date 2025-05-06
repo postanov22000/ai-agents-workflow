@@ -1,88 +1,100 @@
 import os
 import json
-from flask import Flask, redirect, request
+import hashlib
+from flask import Flask, redirect, request, session, url_for
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
-from supabase import create_client
-from dotenv import load_dotenv
-
-load_dotenv()
+from google.oauth2.credentials import Credentials
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecretkey")
 
-# Supabase setup
-supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
-
-# OAuth config
 SCOPES = [
-    "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/userinfo.email",
-    "openid"
+    "openid",
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.modify"
 ]
-REDIRECT_URI = "https://replyzeai.onrender.com/oauth2callback"
 
-# Create client_secrets.json from environment variable
-CLIENT_SECRETS_JSON = os.getenv("CLIENT_SECRETS_JSON")
-if CLIENT_SECRETS_JSON:
-    with open("client_secrets.json", "w") as f:
-        f.write(CLIENT_SECRETS_JSON)
+CLIENT_SECRETS_FILE = "client_secrets.json"
+REDIRECT_URI = "https://replyzeai.onrender.com/oauth2callback"
+TOKEN_DIR = "tokens"
+
+if not os.path.exists(TOKEN_DIR):
+    os.makedirs(TOKEN_DIR)
+
+def get_token_path(user_email):
+    hashed = hashlib.sha256(user_email.encode()).hexdigest()
+    return os.path.join(TOKEN_DIR, f"{hashed}.json")
 
 @app.route("/")
 def index():
+    return '<a href="/authorize">Connect your Gmail</a>'
+
+@app.route("/authorize")
+def authorize():
     flow = Flow.from_client_secrets_file(
-        "client_secrets.json",
+        CLIENT_SECRETS_FILE,
         scopes=SCOPES,
         redirect_uri=REDIRECT_URI,
+        include_granted_scopes=True
     )
-    auth_url, _ = flow.authorization_url(
-        prompt="consent", access_type="offline", include_granted_scopes="true"
-    )
+    auth_url, state = flow.authorization_url(access_type="offline", prompt="consent")
+    session["state"] = state
     return redirect(auth_url)
 
 @app.route("/oauth2callback")
 def oauth2callback():
+    state = session["state"]
     flow = Flow.from_client_secrets_file(
-        "client_secrets.json",
+        CLIENT_SECRETS_FILE,
         scopes=SCOPES,
+        state=state,
         redirect_uri=REDIRECT_URI,
+        include_granted_scopes=True
     )
     flow.fetch_token(authorization_response=request.url)
 
     credentials = flow.credentials
-    service = build("gmail", "v1", credentials=credentials)
-    profile = service.users().getProfile(userId="me").execute()
-    user_email = profile["emailAddress"]
+    user_info_service = build("oauth2", "v2", credentials=credentials)
+    user_info = user_info_service.userinfo().get().execute()
 
-    # Save token to Supabase
-    supabase.table('gmail_tokens').upsert({
-        'user_email': user_email,
-        'credentials': {
-            'token': credentials.token,
-            'refresh_token': credentials.refresh_token,
-            'token_uri': credentials.token_uri,
-            'client_id': credentials.client_id,
-            'client_secret': credentials.client_secret,
-            'scopes': credentials.scopes
-        }
-    }).execute()
+    user_email = user_info["email"]
+    token_path = get_token_path(user_email)
 
-    return f"Gmail connected successfully for {user_email}!"
+    with open(token_path, "w") as token_file:
+        token_file.write(credentials.to_json())
 
-@app.route("/process", methods=["GET"])
-def process_emails():
-    auth_token = request.args.get("token")
-    if auth_token != os.environ.get("PROCESS_SECRET_TOKEN"):
-        return "Unauthorized", 401
-        
-    try:
-        from main import run_worker
-        result = run_worker()
-        return f"Processed: {result}"
-    except Exception as e:
-        import traceback
-        traceback_str = traceback.format_exc()
-        print("ERROR during processing:\n", traceback_str)
-        return f"<pre>{traceback_str}</pre>", 500
+    return f"✅ Gmail connected for {user_email}"
+
+@app.route("/send_test_email/<email>")
+def send_test_email(email):
+    token_path = get_token_path(email)
+    if not os.path.exists(token_path):
+        return "User not connected", 400
+
+    with open(token_path, "r") as token_file:
+        creds_data = json.load(token_file)
+        creds = Credentials.from_authorized_user_info(info=creds_data, scopes=SCOPES)
+
+    service = build("gmail", "v1", credentials=creds)
+    message = {
+        "raw": create_message("me", email, "Hello from ReplyzeAI", "✅ Your Gmail integration is working.")
+    }
+
+    service.users().messages().send(userId="me", body=message).execute()
+    return "📨 Test email sent!"
+
+def create_message(sender, to, subject, message_text):
+    import base64
+    from email.mime.text import MIMEText
+
+    message = MIMEText(message_text)
+    message["to"] = to
+    message["from"] = sender
+    message["subject"] = subject
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+    return raw
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(debug=True)
