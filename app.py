@@ -1,7 +1,7 @@
 import os
 import json
 import hashlib
-from flask import Flask, redirect, request, session, url_for
+from flask import Flask, redirect, request, session
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
@@ -35,10 +35,13 @@ def authorize():
     flow = Flow.from_client_secrets_file(
         CLIENT_SECRETS_FILE,
         scopes=SCOPES,
-        redirect_uri=REDIRECT_URI,
-        include_granted_scopes=True
+        redirect_uri=REDIRECT_URI
     )
-    auth_url, state = flow.authorization_url(access_type="offline", prompt="consent")
+    auth_url, state = flow.authorization_url(
+        access_type="offline",
+        prompt="consent",
+        include_granted_scopes="true"  # Moved to authorization_url
+    )
     session["state"] = state
     return redirect(auth_url)
 
@@ -49,8 +52,7 @@ def oauth2callback():
         CLIENT_SECRETS_FILE,
         scopes=SCOPES,
         state=state,
-        redirect_uri=REDIRECT_URI,
-        include_granted_scopes=True
+        redirect_uri=REDIRECT_URI
     )
     flow.fetch_token(authorization_response=request.url)
 
