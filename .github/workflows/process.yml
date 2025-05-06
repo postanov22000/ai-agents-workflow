@@ -1,13 +1,18 @@
-name: Trigger Email Processor
+name: Email Processing Scheduler
 
 on:
   schedule:
-    - cron: '*/5 * * * *'  # Runs every 5 minutes
+    - cron: '*/5 * * * *'  # Every 5 minutes
   workflow_dispatch:
 
 jobs:
-  ping-process:
+  trigger-processing:
     runs-on: ubuntu-latest
     steps:
-      - name: Send GET request to /process
-        run: curl -sS "https://replyzeai.onrender.com/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}"
+      - name: Trigger Processing
+        run: |
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "https://replyzeai.onrender.com/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
+          if [ "$RESPONSE" -ne 200 ]; then
+            echo "Processing failed with status: $RESPONSE"
+            exit 1
+          fi
