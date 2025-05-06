@@ -12,8 +12,7 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecretkey")
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "openid",
-    "https://www.googleapis.com/auth/gmail.send",
-    "https://www.googleapis.com/auth/gmail.modify"
+    "https://www.googleapis.com/auth/gmail.send"
 ]
 
 CLIENT_SECRETS_FILE = "client_secrets.json"
