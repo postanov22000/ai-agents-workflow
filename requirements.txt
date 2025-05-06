@@ -3,12 +3,12 @@ gunicorn==21.2.0
 requests==2.31.0
 python-dotenv==1.0.1
 
-# Supabase SDK and its deps
+# Supabase SDK and dependencies
 supabase==1.0.3
-httpx==0.24.1
+httpx==0.23.3
 python-dateutil==2.8.2
 
-# Google API packages - tested compatible versions
+# Google API dependencies
 google-auth==2.26.1
 google-auth-oauthlib==1.0.0
 google-api-python-client==2.101.0
