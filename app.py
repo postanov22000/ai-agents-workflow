@@ -2,16 +2,18 @@ import os
 import json
 import hashlib
 import logging
-import base64
-from flask import Flask, redirect, request, session, jsonify
+from flask import Flask, redirect, request, session
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
+from supabase import create_client
 from werkzeug.exceptions import HTTPException
-from main import run_worker  # Import worker function
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -23,31 +25,45 @@ SCOPES = [
     "openid",
     "https://www.googleapis.com/auth/gmail.send"
 ]
-REQUIRED_SCOPES = set(SCOPES)
-
 CLIENT_SECRETS_FILE = "client_secrets.json"
 REDIRECT_URI = "https://replyzeai.onrender.com/oauth2callback"
-TOKEN_DIR = "tokens"
 
-# Ensure client_secrets.json exists
-if not os.path.exists(CLIENT_SECRETS_FILE):
-    client_secrets = os.environ.get("GOOGLE_CLIENT_SECRETS")
-    if client_secrets:
-        with open(CLIENT_SECRETS_FILE, "w") as f:
-            f.write(client_secrets)
-    else:
-        logger.error("Missing client_secrets.json and GOOGLE_CLIENT_SECRETS environment variable")
+# Initialize Supabase
+try:
+    supabase = create_client(
+        os.environ["SUPABASE_URL"],
+        os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    )
+    logger.info("Supabase client initialized successfully")
+except KeyError as e:
+    logger.error(f"Missing environment variable: {str(e)}")
+    raise
+except Exception as e:
+    logger.error(f"Supabase initialization failed: {str(e)}")
+    raise
 
-# Create token directory
-os.makedirs(TOKEN_DIR, exist_ok=True)
+def validate_client_secrets():
+    """Ensure client_secrets.json exists"""
+    if not os.path.exists(CLIENT_SECRETS_FILE):
+        client_secrets = os.environ.get("GOOGLE_CLIENT_SECRETS")
+        if client_secrets:
+            try:
+                with open(CLIENT_SECRETS_FILE, "w") as f:
+                    f.write(client_secrets)
+                logger.info("Created client_secrets.json from env")
+            except Exception as e:
+                logger.error(f"Failed to write client_secrets.json: {str(e)}")
+                raise
+        else:
+            logger.error("Missing both client_secrets.json and GOOGLE_CLIENT_SECRETS env")
+            raise RuntimeError("Missing OAuth configuration")
 
-def get_token_path(user_email):
-    return os.path.join(TOKEN_DIR, hashlib.sha256(user_email.encode()).hexdigest() + ".json")
+validate_client_secrets()
 
 @app.errorhandler(Exception)
 def handle_exception(e):
     logger.exception("An error occurred")
-    return jsonify(error=str(e)), 500
+    return "Internal Server Error", 500
 
 @app.route("/")
 def index():
@@ -69,97 +85,88 @@ def authorize():
         session["state"] = state
         return redirect(auth_url)
     except Exception as e:
-        logger.error(f"Authorization error: {str(e)}")
+        logger.error(f"Authorization initialization failed: {str(e)}")
         return "Authorization failed - please try again later", 500
 
 @app.route("/oauth2callback")
 def oauth2callback():
     try:
         if "state" not in session:
+            logger.error("Missing session state in callback")
             return "Missing session state", 400
-            
+
         flow = Flow.from_client_secrets_file(
             CLIENT_SECRETS_FILE,
             scopes=SCOPES,
             state=session["state"],
             redirect_uri=REDIRECT_URI
         )
-        
-        flow.fetch_token(authorization_response=request.url)
-        
-        # Validate received scopes
-        granted_scopes = set(flow.credentials.scopes)
-        if not REQUIRED_SCOPES.issubset(granted_scopes):
-            missing = REQUIRED_SCOPES - granted_scopes
-            raise ValueError(f"Missing required scopes: {missing}")
-            
-        if granted_scopes - REQUIRED_SCOPES:
-            extra = granted_scopes - REQUIRED_SCOPES
-            logger.warning(f"Received extra scopes: {extra}")
 
+        # Fetch tokens from Google
+        flow.fetch_token(authorization_response=request.url)
         credentials = flow.credentials
+
+        # Get user email
         user_info_service = build("oauth2", "v2", credentials=credentials)
         user_info = user_info_service.userinfo().get().execute()
-        
         user_email = user_info.get("email")
+
         if not user_email:
-            return "Failed to retrieve user email", 400
+            logger.error("Failed to retrieve user email from Google")
+            raise ValueError("Missing user email in OAuth response")
+
+        # Prepare credentials data
+        credentials_data = {
+            "token": credentials.token,
+            "refresh_token": credentials.refresh_token,
+            "token_uri": credentials.token_uri,
+            "client_id": credentials.client_id,
+            "client_secret": credentials.client_secret,
+            "scopes": credentials.scopes
+        }
+
+        # Store in Supabase
+        try:
+            upsert_response = supabase.table("gmail_tokens").upsert({
+                "user_email": user_email,
+                "credentials": credentials_data
+            }).execute()
+
+            if not upsert_response.data:
+                logger.error("Supabase upsert returned no data")
+                raise RuntimeError("Failed to store credentials")
+
+            logger.info(f"Successfully stored credentials for {user_email}")
             
-        # Store credentials
-        token_path = get_token_path(user_email)
-        with open(token_path, "w") as token_file:
-            token_file.write(credentials.to_json())
-            
+        except Exception as db_error:
+            logger.error(f"Supabase storage failed: {str(db_error)}")
+            logger.debug(f"Credentials data: {json.dumps(credentials_data, indent=2)}")
+            raise
+
         return f"✅ Gmail connected for {user_email}"
+
     except Exception as e:
-        logger.error(f"OAuth callback error: {str(e)}")
+        logger.error(f"OAuth callback failed: {str(e)}")
         return "Connection failed - please try again", 500
 
-@app.route("/process")
+@app.route("/process", methods=["GET"])
 def process_emails():
     try:
-        # Verify security token
         auth_token = request.args.get("token")
+        if not auth_token:
+            logger.warning("Missing process token")
+            return "Unauthorized", 401
+
         if auth_token != os.environ.get("PROCESS_SECRET_TOKEN"):
             logger.warning("Invalid process token attempt")
-            return jsonify(error="Unauthorized"), 401
-            
-        result = run_worker()
-        return jsonify(
-            status="success",
-            processed=result
-        )
-    except Exception as e:
-        logger.error(f"Processing error: {str(e)}")
-        return jsonify(
-            status="error",
-            error=str(e)
-        ), 500
+            return "Unauthorized", 401
 
-@app.route("/send_test_email/<email>")
-def send_test_email(email):
-    try:
-        token_path = get_token_path(email)
-        if not os.path.exists(token_path):
-            return "User not connected", 400
-            
-        with open(token_path, "r") as token_file:
-            creds = Credentials.from_authorized_user_info(
-                json.load(token_file), 
-                SCOPES
-            )
-            
-        service = build("gmail", "v1", credentials=creds)
-        message = {
-            "raw": base64.urlsafe_b64encode(
-                f"From: me\nTo: {email}\nSubject: Test\n\nHello from ReplyzeAI".encode()
-            ).decode()
-        }
-        service.users().messages().send(userId="me", body=message).execute()
-        return "📨 Test email sent!"
+        from main import run_worker
+        result = run_worker()
+        return f"Processed: {result}"
     except Exception as e:
-        logger.error(f"Test email error: {str(e)}")
-        return "Failed to send test email", 500
+        logger.error(f"Processing failed: {str(e)}")
+        return "Processing error", 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
