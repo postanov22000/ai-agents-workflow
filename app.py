@@ -4,7 +4,6 @@ import logging
 from datetime import datetime, timezone
 from functools import wraps
 from flask import Flask, redirect, request, session, jsonify, g
-from flask_cors import CORS
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
@@ -19,10 +18,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app, supports_credentials=True, origins=[
-    "https://replyzeai.onrender.com",
-    "http://localhost:3000"
-])
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 
 # Configuration
@@ -50,6 +45,7 @@ except Exception as e:
     raise
 
 def validate_client_secrets():
+    """Ensure client_secrets.json exists"""
     if not os.path.exists(CLIENT_SECRETS_FILE):
         client_secrets = os.environ.get("GOOGLE_CLIENT_SECRETS")
         if client_secrets:
@@ -61,10 +57,21 @@ def validate_client_secrets():
                 logger.error(f"Failed to write client_secrets.json: {str(e)}")
                 raise
         else:
-            logger.error("Missing client_secrets.json and GOOGLE_CLIENT_SECRETS env")
+            logger.error("Missing both client_secrets.json and GOOGLE_CLIENT_SECRETS env")
             raise RuntimeError("Missing OAuth configuration")
 
 validate_client_secrets()
+
+# Manual CORS handling
+@app.after_request
+def add_cors_headers(response):
+    origin = request.headers.get('Origin', 'https://replyzeai.onrender.com')
+    if origin in ['https://replyzeai.onrender.com', 'http://localhost:3000']:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    return response
 
 # Auth middleware
 def supabase_jwt_required(f):
@@ -148,17 +155,12 @@ def oauth2callback():
             "scopes": credentials.scopes
         }
 
-        upsert_response = supabase.table("gmail_tokens").upsert({
+        supabase.table("gmail_tokens").upsert({
             "user_email": user_email,
             "credentials": credentials_data
         }).execute()
 
-        if not upsert_response.data:
-            logger.error("Supabase upsert failed")
-            return jsonify(error="Credential storage failed"), 500
-
-        logger.info(f"Stored credentials for {user_email}")
-        return redirect(f"/dashboard?success=true&email={user_email}")
+        return redirect(f"https://replyzeai.onrender.com/dashboard?success=true&email={user_email}")
 
     except Exception as e:
         logger.error(f"OAuth callback failed: {str(e)}")
@@ -200,7 +202,7 @@ def get_activities():
         activities = supabase.table("emails") \
                           .select("id,sender_email,recipient_email,processed_content,created_at") \
                           .eq("user_id", g.user.id) \
-                          .order("created_at", desc=True) \
+                          .order("created_at", descending=True) \
                           .limit(5) \
                           .execute().data
                           
