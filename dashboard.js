@@ -1,102 +1,113 @@
+// dashboard.js
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
-const supabase = createClient(
-  'https://skxzfkudduqrubtgtodp.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODAwNzMsImV4cCI6MjA2MTE1NjA3M30.Wj3V5-swysAz8xAbA4lKmo-NNu_mv1UW_X4BgFNq0ag'
-);
-
+// Configuration from HTML meta tags
+const supabaseUrl = document.querySelector('meta[name="supabase-url"]').content;
+const supabaseAnonKey = document.querySelector('meta[name="supabase-anon-key"]').content;
 const API_BASE = 'https://replyzeai.onrender.com';
-let userId;
 
-// UI Elements
-const metrics = {
-  processed: document.getElementById('processed-count'),
+// Initialize Supabase
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// State
+let userId;
+let realtimeChannel;
+
+// DOM Elements
+const elements = {
+  processedCount: document.getElementById('processed-count'),
   timeSaved: document.getElementById('time-saved'),
-  accuracy: document.getElementById('response-accuracy')
+  responseAccuracy: document.getElementById('response-accuracy'),
+  activityContainer: document.getElementById('activity-container'),
+  responderStatus: document.getElementById('responder-status'),
+  logoutBtn: document.getElementById('logout-btn'),
+  configureBtn: document.getElementById('configure-btn'),
+  pauseBtn: document.getElementById('pause-responder')
 };
 
 // Helpers
-const showError = (message) => {
+const showToast = (message, isError = true) => {
   const toast = document.createElement('div');
-  toast.className = 'error-toast';
+  toast.className = `toast ${isError ? 'error' : 'success'}`;
   toast.textContent = message;
   document.body.appendChild(toast);
   setTimeout(() => toast.remove(), 5000);
 };
 
-const formatTime = (minutes) => {
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return `${hours}h ${mins}m`;
+const formatDate = (isoString) => {
+  return new Date(isoString).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 };
 
-// API Calls
-const fetchWithAuth = async (url) => {
-  const { data: { session } } = await supabase.auth.getSession();
-  
-  const response = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${session.access_token}`
-    }
-  });
-  
-  if (!response.ok) {
-    throw new Error(`API request failed: ${response.status}`);
+// API Fetch Wrapper
+const fetchAPI = async (endpoint) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      }
+    });
+
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return await response.json();
+  } catch (error) {
+    showToast(`API Error: ${error.message}`);
+    throw error;
   }
-  
-  return response.json();
 };
 
 // Data Loading
 const loadMetrics = async () => {
   try {
-    const data = await fetchWithAuth(`${API_BASE}/api/metrics`);
+    const data = await fetchAPI('/api/metrics');
     
-    metrics.processed.textContent = data.processed;
-    metrics.timeSaved.textContent = formatTime(data.time_saved);
-    metrics.accuracy.textContent = data.processed > 0 
+    elements.processedCount.textContent = data.processed;
+    elements.timeSaved.textContent = `${Math.floor(data.time_saved / 60)}h ${data.time_saved % 60}m`;
+    elements.responseAccuracy.textContent = data.processed > 0 
       ? `${data.accuracy.toFixed(1)}%` 
       : '—';
-      
   } catch (error) {
-    showError('Failed to load metrics');
-    console.error('Metrics error:', error);
+    console.error('Metrics load failed:', error);
   }
 };
 
 const loadActivities = async () => {
   try {
-    const { activities } = await fetchWithAuth(`${API_BASE}/api/activities`);
+    const { activities } = await fetchAPI('/api/activities');
     renderActivities(activities);
   } catch (error) {
-    showError('Failed to load recent activities');
-    console.error('Activities error:', error);
+    console.error('Activities load failed:', error);
   }
 };
 
 const renderActivities = (activities) => {
-  const container = document.getElementById('activity-container');
-  container.innerHTML = activities.length === 0
-    ? '<div class="activity-item">No recent activities found</div>'
-    : activities.map(activity => `
+  elements.activityContainer.innerHTML = activities.length > 0
+    ? activities.map(activity => `
         <div class="activity-item">
           <div class="activity-header">
             <div class="activity-contact">${activity.sender_email}</div>
-            <div class="activity-time">${new Date(activity.created_at).toLocaleString()}</div>
+            <div class="activity-time">${formatDate(activity.created_at)}</div>
           </div>
           <div class="activity-content">${activity.processed_content}</div>
           <div class="activity-actions">
-            <button class="action-btn" onclick="window.openDetail('${activity.id}')">
+            <button class="action-btn" data-email-id="${activity.id}">
               <i class="fas fa-eye"></i>Review
             </button>
           </div>
         </div>
-      `).join('');
+      `).join('')
+    : '<div class="activity-item">No recent activities found</div>';
 };
 
 // Realtime Updates
 const setupRealtime = () => {
-  return supabase.channel('emails')
+  realtimeChannel = supabase.channel('emails-channel')
     .on('postgres_changes', {
       event: '*',
       schema: 'public',
@@ -106,7 +117,44 @@ const setupRealtime = () => {
       loadMetrics();
       loadActivities();
     })
-    .subscribe();
+    .subscribe(status => {
+      elements.responderStatus.textContent = 
+        status === 'SUBSCRIBED' ? 'Active' : 'Connection Issues';
+    });
+};
+
+// Event Handlers
+const setupEventListeners = () => {
+  elements.logoutBtn.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
+  });
+
+  elements.configureBtn.addEventListener('click', () => {
+    window.location.href = '/configure';
+  });
+
+  elements.pauseBtn.addEventListener('click', async () => {
+    try {
+      const { error } = await supabase
+        .from('user_settings')
+        .update({ responder_enabled: false })
+        .eq('user_id', userId);
+      
+      if (error) throw error;
+      showToast('Responder paused successfully', false);
+    } catch (error) {
+      showToast('Failed to pause responder');
+    }
+  });
+
+  elements.activityContainer.addEventListener('click', (e) => {
+    const btn = e.target.closest('.action-btn');
+    if (btn) {
+      const emailId = btn.dataset.emailId;
+      window.open(`/email-detail/${emailId}`, '_blank');
+    }
+  });
 };
 
 // Initialization
@@ -114,32 +162,22 @@ const initDashboard = async () => {
   try {
     const { data: { session }, error } = await supabase.auth.getSession();
     
-    if (error || !session) {
+    if (error || !session?.user) {
       window.location.href = '/login';
       return;
     }
-    
+
     userId = session.user.id;
-    
-    // Load initial data
     await Promise.all([loadMetrics(), loadActivities()]);
     setupRealtime();
-    
-    // Event listeners
-    document.getElementById('logout-btn').addEventListener('click', async () => {
-      await supabase.auth.signOut();
-      window.location.href = '/login';
-    });
-    
-    document.getElementById('configure-btn').addEventListener('click', () => {
-      window.location.href = '/configure';
-    });
+    setupEventListeners();
+    elements.responderStatus.textContent = 'Active';
 
   } catch (error) {
-    console.error('Initialization error:', error);
+    console.error('Dashboard init failed:', error);
     window.location.href = '/login';
   }
 };
 
-// Start the dashboard
-initDashboard();
+// Start the Dashboard
+document.addEventListener('DOMContentLoaded', initDashboard);
