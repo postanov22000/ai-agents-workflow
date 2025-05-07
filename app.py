@@ -1,14 +1,13 @@
 import os
 import json
-import hashlib
 import logging
+from datetime import datetime, timezone
 from flask import Flask, redirect, request, session, jsonify
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from supabase import create_client
 from werkzeug.exceptions import HTTPException
-from datetime import datetime, timezone
 
 # Configure logging
 logging.basicConfig(
@@ -148,12 +147,15 @@ def process_emails():
             logger.warning("Invalid process token attempt")
             return jsonify(error="Unauthorized"), 401
 
-        # Check daily email limit
-        sent_today = supabase.table("emails") \
-                          .select("id", count=True) \
-                          .gte("sent_at", datetime.now(timezone.utc).isoformat()) \
-                          .execute().count
+        # Check daily email limit with proper None handling
+        result = supabase.table("emails") \
+                      .select("id", count=True) \
+                      .gte("sent_at", datetime.now(timezone.utc).isoformat()) \
+                      .execute()
         
+        sent_today = result.count if result.count is not None else 0
+        logger.info(f"Emails sent today: {sent_today}")
+
         if sent_today >= DAILY_EMAIL_LIMIT:
             logger.warning(f"Daily limit reached: {sent_today}/{DAILY_EMAIL_LIMIT}")
             return jsonify(
@@ -173,17 +175,19 @@ def process_emails():
 @app.route("/health")
 def health_check():
     try:
-        email_count = supabase.table("emails").select("id", count=True).execute().count
-        token_count = supabase.table("gmail_tokens").select("user_email").execute().count
+        email_count = supabase.table("emails").select("id", count=True).execute().count or 0
+        token_count = supabase.table("gmail_tokens").select("user_email").execute().count or 0
         return jsonify(
             database_connected=True,
             emails=email_count,
-            gmail_connections=token_count
+            gmail_connections=token_count,
+            status="ok"
         )
     except Exception as e:
         return jsonify(
             database_connected=False,
-            error=str(e)
+            error=str(e),
+            status="error"
         ), 500
 
 if __name__ == "__main__":
