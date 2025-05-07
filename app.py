@@ -2,16 +2,17 @@ import os
 import json
 import hashlib
 import logging
-from flask import Flask, redirect, request, session
+from flask import Flask, redirect, request, session, jsonify
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from supabase import create_client
 from werkzeug.exceptions import HTTPException
+from datetime import datetime, timezone
 
 # Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 
-# OAuth Configuration
+# Configuration
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "openid",
@@ -27,6 +28,7 @@ SCOPES = [
 ]
 CLIENT_SECRETS_FILE = "client_secrets.json"
 REDIRECT_URI = "https://replyzeai.onrender.com/oauth2callback"
+DAILY_EMAIL_LIMIT = 95  # Stay under Google's 100/day limit
 
 # Initialize Supabase
 try:
@@ -63,7 +65,7 @@ validate_client_secrets()
 @app.errorhandler(Exception)
 def handle_exception(e):
     logger.exception("An error occurred")
-    return "Internal Server Error", 500
+    return jsonify(error="Internal Server Error"), 500
 
 @app.route("/")
 def index():
@@ -86,14 +88,14 @@ def authorize():
         return redirect(auth_url)
     except Exception as e:
         logger.error(f"Authorization initialization failed: {str(e)}")
-        return "Authorization failed - please try again later", 500
+        return jsonify(error="Authorization failed"), 500
 
 @app.route("/oauth2callback")
 def oauth2callback():
     try:
         if "state" not in session:
             logger.error("Missing session state in callback")
-            return "Missing session state", 400
+            return jsonify(error="Invalid session"), 400
 
         flow = Flow.from_client_secrets_file(
             CLIENT_SECRETS_FILE,
@@ -102,20 +104,17 @@ def oauth2callback():
             redirect_uri=REDIRECT_URI
         )
 
-        # Fetch tokens from Google
         flow.fetch_token(authorization_response=request.url)
         credentials = flow.credentials
 
-        # Get user email
         user_info_service = build("oauth2", "v2", credentials=credentials)
         user_info = user_info_service.userinfo().get().execute()
         user_email = user_info.get("email")
 
         if not user_email:
             logger.error("Failed to retrieve user email from Google")
-            raise ValueError("Missing user email in OAuth response")
+            return jsonify(error="Email not found"), 400
 
-        # Prepare credentials data
         credentials_data = {
             "token": credentials.token,
             "refresh_token": credentials.refresh_token,
@@ -125,48 +124,67 @@ def oauth2callback():
             "scopes": credentials.scopes
         }
 
-        # Store in Supabase
-        try:
-            upsert_response = supabase.table("gmail_tokens").upsert({
-                "user_email": user_email,
-                "credentials": credentials_data
-            }).execute()
+        upsert_response = supabase.table("gmail_tokens").upsert({
+            "user_email": user_email,
+            "credentials": credentials_data
+        }).execute()
 
-            if not upsert_response.data:
-                logger.error("Supabase upsert returned no data")
-                raise RuntimeError("Failed to store credentials")
+        if not upsert_response.data:
+            logger.error("Supabase upsert failed")
+            return jsonify(error="Credential storage failed"), 500
 
-            logger.info(f"Successfully stored credentials for {user_email}")
-            
-        except Exception as db_error:
-            logger.error(f"Supabase storage failed: {str(db_error)}")
-            logger.debug(f"Credentials data: {json.dumps(credentials_data, indent=2)}")
-            raise
-
+        logger.info(f"Stored credentials for {user_email}")
         return f"✅ Gmail connected for {user_email}"
 
     except Exception as e:
         logger.error(f"OAuth callback failed: {str(e)}")
-        return "Connection failed - please try again", 500
+        return jsonify(error="Connection failed"), 500
 
 @app.route("/process", methods=["GET"])
 def process_emails():
     try:
         auth_token = request.args.get("token")
-        if not auth_token:
-            logger.warning("Missing process token")
-            return "Unauthorized", 401
-
-        if auth_token != os.environ.get("PROCESS_SECRET_TOKEN"):
+        if not auth_token or auth_token != os.environ.get("PROCESS_SECRET_TOKEN"):
             logger.warning("Invalid process token attempt")
-            return "Unauthorized", 401
+            return jsonify(error="Unauthorized"), 401
+
+        # Check daily email limit
+        sent_today = supabase.table("emails") \
+                          .select("id", count=True) \
+                          .gte("sent_at", datetime.now(timezone.utc).isoformat()) \
+                          .execute().count
+        
+        if sent_today >= DAILY_EMAIL_LIMIT:
+            logger.warning(f"Daily limit reached: {sent_today}/{DAILY_EMAIL_LIMIT}")
+            return jsonify(
+                status="limit_reached",
+                sent_today=sent_today,
+                limit=DAILY_EMAIL_LIMIT
+            ), 429
 
         from main import run_worker
         result = run_worker()
-        return f"Processed: {result}"
+        return jsonify(status="success", result=result)
+
     except Exception as e:
         logger.error(f"Processing failed: {str(e)}")
-        return "Processing error", 500
+        return jsonify(error=str(e)), 500
+
+@app.route("/health")
+def health_check():
+    try:
+        email_count = supabase.table("emails").select("id", count=True).execute().count
+        token_count = supabase.table("gmail_tokens").select("user_email").execute().count
+        return jsonify(
+            database_connected=True,
+            emails=email_count,
+            gmail_connections=token_count
+        )
+    except Exception as e:
+        return jsonify(
+            database_connected=False,
+            error=str(e)
+        ), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
