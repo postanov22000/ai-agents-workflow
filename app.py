@@ -62,52 +62,61 @@ def validate_client_secrets():
 
 validate_client_secrets()
 
-# CORS Handling
+# Enhanced CORS Configuration
 @app.before_request
-def handle_options():
+def handle_preflight():
     if request.method == "OPTIONS":
         response = jsonify({"status": "preflight"})
-        response.headers.add("Access-Control-Allow-Headers", "*")
-        response.headers.add("Access-Control-Allow-Methods", "*")
+        response.headers["Access-Control-Allow-Origin"] = request.headers.get("Origin", "*")
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
         return response
 
 @app.after_request
 def add_cors_headers(response):
-    origin = request.headers.get('Origin', 'https://replyzeai.onrender.com')
     allowed_origins = [
         'https://replyzeai.onrender.com',
         'http://localhost:3000',
         'http://127.0.0.1:3000'
     ]
+    origin = request.headers.get('Origin')
     
     if origin in allowed_origins:
-        response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
     
     return response
 
-# Auth Middleware
+# Authentication Middleware with Enhanced Logging
 def supabase_jwt_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            logger.error("Missing or invalid Authorization header")
-            return jsonify(error="Authorization token required"), 401
+        auth_header = request.headers.get('Authorization', '')
+        logger.info(f"Incoming request headers: {dict(request.headers)}")
+        
+        if not auth_header.startswith('Bearer '):
+            logger.error("Missing Bearer token in authorization header")
+            return jsonify(error="Authorization header required"), 401
             
         token = auth_header.split(' ')[1]
+        logger.info(f"JWT token received (truncated): {token[:15]}...")
+
         try:
             user = supabase.auth.get_user(token)
-            if not user:
-                logger.error("Invalid user object from Supabase")
-                return jsonify(error="Invalid token"), 401
+            if not user or not user.user:
+                logger.error("Supabase returned invalid user object")
+                return jsonify(error="Invalid authentication token"), 401
+                
             g.user = user.user
             logger.info(f"Authenticated user: {user.user.id}")
+            
         except Exception as e:
-            logger.error(f"JWT validation failed: {str(e)}")
-            return jsonify(error="Unauthorized"), 401
+            logger.error(f"Authentication failed: {str(e)}")
+            return jsonify(error="Authorization failed"), 401
+            
         return f(*args, **kwargs)
     return decorated_function
 
@@ -116,9 +125,10 @@ def handle_exception(e):
     code = 500
     if isinstance(e, HTTPException):
         code = e.code
-    logger.exception(f"An error occurred: {str(e)}")
+    logger.exception(f"Unhandled exception: {str(e)}")
     return jsonify(error="Internal Server Error"), code
 
+# Routes
 @app.route("/")
 def index():
     return redirect("https://replyzeai.onrender.com/dashboard")
@@ -193,7 +203,6 @@ def get_metrics():
     try:
         user_id = g.user.id
         
-        # Get processed count
         processed_result = supabase.table("emails") \
             .select("*", count='exact') \
             .eq("user_id", user_id) \
@@ -201,7 +210,6 @@ def get_metrics():
             .execute()
         processed = processed_result.count or 0
 
-        # Get completed count
         completed_result = supabase.table("emails") \
             .select("*", count='exact') \
             .eq("user_id", user_id) \
@@ -273,13 +281,12 @@ def process_emails():
 @app.route("/health")
 def health_check():
     try:
-        email_result = supabase.table("emails").select("id", count='exact').execute()
-        token_result = supabase.table("gmail_tokens").select("user_email", count='exact').execute()
-        
+        email_count = supabase.table("emails").select("id", count='exact').execute().count or 0
+        token_count = supabase.table("gmail_tokens").select("user_email", count='exact').execute().count or 0
         return jsonify(
             database_connected=True,
-            emails=email_result.count or 0,
-            gmail_connections=token_result.count or 0,
+            emails=email_count,
+            gmail_connections=token_count,
             status="ok"
         )
     except Exception as e:
