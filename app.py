@@ -45,7 +45,7 @@ except Exception as e:
     raise
 
 def validate_client_secrets():
-    """Ensure client_secrets.json exists"""
+    """Ensure client_secrets.json exists or create from env"""
     if not os.path.exists(CLIENT_SECRETS_FILE):
         client_secrets = os.environ.get("GOOGLE_CLIENT_SECRETS")
         if client_secrets:
@@ -63,14 +63,29 @@ def validate_client_secrets():
 validate_client_secrets()
 
 # CORS Handling
+@app.before_request
+def handle_options():
+    if request.method == "OPTIONS":
+        response = jsonify({"status": "preflight"})
+        response.headers.add("Access-Control-Allow-Headers", "*")
+        response.headers.add("Access-Control-Allow-Methods", "*")
+        return response
+
 @app.after_request
 def add_cors_headers(response):
     origin = request.headers.get('Origin', 'https://replyzeai.onrender.com')
-    if origin in ['https://replyzeai.onrender.com', 'http://localhost:3000']:
+    allowed_origins = [
+        'https://replyzeai.onrender.com',
+        'http://localhost:3000',
+        'http://127.0.0.1:3000'
+    ]
+    
+    if origin in allowed_origins:
         response.headers['Access-Control-Allow-Origin'] = origin
         response.headers['Access-Control-Allow-Credentials'] = 'true'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    
     return response
 
 # Auth Middleware
@@ -79,14 +94,17 @@ def supabase_jwt_required(f):
     def decorated_function(*args, **kwargs):
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify(error="Missing token"), 401
+            logger.error("Missing or invalid Authorization header")
+            return jsonify(error="Authorization token required"), 401
             
         token = auth_header.split(' ')[1]
         try:
             user = supabase.auth.get_user(token)
             if not user:
-                raise ValueError("Invalid token")
+                logger.error("Invalid user object from Supabase")
+                return jsonify(error="Invalid token"), 401
             g.user = user.user
+            logger.info(f"Authenticated user: {user.user.id}")
         except Exception as e:
             logger.error(f"JWT validation failed: {str(e)}")
             return jsonify(error="Unauthorized"), 401
@@ -228,13 +246,12 @@ def process_emails():
             logger.warning("Invalid process token attempt")
             return jsonify(error="Unauthorized"), 401
 
-        # Get count of emails sent today
         result = supabase.table("emails") \
             .select("*", count='exact') \
-            .gte("sent_at", datetime.now(timezone.utc).date().isoformat()) \
+            .gte("sent_at", datetime.now(timezone.utc).isoformat()) \
             .execute()
-        sent_today = result.count or 0
-
+        
+        sent_today = result.count if result.count is not None else 0
         logger.info(f"Emails sent today: {sent_today}")
 
         if sent_today >= DAILY_EMAIL_LIMIT:
@@ -256,18 +273,13 @@ def process_emails():
 @app.route("/health")
 def health_check():
     try:
-        # Check email count
         email_result = supabase.table("emails").select("id", count='exact').execute()
-        email_count = email_result.count or 0
-        
-        # Check token count
         token_result = supabase.table("gmail_tokens").select("user_email", count='exact').execute()
-        token_count = token_result.count or 0
-
+        
         return jsonify(
             database_connected=True,
-            emails=email_count,
-            gmail_connections=token_count,
+            emails=email_result.count or 0,
+            gmail_connections=token_result.count or 0,
             status="ok"
         )
     except Exception as e:
