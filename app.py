@@ -172,18 +172,21 @@ def get_metrics():
     try:
         user_id = g.user.id
         
-        processed = supabase.table("emails") \
-                          .select("id", count=True) \
-                          .eq("user_id", user_id) \
-                          .gte("created_at", datetime.now(timezone.utc).date().isoformat()) \
-                          .execute().count or 0
+        # Get counts using Supabase's count option
+        result = supabase.table("emails") \
+                      .select("*", count='exact') \
+                      .eq("user_id", user_id) \
+                      .gte("created_at", datetime.now(timezone.utc).date().isoformat()) \
+                      .execute()
+        processed = result.count or 0
 
-        completed = supabase.table("emails") \
-                          .select("id", count=True) \
-                          .eq("user_id", user_id) \
-                          .eq("status", "sent") \
-                          .gte("created_at", datetime.now(timezone.utc).date().isoformat()) \
-                          .execute().count or 0
+        result = supabase.table("emails") \
+                      .select("*", count='exact') \
+                      .eq("user_id", user_id) \
+                      .eq("status", "sent") \
+                      .gte("created_at", datetime.now(timezone.utc).date().isoformat()) \
+                      .execute()
+        completed = result.count or 0
 
         return jsonify({
             "processed": processed,
@@ -194,6 +197,24 @@ def get_metrics():
     except Exception as e:
         logger.error(f"Metrics error: {str(e)}")
         return jsonify(error="Failed to load metrics"), 500
+
+@app.route("/api/activities")
+@supabase_jwt_required
+def get_activities():
+    try:
+        user_id = g.user.id
+        result = supabase.table("emails") \
+                      .select("id, created_at, sender_email, processed_content, status") \
+                      .eq("user_id", user_id) \
+                      .order("created_at", desc=True) \
+                      .limit(10) \
+                      .execute()
+        
+        return jsonify(activities=result.data)
+        
+    except Exception as e:
+        logger.error(f"Activities error: {str(e)}")
+        return jsonify(error="Failed to load activities"), 500
 
 @app.route("/api/activities")
 @supabase_jwt_required
