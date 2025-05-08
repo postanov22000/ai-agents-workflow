@@ -1,9 +1,8 @@
 import os
 import json
+import hashlib
 import logging
-from datetime import datetime, timezone
-from functools import wraps
-from flask import Flask, redirect, request, session, jsonify, g
+from flask import Flask, redirect, request, session
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
@@ -12,7 +11,7 @@ from werkzeug.exceptions import HTTPException
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -20,7 +19,7 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 
-# Configuration
+# OAuth Configuration
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "openid",
@@ -28,7 +27,6 @@ SCOPES = [
 ]
 CLIENT_SECRETS_FILE = "client_secrets.json"
 REDIRECT_URI = "https://replyzeai.onrender.com/oauth2callback"
-DAILY_EMAIL_LIMIT = 95
 
 # Initialize Supabase
 try:
@@ -45,7 +43,7 @@ except Exception as e:
     raise
 
 def validate_client_secrets():
-    """Ensure client_secrets.json exists or create from env"""
+    """Ensure client_secrets.json exists"""
     if not os.path.exists(CLIENT_SECRETS_FILE):
         client_secrets = os.environ.get("GOOGLE_CLIENT_SECRETS")
         if client_secrets:
@@ -62,76 +60,14 @@ def validate_client_secrets():
 
 validate_client_secrets()
 
-# Enhanced CORS Configuration
-@app.before_request
-def handle_preflight():
-    if request.method == "OPTIONS":
-        response = jsonify({"status": "preflight"})
-        response.headers["Access-Control-Allow-Origin"] = request.headers.get("Origin", "*")
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Vary"] = "Origin"
-        return response
-
-@app.after_request
-def add_cors_headers(response):
-    allowed_origins = [
-        'https://replyzeai.onrender.com',
-        'http://localhost:3000',
-        'http://127.0.0.1:3000'
-    ]
-    origin = request.headers.get('Origin')
-    
-    if origin in allowed_origins:
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Vary"] = "Origin"
-    
-    return response
-
-# Authentication Middleware with Enhanced Logging
-def supabase_jwt_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        auth_header = request.headers.get('Authorization', '')
-        logger.info(f"Incoming request headers: {dict(request.headers)}")
-        
-        if not auth_header.startswith('Bearer '):
-            logger.error("Missing Bearer token in authorization header")
-            return jsonify(error="Authorization header required"), 401
-            
-        token = auth_header.split(' ')[1]
-        logger.info(f"JWT token received (truncated): {token[:15]}...")
-
-        try:
-            user = supabase.auth.get_user(token)
-            if not user or not user.user:
-                logger.error("Supabase returned invalid user object")
-                return jsonify(error="Invalid authentication token"), 401
-                
-            g.user = user.user
-            logger.info(f"Authenticated user: {user.user.id}")
-            
-        except Exception as e:
-            logger.error(f"Authentication failed: {str(e)}")
-            return jsonify(error="Authorization failed"), 401
-            
-        return f(*args, **kwargs)
-    return decorated_function
-
 @app.errorhandler(Exception)
 def handle_exception(e):
-    code = 500
-    if isinstance(e, HTTPException):
-        code = e.code
-    logger.exception(f"Unhandled exception: {str(e)}")
-    return jsonify(error="Internal Server Error"), code
+    logger.exception("An error occurred")
+    return "Internal Server Error", 500
 
-# Routes
 @app.route("/")
 def index():
-    return redirect("https://replyzeai.onrender.com/dashboard")
+    return '<a href="/authorize">Connect your Gmail</a>'
 
 @app.route("/authorize")
 def authorize():
@@ -150,14 +86,14 @@ def authorize():
         return redirect(auth_url)
     except Exception as e:
         logger.error(f"Authorization initialization failed: {str(e)}")
-        return jsonify(error="Authorization failed"), 500
+        return "Authorization failed - please try again later", 500
 
 @app.route("/oauth2callback")
 def oauth2callback():
     try:
         if "state" not in session:
             logger.error("Missing session state in callback")
-            return jsonify(error="Invalid session"), 400
+            return "Missing session state", 400
 
         flow = Flow.from_client_secrets_file(
             CLIENT_SECRETS_FILE,
@@ -166,17 +102,20 @@ def oauth2callback():
             redirect_uri=REDIRECT_URI
         )
 
+        # Fetch tokens from Google
         flow.fetch_token(authorization_response=request.url)
         credentials = flow.credentials
 
+        # Get user email
         user_info_service = build("oauth2", "v2", credentials=credentials)
         user_info = user_info_service.userinfo().get().execute()
         user_email = user_info.get("email")
 
         if not user_email:
             logger.error("Failed to retrieve user email from Google")
-            return jsonify(error="Email not found"), 400
+            raise ValueError("Missing user email in OAuth response")
 
+        # Prepare credentials data
         credentials_data = {
             "token": credentials.token,
             "refresh_token": credentials.refresh_token,
@@ -186,115 +125,48 @@ def oauth2callback():
             "scopes": credentials.scopes
         }
 
-        supabase.table("gmail_tokens").upsert({
-            "user_email": user_email,
-            "credentials": credentials_data
-        }).execute()
+        # Store in Supabase
+        try:
+            upsert_response = supabase.table("gmail_tokens").upsert({
+                "user_email": user_email,
+                "credentials": credentials_data
+            }).execute()
 
-        return redirect(f"https://replyzeai.onrender.com/dashboard?success=true&email={user_email}")
+            if not upsert_response.data:
+                logger.error("Supabase upsert returned no data")
+                raise RuntimeError("Failed to store credentials")
+
+            logger.info(f"Successfully stored credentials for {user_email}")
+            
+        except Exception as db_error:
+            logger.error(f"Supabase storage failed: {str(db_error)}")
+            logger.debug(f"Credentials data: {json.dumps(credentials_data, indent=2)}")
+            raise
+
+        return f"✅ Gmail connected for {user_email}"
 
     except Exception as e:
         logger.error(f"OAuth callback failed: {str(e)}")
-        return jsonify(error="Connection failed"), 500
-
-@app.route("/api/metrics")
-@supabase_jwt_required
-def get_metrics():
-    try:
-        user_id = g.user.id
-        
-        processed_result = supabase.table("emails") \
-            .select("*", count='exact') \
-            .eq("user_id", user_id) \
-            .gte("created_at", datetime.now(timezone.utc).date().isoformat()) \
-            .execute()
-        processed = processed_result.count or 0
-
-        completed_result = supabase.table("emails") \
-            .select("*", count='exact') \
-            .eq("user_id", user_id) \
-            .eq("status", "sent") \
-            .gte("created_at", datetime.now(timezone.utc).date().isoformat()) \
-            .execute()
-        completed = completed_result.count or 0
-
-        return jsonify({
-            "processed": processed,
-            "time_saved": processed * 5,
-            "accuracy": (completed / processed * 100) if processed else 0
-        })
-        
-    except Exception as e:
-        logger.error(f"Metrics error: {str(e)}")
-        return jsonify(error="Failed to load metrics"), 500
-
-@app.route("/api/activities")
-@supabase_jwt_required
-def get_activities():
-    try:
-        user_id = g.user.id
-        result = supabase.table("emails") \
-            .select("id, created_at, sender_email, processed_content, status") \
-            .eq("user_id", user_id) \
-            .order("created_at", desc=True) \
-            .limit(10) \
-            .execute()
-        
-        return jsonify(activities=result.data)
-        
-    except Exception as e:
-        logger.error(f"Activities error: {str(e)}")
-        return jsonify(error="Failed to load activities"), 500
+        return "Connection failed - please try again", 500
 
 @app.route("/process", methods=["GET"])
 def process_emails():
     try:
         auth_token = request.args.get("token")
-        if not auth_token or auth_token != os.environ.get("PROCESS_SECRET_TOKEN"):
+        if not auth_token:
+            logger.warning("Missing process token")
+            return "Unauthorized", 401
+
+        if auth_token != os.environ.get("PROCESS_SECRET_TOKEN"):
             logger.warning("Invalid process token attempt")
-            return jsonify(error="Unauthorized"), 401
-
-        result = supabase.table("emails") \
-            .select("*", count='exact') \
-            .gte("sent_at", datetime.now(timezone.utc).isoformat()) \
-            .execute()
-        
-        sent_today = result.count if result.count is not None else 0
-        logger.info(f"Emails sent today: {sent_today}")
-
-        if sent_today >= DAILY_EMAIL_LIMIT:
-            logger.warning(f"Daily limit reached: {sent_today}/{DAILY_EMAIL_LIMIT}")
-            return jsonify(
-                status="limit_reached",
-                sent_today=sent_today,
-                limit=DAILY_EMAIL_LIMIT
-            ), 429
+            return "Unauthorized", 401
 
         from main import run_worker
         result = run_worker()
-        return jsonify(status="success", result=result)
-
+        return f"Processed: {result}"
     except Exception as e:
         logger.error(f"Processing failed: {str(e)}")
-        return jsonify(error=str(e)), 500
-
-@app.route("/health")
-def health_check():
-    try:
-        email_count = supabase.table("emails").select("id", count='exact').execute().count or 0
-        token_count = supabase.table("gmail_tokens").select("user_email", count='exact').execute().count or 0
-        return jsonify(
-            database_connected=True,
-            emails=email_count,
-            gmail_connections=token_count,
-            status="ok"
-        )
-    except Exception as e:
-        return jsonify(
-            database_connected=False,
-            error=str(e),
-            status="error"
-        ), 500
+        return "Processing error", 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
