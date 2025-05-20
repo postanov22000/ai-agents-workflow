@@ -7,6 +7,7 @@ import base64
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
+from google.auth.exceptions import RefreshError  # Added import
 from supabase import create_client, Client
 
 # Configure logging
@@ -59,8 +60,19 @@ def load_credentials(sender_email: str) -> Credentials:
 
         if creds.expired:
             logger.info(f"Refreshing expired credentials for {sender_email}")
-            creds.refresh(Request())
-            
+            try:
+                creds.refresh(Request())
+            except RefreshError as e:
+                if 'invalid_grant' in str(e).lower():
+                    # Delete invalid credentials
+                    supabase.table('gmail_tokens') \
+                           .delete() \
+                           .eq('user_email', sender_email) \
+                           .execute()
+                    logger.error(f"Deleted invalid credentials for {sender_email}")
+                    raise ValueError("Session expired. Please re-authenticate your Gmail.")
+                raise
+
             # Update Supabase with new credentials
             supabase.table('gmail_tokens').upsert({
                 'user_email': sender_email,
