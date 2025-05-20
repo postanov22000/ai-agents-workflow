@@ -7,7 +7,7 @@ import base64
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
-from google.auth.exceptions import RefreshError  # Added import
+from google.auth.exceptions import RefreshError
 from supabase import create_client, Client
 
 # Configure logging
@@ -70,6 +70,13 @@ def load_credentials(sender_email: str) -> Credentials:
                            .eq('user_email', sender_email) \
                            .execute()
                     logger.error(f"Deleted invalid credentials for {sender_email}")
+                    
+                    # Mark all user's emails as needing reauthentication
+                    supabase.table('emails') \
+                           .update({'status': 'needs_reauthentication'}) \
+                           .eq('sender_email', sender_email) \
+                           .execute()
+                    
                     raise ValueError("Session expired. Please re-authenticate your Gmail.")
                 raise
 
@@ -159,7 +166,7 @@ def process_single_email(email: dict) -> None:
         supabase.table("emails") \
             .update({
                 "status": "error",
-                "error_message": str(e)[:500]  # Truncate long errors
+                "error_message": str(e)[:500]
             }) \
             .eq("id", email_id) \
             .execute()
@@ -190,32 +197,54 @@ def send_single_email(email: dict) -> None:
 
     except Exception as e:
         logger.error(f"Sending failed for email {email_id}: {str(e)}")
-        supabase.table("emails") \
-            .update({
-                "status": "failed",
-                "error_message": str(e)[:500]
-            }) \
-            .eq("id", email_id) \
-            .execute()
+        
+        # Special handling for credential issues
+        if 'invalid_grant' in str(e).lower():
+            supabase.table('emails') \
+                   .update({'status': 'needs_reauthentication'}) \
+                   .eq('id', email_id) \
+                   .execute()
+        else:
+            supabase.table("emails") \
+                .update({
+                    "status": "failed",
+                    "error_message": str(e)[:500]
+                }) \
+                .eq("id", email_id) \
+                .execute()
 
 def run_worker() -> str:
     """Main worker function to process emails"""
     try:
         logger.info("Starting email processing")
         
-        # Process preprocessing emails
+        # Process preprocessing emails (skip needs_reauthentication)
         preprocessing = supabase.table("emails") \
                               .select("*") \
                               .eq("status", "preprocessing") \
+                              .neq("sender_email", 
+                                   supabase.table('emails')
+                                          .select('sender_email')
+                                          .eq('status', 'needs_reauthentication')
+                                          .execute()
+                                          .data
+                                  ) \
                               .execute().data
         
         for email in preprocessing:
             process_single_email(email)
 
-        # Process ready-to-send emails
+        # Process ready-to-send emails (skip needs_reauthentication)
         ready = supabase.table("emails") \
                        .select("*") \
                        .eq("status", "ready_to_send") \
+                       .neq("sender_email",
+                            supabase.table('emails')
+                                   .select('sender_email')
+                                   .eq('status', 'needs_reauthentication')
+                                   .execute()
+                                   .data
+                           ) \
                        .execute().data
         
         for email in ready:
