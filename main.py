@@ -124,9 +124,9 @@ def process_single_email(email: dict) -> None:
 
         # Generate AI response
         prompt = (
-            "You are a professional real estate agent. "
+            "[INST]You are a professional real estate agent. "
             "Respond to this email in a friendly and professional manner:\n\n"
-            f"{email['original_content']}"
+            f"{email['original_content']}[/INST]"
         )
         
         response = requests.post(
