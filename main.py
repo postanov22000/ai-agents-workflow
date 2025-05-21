@@ -7,7 +7,6 @@ import base64
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
-from google.auth.exceptions import RefreshError
 from supabase import create_client, Client
 
 # Configure logging
@@ -16,6 +15,10 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Hugging Face API key rotation
+HF_API_KEYS = [k.strip() for k in os.environ.get("HF_API_KEYS", "").split(",")]
+current_key_index = 0
 
 # Supabase setup
 def get_supabase() -> Client:
@@ -34,13 +37,12 @@ def get_supabase() -> Client:
 supabase = get_supabase()
 
 def load_credentials(sender_email: str) -> Credentials:
-    """Load and refresh Gmail credentials from Supabase"""
     try:
         response = supabase.table('gmail_tokens') \
                         .select('credentials') \
                         .eq('user_email', sender_email) \
                         .execute()
-        
+
         if not response.data:
             raise ValueError(f"No Gmail credentials found for {sender_email}")
 
@@ -60,27 +62,8 @@ def load_credentials(sender_email: str) -> Credentials:
 
         if creds.expired:
             logger.info(f"Refreshing expired credentials for {sender_email}")
-            try:
-                creds.refresh(Request())
-            except RefreshError as e:
-                if 'invalid_grant' in str(e).lower():
-                    # Delete invalid credentials
-                    supabase.table('gmail_tokens') \
-                           .delete() \
-                           .eq('user_email', sender_email) \
-                           .execute()
-                    logger.error(f"Deleted invalid credentials for {sender_email}")
-                    
-                    # Mark all user's emails as needing reauthentication
-                    supabase.table('emails') \
-                           .update({'status': 'needs_reauthentication'}) \
-                           .eq('sender_email', sender_email) \
-                           .execute()
-                    
-                    raise ValueError("Session expired. Please re-authenticate your Gmail.")
-                raise
+            creds.refresh(Request())
 
-            # Update Supabase with new credentials
             supabase.table('gmail_tokens').upsert({
                 'user_email': sender_email,
                 'credentials': {
@@ -100,7 +83,6 @@ def load_credentials(sender_email: str) -> Credentials:
         raise
 
 def create_message(to: str, subject: str, body: str) -> dict:
-    """Create a MIME message for Gmail API"""
     try:
         message = MIMEText(body)
         message["to"] = to
@@ -113,45 +95,57 @@ def create_message(to: str, subject: str, body: str) -> dict:
         raise
 
 def process_single_email(email: dict) -> None:
-    """Process a single email through AI and update status"""
+    global current_key_index
     email_id = email["id"]
     try:
-        # Update status to processing
         supabase.table("emails") \
             .update({"status": "processing"}) \
             .eq("id", email_id) \
             .execute()
 
-        # Generate AI response
         prompt = (
-            "[INST] You are a professional real estate agent. "
-            "Respond to this email in a friendly and professional manner:\n\n"
+            f"[INST] You are a professional real estate agent. Respond to this email in a friendly and professional manner:\n\n"
             f"{email['original_content']} [/INST]"
         )
-        
-        response = requests.post(
-            "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
-            headers={"Authorization": f"Bearer {os.environ['HF_API_KEY']}"},
-            json={
-                "inputs": prompt,
-                "parameters": {
-                    "max_new_tokens": 500,
-                    "temperature": 0.7
-                },
-                "options": {"use_cache": False}
-            },
-            timeout=30
-        )
 
-        if response.status_code != 200:
-            raise ValueError(f"API Error {response.status_code}: {response.text[:200]}")
+        total_keys = len(HF_API_KEYS)
+        attempts = 0
 
-        try:
-            reply = response.json()[0]["generated_text"].strip()
-        except (KeyError, IndexError):
-            raise ValueError("Unexpected API response format")
+        while attempts < total_keys:
+            key = HF_API_KEYS[current_key_index]
+            try:
+                response = requests.post(
+                    "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
+                    headers={"Authorization": f"Bearer {key}"},
+                    json={
+                        "inputs": prompt,
+                        "parameters": {
+                            "max_new_tokens": 500,
+                            "temperature": 0.7
+                        },
+                        "options": {"use_cache": False}
+                    },
+                    timeout=30
+                )
 
-        # Update with processed content
+                if response.status_code == 200:
+                    reply = response.json()[0]["generated_text"].strip()
+                    break
+                elif response.status_code in [429, 403]:
+                    logger.warning(f"API key {key} exhausted or blocked. Switching...")
+                    current_key_index = (current_key_index + 1) % total_keys
+                    attempts += 1
+                else:
+                    logger.error(f"Unexpected error {response.status_code}: {response.text[:200]}")
+                    current_key_index = (current_key_index + 1) % total_keys
+                    attempts += 1
+            except Exception as e:
+                logger.error(f"Key {key} error: {e}")
+                current_key_index = (current_key_index + 1) % total_keys
+                attempts += 1
+        else:
+            raise RuntimeError("All Hugging Face API keys failed.")
+
         supabase.table("emails") \
             .update({
                 "processed_content": reply,
@@ -172,7 +166,6 @@ def process_single_email(email: dict) -> None:
             .execute()
 
 def send_single_email(email: dict) -> None:
-    """Send a single email and update status"""
     email_id = email["id"]
     try:
         sender = email["sender_email"]
@@ -180,13 +173,11 @@ def send_single_email(email: dict) -> None:
         subject = email.get("subject") or "Re: Your inquiry"
         body = email["processed_content"]
 
-        # Load credentials and send email
         creds = load_credentials(sender)
         service = build("gmail", "v1", credentials=creds, cache_discovery=False)
         msg = create_message(recipient, subject, body)
         service.users().messages().send(userId="me", body=msg).execute()
 
-        # Update status to sent
         supabase.table("emails") \
             .update({
                 "status": "sent",
@@ -197,56 +188,31 @@ def send_single_email(email: dict) -> None:
 
     except Exception as e:
         logger.error(f"Sending failed for email {email_id}: {str(e)}")
-        
-        # Special handling for credential issues
-        if 'invalid_grant' in str(e).lower():
-            supabase.table('emails') \
-                   .update({'status': 'needs_reauthentication'}) \
-                   .eq('id', email_id) \
-                   .execute()
-        else:
-            supabase.table("emails") \
-                .update({
-                    "status": "failed",
-                    "error_message": str(e)[:500]
-                }) \
-                .eq("id", email_id) \
-                .execute()
+        supabase.table("emails") \
+            .update({
+                "status": "failed",
+                "error_message": str(e)[:500]
+            }) \
+            .eq("id", email_id) \
+            .execute()
 
 def run_worker() -> str:
-    """Main worker function to process emails"""
     try:
         logger.info("Starting email processing")
-        
-        # Process preprocessing emails (skip needs_reauthentication)
+
         preprocessing = supabase.table("emails") \
                               .select("*") \
                               .eq("status", "preprocessing") \
-                              .neq("sender_email", 
-                                   supabase.table('emails')
-                                          .select('sender_email')
-                                          .eq('status', 'needs_reauthentication')
-                                          .execute()
-                                          .data
-                                  ) \
                               .execute().data
-        
+
         for email in preprocessing:
             process_single_email(email)
 
-        # Process ready-to-send emails (skip needs_reauthentication)
         ready = supabase.table("emails") \
                        .select("*") \
                        .eq("status", "ready_to_send") \
-                       .neq("sender_email",
-                            supabase.table('emails')
-                                   .select('sender_email')
-                                   .eq('status', 'needs_reauthentication')
-                                   .execute()
-                                   .data
-                           ) \
                        .execute().data
-        
+
         for email in ready:
             send_single_email(email)
 
