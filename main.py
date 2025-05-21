@@ -115,7 +115,7 @@ def process_single_email(email: dict) -> None:
             key = HF_API_KEYS[current_key_index]
             try:
                 response = requests.post(
-                    "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
+                    "https://api-inference.huggingface.co/models/google/flan-t5-base",
                     headers={"Authorization": f"Bearer {key}"},
                     json={
                         "inputs": prompt,
