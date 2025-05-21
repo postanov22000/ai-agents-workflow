@@ -95,7 +95,7 @@ def process_single_email(email: dict) -> None:
             key = HF_API_KEYS[current_key_index]
             try:
                 response = requests.post(
-                    "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",  # ✅ Use free model
+                    "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
                     headers={"Authorization": f"Bearer {key}"},
                     json={
                         "inputs": prompt,
@@ -110,6 +110,11 @@ def process_single_email(email: dict) -> None:
 
                 if response.status_code == 200:
                     reply = response.json()[0]["generated_text"].strip()
+
+                    # 🧼 Strip the echoed prompt if it exists
+                    if "[/INST]" in reply:
+                        reply = reply.split("[/INST]", 1)[1].strip()
+
                     break
                 elif response.status_code in [429, 403, 401]:
                     logger.warning(f"API key {key[:10]}... failed ({response.status_code}), rotating...")
