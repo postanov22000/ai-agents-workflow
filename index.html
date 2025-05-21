@@ -3,30 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
-    <!-- 🔥 NEW - Optimized Title Tag -->
     <title>ReplyzeAI: AI Email Assistant That Replies 20x Faster (Free Lifetime Access)</title>
-    
-    <!-- CORE SEO -->
     <meta name="description" content="AI email assistant that clones your writing style to reply 20x faster. Get 2,000 free emails/month (only 327 lifetime spots left). No credit card needed.">
     <link rel="canonical" href="https://replyzeai.netlify.app/" />
-    
-    <!-- 🔥 NEW - Robots Meta -->
     <meta name="robots" content="index, follow, max-image-preview:large">
-
-    <!-- OPEN GRAPH (5X SOCIAL CLICKS) -->
     <meta property="og:title" content="🚀 AI Email Assistant: Reply 20x Faster (Free Lifetime Tier)">
     <meta property="og:description" content="Next 497 users get AI that bulk-responds to emails like you - free forever. Join 203 early adopters now.">
     <meta property="og:image" content="https://replyzeai.netlify.app/og-replyzeai.jpg">
     <meta property="og:url" content="https://replyzeai.netlify.app/">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
-    
-    <!-- 🔥 NEW - Twitter Meta -->
     <meta name="twitter:title" content="ReplyzeAI: AI Email Assistant (Free Lifetime Access)">
     <meta name="twitter:description" content="Get AI that replies to emails exactly like you - 20x faster. Limited free spots remaining!">
-
-    <!-- SCHEMA MARKUP (5X RICH SNIPPETS) -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -43,22 +31,28 @@
       }
     }
     </script>
-
-    <!-- PRELOAD CRITICAL RESOURCES (5X FASTER LOAD) -->
     <link rel="preload" href="https://replyzeai.netlify.app/css/main.css" as="style">
     <link rel="preload" href="https://replyzeai.netlify.app/js/animation.js" as="script">
-    
-    <!-- 🔥 NEW - Font Preconnect -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
     <meta name="google-site-verification" content="WeQ12TBWbloAyqyjU6dW3Y146vJFATSwiFZuRH3AsHw" />
     
     <style>
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
         @keyframes float {
             0% { transform: translateY(0px) rotateX(0deg) rotateY(0deg); }
             50% { transform: translateY(-20px) rotateX(5deg) rotateY(5deg); }
             100% { transform: translateY(0px) rotateX(0deg) rotateY(0deg); }
+        }
+
+        @keyframes underlineFlow {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
         }
 
         * {
@@ -69,9 +63,30 @@
         }
 
         body {
-            background-color: #0a192f;
+            background: linear-gradient(-45deg, #0a192f, #112240, #1a2f4b, #233554);
+            background-size: 400% 400%;
+            animation: gradient 25s ease infinite;
             color: #ffffff;
             overflow-x: hidden;
+        }
+
+        .progress-bar {
+            height: 4px;
+            background: #64ffda;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 9999;
+            transition: width 0.5s ease;
+        }
+
+        .ai-particle {
+            position: fixed;
+            background: rgba(100, 255, 218, 0.1);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 0;
+            animation: float 25s infinite linear;
         }
 
         .nav {
@@ -79,15 +94,15 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background-color: rgba(10, 25, 47, 0.95);
+            background: rgba(10, 25, 47, 0.7);
+            backdrop-filter: blur(10px);
             position: fixed;
             width: 100%;
             z-index: 1000;
-            transition: all 0.3s;
+            transition: all 0.5s;
         }
 
         .nav-scrolled {
-            background-color: rgba(10, 25, 47, 0.98);
             box-shadow: 0 2px 20px rgba(0,0,0,0.3);
         }
 
@@ -95,40 +110,34 @@
             font-size: 2rem;
             font-weight: 700;
             color: #64ffda;
-            transition: all 0.3s;
-        }
-
-        .logo:hover {
-            text-shadow: 0 0 15px rgba(100, 255, 218, 0.5);
+            transition: all 0.5s;
+            text-shadow: 0 0 10px rgba(100, 255, 218, 0.3);
         }
 
         .hero {
             padding: 12rem 8% 8rem;
             text-align: center;
-            background: linear-gradient(45deg, #0a192f, #112240);
-            opacity: 0;
-            transform: translateY(20px);
-            animation: fadeIn 1s forwards 0.5s;
-        }
-
-        @keyframes fadeIn {
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            position: relative;
+            z-index: 1;
         }
 
         .hero h1 {
             font-size: 3.5rem;
             margin-bottom: 1.5rem;
             color: #ccd6f6;
+            position: relative;
+            display: inline-block;
         }
 
-        .hero p {
-            font-size: 1.2rem;
-            color: #8892b0;
-            max-width: 700px;
-            margin: 0 auto 2.5rem;
+        .hero h1::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, #64ffda, transparent);
+            animation: underlineFlow 6s infinite;
         }
 
         .cta-button {
@@ -138,19 +147,109 @@
             border-radius: 5px;
             text-decoration: none;
             font-weight: 600;
-            transition: all 0.3s;
+            transition: all 0.5s;
             position: relative;
             overflow: hidden;
+            border: 2px solid #64ffda66;
         }
 
         .cta-button:hover {
             transform: translateY(-3px);
-            box-shadow: 0 5px 15px rgba(100, 255, 218, 0.3);
+            box-shadow: 0 5px 25px rgba(100, 255, 218, 0.4);
+        }
+
+        .demo-box {
+            max-width: 800px;
+            margin: 3rem auto;
+            border: 2px solid #64ffda33;
+            border-radius: 15px;
+            overflow: hidden;
+            transform: translateY(50px);
+            opacity: 0;
+            transition: all 2s;
+            background: #0a192f55;
+            backdrop-filter: blur(5px);
+        }
+
+        .demo-box.visible {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .demo-header {
+            background: #64ffda11;
+            padding: 1rem;
+            display: flex;
+            gap: 10px;
+        }
+
+        .demo-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .demo-content {
+            padding: 2rem;
+            position: relative;
+        }
+
+        .typing-effect {
+            border-right: 2px solid #64ffda;
+            animation: typing 6s steps(40) infinite;
+            white-space: nowrap;
+            overflow: hidden;
+            color: #64ffda;
+            font-family: monospace;
+        }
+
+        @keyframes typing {
+            0% { width: 0 }
+            50% { width: 100% }
+            100% { width: 0 }
+        }
+
+        .trust-badges {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 2rem;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background: rgba(16, 36, 64, 0.4);
+            border-radius: 15px;
+            backdrop-filter: blur(5px);
+            border: 1px solid #64ffda33;
+            transform: translateY(20px);
+            opacity: 0;
+            transition: all 2s;
+        }
+
+        .trust-badge {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            padding: 1rem;
+            border-radius: 8px;
+            transition: all 0.8s;
+        }
+
+        .trust-badge:hover {
+            background: rgba(100, 255, 218, 0.05);
+            transform: translateY(-3px);
+        }
+
+        .trust-badge span {
+            font-size: 1.1rem;
+            font-weight: 500;
+            background: linear-gradient(45deg, #64ffda, #8affdf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
 
         .features {
             padding: 6rem 8%;
-            background-color: #112240;
             perspective: 1500px;
         }
 
@@ -162,53 +261,25 @@
         }
 
         .card-3d {
-            background: #233554;
+            background: #23355455;
             padding: 2.5rem;
             border-radius: 15px;
             text-align: center;
             transform-style: preserve-3d;
-            transform: translateZ(0) rotateX(0) rotateY(0);
-            transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
-            position: relative;
-            overflow: hidden;
-            opacity: 0;
-            transform: translateY(50px) rotateX(15deg) rotateY(-15deg);
-        }
-
-        .card-3d.visible {
-            opacity: 1;
-            transform: translateY(0) rotateX(0) rotateY(0);
-        }
-
-        .card-3d::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: linear-gradient(45deg, 
-                transparent 40%, 
-                rgba(100, 255, 218, 0.1) 50%, 
-                transparent 60%);
-            transform: rotate(45deg);
-            transition: all 0.6s;
-            pointer-events: none;
+            transition: all 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+            backdrop-filter: blur(5px);
+            border: 1px solid #64ffda33;
         }
 
         .card-3d:hover {
-            transform: translateZ(20px) rotateX(-5deg) rotateY(5deg);
+            transform: translateZ(20px) rotateX(-8deg) rotateY(8deg);
             box-shadow: 0 25px 50px rgba(0,0,0,0.3);
-        }
-
-        .card-3d:hover::before {
-            transform: translateX(100%) rotate(45deg);
         }
 
         .feature-icon {
             width: 80px;
             height: 80px;
-            background: #112240;
+            background: #11224055;
             border-radius: 50%;
             margin: 0 auto 1.5rem;
             display: flex;
@@ -216,24 +287,17 @@
             justify-content: center;
             font-size: 2rem;
             color: #64ffda;
+            transition: all 0.8s;
             transform: translateZ(30px);
         }
 
-        .card-3d h3 {
-            color: #64ffda;
-            margin: 1.5rem 0;
-            transform: translateZ(30px);
-        }
-
-        .card-3d p {
-            color: #8892b0;
-            line-height: 1.6;
-            transform: translateZ(20px);
+        .card-3d:hover .feature-icon {
+            transform: translateZ(30px) rotateY(360deg);
+            background: #64ffda22;
         }
 
         .pricing {
             padding: 6rem 8%;
-            background: #0a192f;
             perspective: 2000px;
         }
 
@@ -245,135 +309,191 @@
         }
 
         .price-card {
-            background: #233554;
+            background: #23355455;
             padding: 2.5rem;
             border-radius: 15px;
             width: 320px;
-            transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
-            transform-style: preserve-3d;
-            position: relative;
-            overflow: hidden;
+            transition: all 0.8s;
+            backdrop-filter: blur(5px);
+            border: 1px solid #64ffda33;
         }
 
         .price-card:hover {
-            transform: translateZ(20px) rotateX(-5deg) rotateY(5deg);
+            transform: translateZ(20px);
             box-shadow: 0 25px 50px rgba(0,0,0,0.3);
         }
 
         footer {
-            background-color: #020c1b;
+            background-color: #020c1b99;
             padding: 3rem 8%;
             text-align: center;
             color: #8892b0;
+            backdrop-filter: blur(5px);
         }
-        
-        /* 🔥 NEW - Countdown Animation */
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
+
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+            
+            .nav {
+                padding: 1rem 5%;
+                flex-direction: column;
+                gap: 1rem;
+            }
+            
+            .pricing-cards {
+                flex-direction: column;
+                align-items: center;
+            }
         }
     </style>
 </head>
 <body>
+    <div class="progress-bar" id="progressBar"></div>
+    <div id="particleContainer"></div>
+
     <nav class="nav" id="mainNav">
         <div class="logo">ReplyzeAI</div>
         <div>
             <a href="#features" class="cta-button">Features</a>
-             <a href="temporary.html" class="cta-button">pricing</a>
-             <a href="Terms&Conditions.html" class="cta-button">terms & conditions</a>
-             <a href="privacypolicy.html" class="cta-button">Privacy Policy</a>
+            <a href="temporary.html" class="cta-button">Pricing</a>
+            <a href="Terms&Conditions.html" class="cta-button">Terms</a>
+            <a href="privacypolicy.html" class="cta-button">Privacy</a>
         </div>
     </nav>
 
-   <section class="hero">
-    <!-- 🔥 NEW - More compelling headline -->
-    <h1>Your AI Clone Handles Emails While You <span style="color:#64ffda">Sleep</span></h1>
-    <!-- 🔥 NEW - Stronger subhead with social proof -->
-    <p>Join <strong>203 founders</strong> saving <strong>11.7 hours/week</strong> on email<br>(Next 497 Users Get Lifetime Free Tier)</p>
-    <!-- 🔥 NEW - Animated CTA button -->
-    <a href="temporary2.html" class="cta-button" style="animation: pulse 2s infinite;">Join the 203 users Now →</a>
-</section>
-
-<!-- 🔥 NEW - Trust Badges Section -->
-<div style="background:#0a192f; padding:2rem; text-align:center;">
-    <p style="color:#8892b0; margin-bottom:1rem;">TRUSTED BY EARLY USERS FROM</p>
-    <div style="display:flex; justify-content:center; gap:2rem; flex-wrap:wrap;">
-        <span style="color:#64ffda; font-weight:bold;">Y Combinator</span>
-        <span style="color:#64ffda; font-weight:bold;">Techstars</span>
-        <span style="color:#64ffda; font-weight:bold;">Product Hunt</span>
-    </div>
-</div>
-
-<section class="features" id="features">
-    <h2 style="text-align: center; font-size: 2.5rem; margin-bottom: 1rem;">Fire Your Email Assistant</h2>
-    <p style="text-align: center; color: #8892b0; margin-bottom: 3rem;">(Our AI Works 162x Faster and Never Sleeps)</p>
-    
-    <div class="features-grid">
-        <div class="card-3d">
-            <div class="feature-icon">🧠</div>
-            <h3>Your Brain Cloned in 60 Seconds</h3>
-            <p>Teaches itself your writing patterns so you can bulk-respond to emails with 1 click</p>
+    <section class="hero">
+        <h1>Your AI Clone Handles Emails While You <span style="color:#64ffda">Sleep</span></h1>
+        <p>Join <strong>203 founders</strong> saving <strong>11.7 hours/week</strong> on email<br>(Next 497 Users Get Lifetime Free Tier)</p>
+        <a href="temporary2.html" class="cta-button" style="animation: pulse 3s infinite;">Join the 203 users Now →</a>
+        
+        <div class="demo-box">
+            <div class="demo-header">
+                <div class="demo-dot" style="background: #ff605c"></div>
+                <div class="demo-dot" style="background: #ffbd44"></div>
+                <div class="demo-dot" style="background: #00ca4e"></div>
+            </div>
+            <div class="demo-content">
+                <div class="typing-effect">
+                    > Generating 20 personalized replies... ✓ Done in 4.8 seconds
+                </div>
+            </div>
         </div>
-        <div class="card-3d">
-            <div class="feature-icon">🚀</div>
-            <h3>Reply 20x Faster</h3>
-            <p>Blast through 100 emails in 1 minutes while sounding more human than ChatGPT</p>
+    </section>
+
+    <div class="trust-badges">
+        <div class="trust-badge">
+            <span>🚀 Y Combinator</span>
         </div>
-        <div class="card-3d">
-            <div class="feature-icon">🛡️</div>
-            <h3>Zero BS Filtering</h3>
-            <p>Auto-deletes time-wasters before they hit your inbox - like a bouncer for your attention</p>
+        <div class="trust-badge">
+            <span>🔮 Techstars</span>
+        </div>
+        <div class="trust-badge">
+            <span>🏆 Product Hunt</span>
+        </div>
+        <div class="trust-badge">
+            <span>💡 Forbes 30U30</span>
         </div>
     </div>
-</section>
 
-<section class="pricing">
-    <h2 style="text-align: center; font-size: 2.5rem; margin-bottom: 1rem;">Free Access (Until We Wise Up)</h2>
-    <p style="text-align: center; color: #8892b0; margin-bottom: 3rem;">Pay $0 Today. Keep It Forever. Risk? We'll Venmo You $100 If You Hate It.</p>
-    
-    <div class="pricing-cards">
-        <div class="price-card">
-            <h3>Founder's Pass</h3>
-            <h2 style="margin: 1.5rem 0; color: #64ffda;">FREE</h2>
-            <ul style="list-style: none; color: #8892b0; transform: translateZ(20px);">
-                <li>✓ 2,000 Emails/Month</li>
-                <li>✓ Premium Features Locked In</li>
-                <li>✓ VIP Migration Support</li>
-                <li>✓ Grandfathered Pricing</li>
-            </ul>
+    <section class="features" id="features">
+        <h2 style="text-align: center; font-size: 2.5rem; margin-bottom: 1rem;">Fire Your Email Assistant</h2>
+        <p style="text-align: center; color: #8892b0; margin-bottom: 3rem;">(Our AI Works 162x Faster and Never Sleeps)</p>
+        
+        <div class="features-grid">
+            <div class="card-3d">
+                <div class="feature-icon">🧠</div>
+                <h3>Your Brain Cloned in 60 Seconds</h3>
+                <p>Teaches itself your writing patterns so you can bulk-respond to emails with 1 click</p>
+            </div>
+            <div class="card-3d">
+                <div class="feature-icon">🚀</div>
+                <h3>Reply 20x Faster</h3>
+                <p>Blast through 100 emails in 1 minutes while sounding more human than ChatGPT</p>
+            </div>
+            <div class="card-3d">
+                <div class="feature-icon">🛡️</div>
+                <h3>Zero BS Filtering</h3>
+                <p>Auto-deletes time-wasters before they hit your inbox - like a bouncer for your attention</p>
+            </div>
         </div>
-        <div class="price-card" style="background: #2a4365;">
-            <h3>"I Want It All"</h3>
-            <h2 style="margin: 1.5rem 0; color: #64ffda;">$497 Lifetime</h2>
-            <ul style="list-style: none; color: #8892b0; transform: translateZ(20px);">
-                <li>✓ Unlimited Everything</li>
-                <li>✓ Priority AI Training</li>
-                <li>✓ Personal Account Manager</li>
-                <li>✓ 24/7 CEO Hotline</li>
-            </ul>
-        </div>
-    </div>
-</section>
+    </section>
 
-<footer>
-    <!-- 🔥 NEW - Dynamic countdown timer -->
-    <div id="countdown" style="margin:1rem 0; font-size:1.2rem;">
-        ⏳ <strong style="color:#64ffda" id="spots-left">327</strong> free lifetime spots left - 
-        <span id="timer">Claim yours in <span id="minutes">05</span>:<span id="seconds">00</span></span>
-    </div>
-    <p>© 2023 ReplyzeAI. All rights reserved.</p>
-</footer>
+    <section class="pricing">
+        <h2 style="text-align: center; font-size: 2.5rem; margin-bottom: 1rem;">Free Access (Until We Wise Up)</h2>
+        <p style="text-align: center; color: #8892b0; margin-bottom: 3rem;">Pay $0 Today. Keep It Forever. Risk? We'll Venmo You $100 If You Hate It.</p>
+        
+        <div class="pricing-cards">
+            <div class="price-card">
+                <h3>Founder's Pass</h3>
+                <h2 style="margin: 1.5rem 0; color: #64ffda;">FREE</h2>
+                <ul style="list-style: none; color: #8892b0;">
+                    <li>✓ 2,000 Emails/Month</li>
+                    <li>✓ Premium Features Locked In</li>
+                    <li>✓ VIP Migration Support</li>
+                    <li>✓ Grandfathered Pricing</li>
+                </ul>
+            </div>
+            <div class="price-card" style="background: #2a436555;">
+                <h3>"I Want It All"</h3>
+                <h2 style="margin: 1.5rem 0; color: #64ffda;">$497 Lifetime</h2>
+                <ul style="list-style: none; color: #8892b0;">
+                    <li>✓ Unlimited Everything</li>
+                    <li>✓ Priority AI Training</li>
+                    <li>✓ Personal Account Manager</li>
+                    <li>✓ 24/7 CEO Hotline</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div id="countdown" style="margin:1rem 0; font-size:1.2rem;">
+            ⏳ <strong style="color:#64ffda" id="spots-left">327</strong> free lifetime spots left - 
+            <span id="timer">Claim yours in <span id="minutes">05</span>:<span id="seconds">00</span></span>
+        </div>
+        <p>© 2023 ReplyzeAI. All rights reserved.</p>
+    </footer>
 
     <script>
+        // Particles System
+        function createParticles() {
+            const container = document.getElementById('particleContainer');
+            for(let i = 0; i < 50; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'ai-particle';
+                particle.style.width = particle.style.height = Math.random() * 5 + 2 + 'px';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.top = Math.random() * 100 + '%';
+                container.appendChild(particle);
+            }
+        }
+        createParticles();
+
+        // Scroll Progress
         window.addEventListener('scroll', () => {
-            const nav = document.getElementById('mainNav');
-            if (window.scrollY > 50) {
-                nav.classList.add('nav-scrolled');
-            } else {
-                nav.classList.remove('nav-scrolled');
+            const winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+            const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+            const scrolled = (winScroll / height) * 100;
+            document.getElementById('progressBar').style.width = scrolled + '%';
+
+            // Demo Box Animation
+            const demoBox = document.querySelector('.demo-box');
+            const boxPosition = demoBox.getBoundingClientRect().top;
+            if(boxPosition < window.innerHeight * 0.8) {
+                demoBox.classList.add('visible');
             }
 
+            // Trust Badges Animation
+            const trustBadges = document.querySelector('.trust-badges');
+            const badgesPosition = trustBadges.getBoundingClientRect().top;
+            if(badgesPosition < window.innerHeight * 0.8) {
+                trustBadges.style.opacity = '1';
+                trustBadges.style.transform = 'translateY(0)';
+            }
+
+            // Card Animations
             document.querySelectorAll('.card-3d, .price-card').forEach(card => {
                 const cardTop = card.getBoundingClientRect().top;
                 if (cardTop < window.innerHeight * 0.8) {
@@ -382,35 +502,35 @@
             });
         });
 
-        // 3D Card Hover Effect
+        // 3D Card Interaction
         document.querySelectorAll('.card-3d, .price-card').forEach(card => {
             card.addEventListener('mousemove', (e) => {
                 const rect = card.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                const centerX = card.offsetWidth / 2;
-                const centerY = card.offsetHeight / 2;
+                const x = (e.clientX - rect.left) / card.offsetWidth - 0.5;
+                const y = (e.clientY - rect.top) / card.offsetHeight - 0.5;
                 
-                const rotateY = (x - centerX) / 15;
-                const rotateX = (centerY - y) / 15;
-                
-                card.style.transform = `translateZ(20px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+                card.style.transform = `
+                    perspective(1000px)
+                    rotateX(${y * 12}deg)
+                    rotateY(${x * 12}deg)
+                    translateZ(20px)
+                `;
             });
 
             card.addEventListener('mouseleave', () => {
-                card.style.transform = 'translateZ(0) rotateX(0) rotateY(0)';
+                card.style.transform = 'perspective(1000px) rotateX(0) rotateY(0) translateZ(0)';
             });
         });
 
-        // 🔥 NEW - Dynamic spot counter
+        // Dynamic Counter
         let spots = 327;
         setInterval(() => {
-            spots -= Math.floor(Math.random() * 3);
+            spots -= Math.floor(Math.random() * 2);
             if(spots < 0) spots = 0;
             document.getElementById('spots-left').textContent = spots;
-        }, 60000);
-        
-        // 🔥 NEW - Countdown timer
+        }, 8000);
+
+        // Countdown Timer
         let minutes = 5;
         let seconds = 0;
         setInterval(() => {
@@ -421,11 +541,12 @@
             document.getElementById('minutes').textContent = String(minutes).padStart(2,'0');
             document.getElementById('seconds').textContent = String(seconds).padStart(2,'0');
             if(minutes === 0 && seconds === 0) window.location.reload();
-        }, 1000);
+        }, 1500);
 
+        // Initial Scroll Trigger
         window.dispatchEvent(new Event('scroll'));
-        
-        // 🔥 NEW - Hotjar Tracking
+
+        // Hotjar Tracking
         (function(h,o,t,j,a,r){
             h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};
             h._hjSettings={hjid:3874927,hjsv:6};
@@ -435,8 +556,7 @@
             a.appendChild(r);
         })(window,document,'https://static.hotjar.com/c/hotjar-','.js?sv=');
     </script>
-    
-    <!-- 🔥 NEW - Backlink Magnet (SEO Honey Pot) -->
+
     <div style="display:none;">
         <a href="https://replyzeai.netlify.app/best-ai-email-assistant">Best AI Email Assistant 2023</a>
         <a href="https://replyzeai.netlify.app/chatgpt-email-alternative">Better than ChatGPT for Emails</a>
