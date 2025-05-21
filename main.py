@@ -16,10 +16,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Hugging Face API key rotation
-HF_API_KEYS = [k.strip() for k in os.environ.get("HF_API_KEYS", "").split(",")]
-current_key_index = 0
-
 # Supabase setup
 def get_supabase() -> Client:
     try:
@@ -37,6 +33,7 @@ def get_supabase() -> Client:
 supabase = get_supabase()
 
 def load_credentials(sender_email: str) -> Credentials:
+    """Load and refresh Gmail credentials from Supabase"""
     try:
         response = supabase.table('gmail_tokens') \
                         .select('credentials') \
@@ -64,6 +61,7 @@ def load_credentials(sender_email: str) -> Credentials:
             logger.info(f"Refreshing expired credentials for {sender_email}")
             creds.refresh(Request())
 
+            # Update Supabase with new credentials
             supabase.table('gmail_tokens').upsert({
                 'user_email': sender_email,
                 'credentials': {
@@ -83,6 +81,7 @@ def load_credentials(sender_email: str) -> Credentials:
         raise
 
 def create_message(to: str, subject: str, body: str) -> dict:
+    """Create a MIME message for Gmail API"""
     try:
         message = MIMEText(body)
         message["to"] = to
@@ -95,57 +94,45 @@ def create_message(to: str, subject: str, body: str) -> dict:
         raise
 
 def process_single_email(email: dict) -> None:
-    global current_key_index
+    """Process a single email through AI and update status"""
     email_id = email["id"]
     try:
+        # Update status to processing
         supabase.table("emails") \
             .update({"status": "processing"}) \
             .eq("id", email_id) \
             .execute()
 
+        # Generate AI response
         prompt = (
-            f"[INST] You are a professional real estate agent. Respond to this email in a friendly and professional manner:\n\n"
-            f"{email['original_content']} [/INST]"
+            "You are a professional real estate agent. "
+            "Respond to this email in a friendly and professional manner:\n\n"
+            f"{email['original_content']}"
         )
 
-        total_keys = len(HF_API_KEYS)
-        attempts = 0
+        response = requests.post(
+            "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
+            headers={"Authorization": f"Bearer {os.environ['HF_API_KEY']}"},
+            json={
+                "inputs": prompt,
+                "parameters": {
+                    "max_new_tokens": 500,
+                    "temperature": 0.7
+                },
+                "options": {"use_cache": False}
+            },
+            timeout=30
+        )
 
-        while attempts < total_keys:
-            key = HF_API_KEYS[current_key_index]
-            try:
-                response = requests.post(
-                    "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
-                    headers={"Authorization": f"Bearer {key}"},
-                    json={
-                        "inputs": prompt,
-                        "parameters": {
-                            "max_new_tokens": 500,
-                            "temperature": 0.7
-                        },
-                        "options": {"use_cache": False}
-                    },
-                    timeout=30
-                )
+        if response.status_code != 200:
+            raise ValueError(f"API Error {response.status_code}: {response.text[:200]}")
 
-                if response.status_code == 200:
-                    reply = response.json()[0]["generated_text"].strip()
-                    break
-                elif response.status_code in [429, 403]:
-                    logger.warning(f"API key {key} exhausted or blocked. Switching...")
-                    current_key_index = (current_key_index + 1) % total_keys
-                    attempts += 1
-                else:
-                    logger.error(f"Unexpected error {response.status_code}: {response.text[:200]}")
-                    current_key_index = (current_key_index + 1) % total_keys
-                    attempts += 1
-            except Exception as e:
-                logger.error(f"Key {key} error: {e}")
-                current_key_index = (current_key_index + 1) % total_keys
-                attempts += 1
-        else:
-            raise RuntimeError("All Hugging Face API keys failed.")
+        try:
+            reply = response.json()[0]["generated_text"].strip()
+        except (KeyError, IndexError):
+            raise ValueError("Unexpected API response format")
 
+        # Update with processed content
         supabase.table("emails") \
             .update({
                 "processed_content": reply,
@@ -160,12 +147,13 @@ def process_single_email(email: dict) -> None:
         supabase.table("emails") \
             .update({
                 "status": "error",
-                "error_message": str(e)[:500]
+                "error_message": str(e)[:500]  # Truncate long errors
             }) \
             .eq("id", email_id) \
             .execute()
 
 def send_single_email(email: dict) -> None:
+    """Send a single email and update status"""
     email_id = email["id"]
     try:
         sender = email["sender_email"]
@@ -173,11 +161,13 @@ def send_single_email(email: dict) -> None:
         subject = email.get("subject") or "Re: Your inquiry"
         body = email["processed_content"]
 
+        # Load credentials and send email
         creds = load_credentials(sender)
         service = build("gmail", "v1", credentials=creds, cache_discovery=False)
         msg = create_message(recipient, subject, body)
         service.users().messages().send(userId="me", body=msg).execute()
 
+        # Update status to sent
         supabase.table("emails") \
             .update({
                 "status": "sent",
@@ -197,9 +187,11 @@ def send_single_email(email: dict) -> None:
             .execute()
 
 def run_worker() -> str:
+    """Main worker function to process emails"""
     try:
         logger.info("Starting email processing")
 
+        # Process preprocessing emails
         preprocessing = supabase.table("emails") \
                               .select("*") \
                               .eq("status", "preprocessing") \
@@ -208,6 +200,7 @@ def run_worker() -> str:
         for email in preprocessing:
             process_single_email(email)
 
+        # Process ready-to-send emails
         ready = supabase.table("emails") \
                        .select("*") \
                        .eq("status", "ready_to_send") \
