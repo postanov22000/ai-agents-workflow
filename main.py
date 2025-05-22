@@ -104,15 +104,20 @@ def process_single_email(email: dict) -> None:
         if not personalize_url:
             raise ValueError("Missing PERSONALIZE_FUNCTION_URL environment variable")
 
-        response = requests.post(
-            personalize_url,
-            json={
-                "template_text": template_text,
-                "past_emails": past_emails,
-                "deal_data": deal_data
-            },
-            timeout=60
-        )
+      response = requests.post(
+    personalize_url,
+    json={
+        "template_text": template_text,
+        "past_emails": past_emails,
+        "deal_data": deal_data
+    },
+    headers={
+        "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}",
+        "Content-Type": "application/json"
+    },
+    timeout=60
+)
+
 
         if response.status_code != 200:
             raise ValueError(f"Personalization failed: {response.status_code} - {response.text[:300]}")
