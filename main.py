@@ -77,57 +77,49 @@ def create_message(to: str, subject: str, body: str) -> dict:
     }
 
 def process_single_email(email: dict) -> None:
-    global current_key_index
     email_id = email["id"]
 
     try:
         supabase.table("emails").update({"status": "processing"}).eq("id", email_id).execute()
 
-        prompt = (
-            f"[INST] You are a professional real estate agent. Respond to this email in a friendly and professional manner:\n\n"
-            f"{email['original_content']} [/INST]"
+        # 🔧 Static mock boilerplate (could later pull from Supabase)
+        template_text = "The property is located in a prime area and offers solid investment potential."
+
+        # 🔧 Past style examples (from prior sent emails)
+        past_emails = [
+            "This asset is positioned in a high-demand submarket with minimal vacancy.",
+            "Strategically located near top-performing retail anchors, providing steady foot traffic."
+        ]
+
+        # 🔧 Example deal data (this could come from parsing or Supabase)
+        deal_data = {
+            "market": "SoHo",
+            "cap_rate": "5.2%",
+            "tenant": "Chase Bank"
+        }
+
+        # 🔁 POST to Edge Function
+        personalize_url = os.environ.get("PERSONALIZE_FUNCTION_URL")  # add this to your .env
+
+        if not personalize_url:
+            raise ValueError("Missing PERSONALIZE_FUNCTION_URL environment variable")
+
+        response = requests.post(
+            personalize_url,
+            json={
+                "template_text": template_text,
+                "past_emails": past_emails,
+                "deal_data": deal_data
+            },
+            timeout=60
         )
 
-        total_keys = len(HF_API_KEYS)
-        attempts = 0
+        if response.status_code != 200:
+            raise ValueError(f"Personalization failed: {response.status_code} - {response.text[:300]}")
 
-        while attempts < total_keys:
-            key = HF_API_KEYS[current_key_index]
-            try:
-                response = requests.post(
-                    "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
-                    headers={"Authorization": f"Bearer {key}"},
-                    json={
-                        "inputs": prompt,
-                        "parameters": {
-                            "max_new_tokens": 500,
-                            "temperature": 0.7
-                        },
-                        "options": {"use_cache": False}
-                    },
-                    timeout=30
-                )
-
-                if response.status_code == 200:
-                    reply = response.json()[0]["generated_text"].strip()
-
-                    # 🧼 Strip the echoed prompt if it exists
-                    if "[/INST]" in reply:
-                        reply = reply.split("[/INST]", 1)[1].strip()
-
-                    break
-                elif response.status_code in [429, 403, 401]:
-                    logger.warning(f"API key {key[:10]}... failed ({response.status_code}), rotating...")
-                    current_key_index = (current_key_index + 1) % total_keys
-                    attempts += 1
-                else:
-                    raise ValueError(f"API Error {response.status_code}: {response.text[:200]}")
-            except Exception as e:
-                logger.error(f"Key {key[:10]}... error: {str(e)}")
-                current_key_index = (current_key_index + 1) % total_keys
-                attempts += 1
-        else:
-            raise RuntimeError("All Hugging Face API keys failed.")
+        reply = response.json().get("result", "").strip()
+        if not reply:
+            raise ValueError("Personalization returned empty result")
 
         supabase.table("emails").update({
             "processed_content": reply,
