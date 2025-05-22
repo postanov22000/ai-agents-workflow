@@ -82,32 +82,26 @@ def process_single_email(email: dict) -> None:
     try:
         supabase.table("emails").update({"status": "processing"}).eq("id", email_id).execute()
 
-        # 🔧 Static mock boilerplate (can be replaced later)
-        template_text = "The property is located in a prime area and offers solid investment potential."
+        # Extract input for proposal generation
+        market = "SoHo"  # TODO: Parse from email['original_content'] or assign dynamically
+        deal_type = "retail"
+        cap_rate = "5.2%"  # Static for now, can parse later
+        tenant_type = "national"
+        style = "assertive"
 
-        # 🔧 Past style examples
-        past_emails = [
-            "This asset is positioned in a high-demand submarket with minimal vacancy.",
-            "Strategically located near top-performing retail anchors, providing steady foot traffic."
-        ]
-
-        # 🔧 Mock deal data (you can extract this from `email['original_content']` in future)
-        deal_data = {
-            "market": "SoHo",
-            "cap_rate": "5.2%",
-            "tenant": "Chase Bank"
-        }
-
-        personalize_url = os.environ.get("PERSONALIZE_FUNCTION_URL")
-        if not personalize_url:
-            raise ValueError("Missing PERSONALIZE_FUNCTION_URL environment variable")
+        # Call generate-proposal edge function
+        proposal_url = os.environ.get("GENERATE_PROPOSAL_FUNCTION_URL")
+        if not proposal_url:
+            raise ValueError("Missing GENERATE_PROPOSAL_FUNCTION_URL in environment variables")
 
         response = requests.post(
-            personalize_url,
+            proposal_url,
             json={
-                "template_text": template_text,
-                "past_emails": past_emails,
-                "deal_data": deal_data
+                "market": market,
+                "deal_type": deal_type,
+                "cap_rate": cap_rate,
+                "tenant_type": tenant_type,
+                "style": style
             },
             headers={
                 "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}",
@@ -117,12 +111,13 @@ def process_single_email(email: dict) -> None:
         )
 
         if response.status_code != 200:
-            raise ValueError(f"Personalization failed: {response.status_code} - {response.text[:300]}")
+            raise ValueError(f"Proposal generation failed: {response.status_code} - {response.text[:300]}")
 
         reply = response.json().get("result", "").strip()
         if not reply:
-            raise ValueError("Personalization returned empty result")
+            raise ValueError("Proposal function returned an empty response.")
 
+        # Save the result
         supabase.table("emails").update({
             "processed_content": reply,
             "status": "ready_to_send",
@@ -135,6 +130,7 @@ def process_single_email(email: dict) -> None:
             "status": "error",
             "error_message": str(e)[:500]
         }).eq("id", email_id).execute()
+
 
 def send_single_email(email: dict) -> None:
     email_id = email["id"]
