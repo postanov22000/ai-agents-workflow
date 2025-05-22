@@ -82,42 +82,39 @@ def process_single_email(email: dict) -> None:
     try:
         supabase.table("emails").update({"status": "processing"}).eq("id", email_id).execute()
 
-        # 🔧 Static mock boilerplate (could later pull from Supabase)
+        # 🔧 Static mock boilerplate (can be replaced later)
         template_text = "The property is located in a prime area and offers solid investment potential."
 
-        # 🔧 Past style examples (from prior sent emails)
+        # 🔧 Past style examples
         past_emails = [
             "This asset is positioned in a high-demand submarket with minimal vacancy.",
             "Strategically located near top-performing retail anchors, providing steady foot traffic."
         ]
 
-        # 🔧 Example deal data (this could come from parsing or Supabase)
+        # 🔧 Mock deal data (you can extract this from `email['original_content']` in future)
         deal_data = {
             "market": "SoHo",
             "cap_rate": "5.2%",
             "tenant": "Chase Bank"
         }
 
-        # 🔁 POST to Edge Function
-        personalize_url = os.environ.get("PERSONALIZE_FUNCTION_URL")  # add this to your .env
-
+        personalize_url = os.environ.get("PERSONALIZE_FUNCTION_URL")
         if not personalize_url:
             raise ValueError("Missing PERSONALIZE_FUNCTION_URL environment variable")
 
-      response = requests.post(
-    personalize_url,
-    json={
-        "template_text": template_text,
-        "past_emails": past_emails,
-        "deal_data": deal_data
-    },
-    headers={
-        "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}",
-        "Content-Type": "application/json"
-    },
-    timeout=60
-)
-
+        response = requests.post(
+            personalize_url,
+            json={
+                "template_text": template_text,
+                "past_emails": past_emails,
+                "deal_data": deal_data
+            },
+            headers={
+                "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}",
+                "Content-Type": "application/json"
+            },
+            timeout=60
+        )
 
         if response.status_code != 200:
             raise ValueError(f"Personalization failed: {response.status_code} - {response.text[:300]}")
