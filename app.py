@@ -142,11 +142,17 @@ def oauth2callback():
 
     return redirect(f"/dashboard?user_id={email}")
 
-@app.route("/disconnect_gmail", methods=["POST"])
+@app.route("/disconnect_gmail", methods=["GET", "POST"])
 def disconnect_gmail():
-    user_id = request.form.get("user_id")
-    supabase.table("gmail_tokens").delete().eq("user_email", user_id).execute()
-    return redirect(f"/dashboard?user_id={user_id}")
+    if request.method == "GET":
+        # Show a confirmation page
+        user_id = request.args.get("user_id")
+        return render_template("confirm_disconnect.html", user_id=user_id)
+    elif request.method == "POST":
+        # Process the actual deletion
+        user_id = request.form.get("user_id")
+        supabase.table("gmail_tokens").delete().eq("user_email", user_id).execute()
+        return redirect(f"/dashboard?user_id={user_id}")
 
 @app.route("/admin")
 def admin():
