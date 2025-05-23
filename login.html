@@ -149,7 +149,7 @@
                     });
 
                     if (error) throw error;
-                    window.location.href = 'dashboard.html';
+                    window.location.href = 'templates/dashboard.html';
                 } catch (error) {
                     if (error.message.includes('Email not confirmed')) {
                         errorMessage.innerHTML = `
