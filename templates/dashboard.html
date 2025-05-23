@@ -196,7 +196,16 @@
                         <button type="submit" class="btn btn-danger">
                             <i class="fas fa-unlink"></i> Disconnect Gmail
                         </button>
-                    </form>
+{% if show_reconnect %}
+  <div class="mt-4">
+    <form action="/connect_gmail" method="GET">
+      <button class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded">
+        Reconnect Gmail
+      </button>
+    </form>
+  </div>
+{% endif %}
+                   </form>
                     <div style="margin-top: 15px;">
                         <a href="#" class="btn btn-primary">
                             <i class="fas fa-rocket"></i> Upgrade Plan
