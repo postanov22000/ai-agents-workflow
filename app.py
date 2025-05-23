@@ -3,7 +3,7 @@ from flask import Flask, render_template, request, redirect, jsonify
 from datetime import date
 from supabase import create_client, Client
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder="templates")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
 
 # Connect to Supabase 1
@@ -29,6 +29,7 @@ def dashboard():
     time_saved = count * 3
 
     profile = supabase.table("profiles").select("full_name, ai_enabled").eq("id", user_id).single().execute().data
+    print("Rendering dashboard for", profile["full_name"], count, "emails")
     return render_template("dashboard.html",
         name=profile["full_name"],
         user_id=user_id,
