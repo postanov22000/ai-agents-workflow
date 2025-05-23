@@ -128,7 +128,7 @@ def oauth2callback():
     )
     email = info["email"]
 
-    # Store Gmail tokens
+    # Store Gmail credentials
     supabase.table("gmail_tokens").upsert({
         "user_email": email,
         "credentials": {
@@ -141,12 +141,12 @@ def oauth2callback():
         }
     }).execute()
 
-    # Create user profile if missing
-    existing = supabase.table("profiles").select("id").eq("id", email).execute().data
-    if not existing:
+    # Ensure profile exists for this user
+    profile_resp = supabase.table("profiles").select("id").eq("id", email).execute()
+    if not profile_resp.data:
         supabase.table("profiles").insert({
             "id": email,
-            "full_name": email.split("@")[0].title(),
+            "full_name": email.split("@")[0].replace(".", " ").title(),
             "ai_enabled": True
         }).execute()
 
