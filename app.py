@@ -142,27 +142,12 @@ def oauth2callback():
 
     return redirect(f"/dashboard?user_id={email}")
 
-@app.route("/disconnect_gmail", methods=["GET", "POST"])
+@app.route("/disconnect_gmail", methods=["POST"])
 def disconnect_gmail():
-    try:
-        if request.method == "GET":
-            user_id = request.args.get("user_id")
-            return render_template("confirm_disconnect.html", user_id=user_id)
-        elif request.method == "POST":
-            user_id = request.form.get("user_id")
-            
-            # Fetch the user's email from the profiles table
-            profile = supabase.table("profiles").select("email").eq("id", user_id).execute().data
-            if not profile:
-                return "User profile not found", 404
-            user_email = profile[0]["email"]  # Use email to delete from gmail_tokens
-            
-            # Delete from gmail_tokens using the EMAIL (not UUID)
-            supabase.table("gmail_tokens").delete().eq("user_email", user_email).execute()
-            return redirect(f"/dashboard?user_id={user_id}")
-    except Exception as e:
-        app.logger.error(f"Error in disconnect_gmail: {str(e)}")
-        return "Internal Server Error", 500
+    user_id = request.form.get("user_id")
+    supabase.table("gmail_tokens").delete().eq("user_email", user_id).execute()
+    return redirect(f"/dashboard?user_id={user_id}")
+
 @app.route("/admin")
 def admin():
     return render_template("admin.html")
