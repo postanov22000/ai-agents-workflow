@@ -30,9 +30,10 @@ def dashboard():
 
     today = date.today().isoformat()
     sent = supabase.table("emails").select("sent_at").eq("user_id", user_id).eq("status", "sent").execute().data
-    count = len([e for e in sent if e["sent_at"] and e["sent_at"].startswith(today)])
-    time_saved = count * 3
+    emails_sent_today = len([e for e in sent if e["sent_at"] and e["sent_at"].startswith(today)])
+    time_saved = emails_sent_today * 3
 
+    # Fetch user profile
     try:
         profile_resp = supabase.table("profiles").select("full_name, ai_enabled").eq("id", user_id).limit(1).execute()
         if not profile_resp.data:
@@ -41,22 +42,22 @@ def dashboard():
     except Exception as e:
         return f"Profile query error: {str(e)}", 500
 
-    # ✅ Check if Gmail token exists and is valid
-    token_response = supabase.table("gmail_tokens").select("credentials").eq("user_email", user_id).execute().data
+    # Check if Gmail token is expired
+    token_resp = supabase.table("gmail_tokens").select("credentials").eq("user_email", user_id).execute().data
     show_reconnect = True
 
-    if token_response:
-        creds_data = token_response[0]["credentials"]
-        creds = Credentials(
-            token=creds_data["token"],
-            refresh_token=creds_data["refresh_token"],
-            token_uri=creds_data["token_uri"],
-            client_id=creds_data["client_id"],
-            client_secret=creds_data["client_secret"],
-            scopes=creds_data["scopes"]
-        )
-
+    if token_resp:
         try:
+            creds_data = token_resp[0]["credentials"]
+            creds = Credentials(
+                token=creds_data["token"],
+                refresh_token=creds_data["refresh_token"],
+                token_uri=creds_data["token_uri"],
+                client_id=creds_data["client_id"],
+                client_secret=creds_data["client_secret"],
+                scopes=creds_data["scopes"]
+            )
+
             if creds.expired:
                 creds.refresh(Request())
 
@@ -67,7 +68,7 @@ def dashboard():
     return render_template("dashboard.html",
         name=profile["full_name"],
         user_id=user_id,
-        emails_sent=count,
+        emails_sent=emails_sent_today,
         time_saved=time_saved,
         ai_enabled=profile.get("ai_enabled", True),
         show_reconnect=show_reconnect
@@ -97,7 +98,6 @@ def connect_gmail():
         include_granted_scopes="true",
         prompt="consent"
     )
-
     return redirect(authorization_url)
 
 @app.route("/oauth2callback")
