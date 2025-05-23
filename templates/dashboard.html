@@ -4,300 +4,315 @@
     <meta charset="UTF-8">
     <title>Dashboard | ReplyzeCRE AI</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.6" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.1/dist/tailwind.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        @keyframes gradientBG {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(0) rotate(0deg); }
-            50% { transform: translateY(-10px) rotate(15deg); }
+        :root {
+            --primary: #64ffda;
+            --secondary: #0a192f;
+            --accent: #52d1b8;
         }
 
         body {
-            background: linear-gradient(-45deg, #0a192f, #112240, #1a2f4b, #233554);
-            background-size: 400% 400%;
-            animation: gradientBG 25s ease infinite;
+            background: #0a192f;
             color: #ffffff;
+            font-family: 'Inter', sans-serif;
         }
 
-        .progress-bar {
-            height: 4px;
-            background: #64ffda;
-            position: fixed;
-            top: 0;
-            left: 0;
-            z-index: 10000;
-            transition: width 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 240px 1fr;
+            min-height: 100vh;
         }
 
-        .nav {
-            padding: 1.5rem 8%;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: rgba(10, 25, 47, 0.9);
+        .sidebar {
+            background: rgba(16, 36, 64, 0.95);
             backdrop-filter: blur(15px);
+            border-right: 1px solid rgba(100, 255, 218, 0.1);
+            padding: 1.5rem;
             position: fixed;
-            width: 100%;
-            z-index: 1000;
+            height: 100vh;
+            width: 240px;
         }
 
-        .logo {
-            font-size: 2.2rem;
-            font-weight: 700;
-            background: linear-gradient(45deg, #64ffda, #8affdf);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+        .main-content {
+            margin-left: 240px;
+            padding: 2rem;
         }
 
-        .dashboard-card {
-            background: rgba(16, 36, 64, 0.4);
-            border-radius: 20px;
-            padding: 2.5rem;
-            transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(100, 255, 218, 0.1);
-        }
-
-        .dashboard-card:hover {
-            transform: translateZ(20px) rotateX(-2deg) rotateY(2deg);
+        .metric-card {
             background: rgba(16, 36, 64, 0.6);
+            border: 1px solid rgba(100, 255, 218, 0.1);
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .stat-value {
-            font-size: 2.5rem;
-            color: #64ffda;
-            font-weight: 700;
-            text-shadow: 0 0 15px rgba(100, 255, 218, 0.3);
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(100, 255, 218, 0.1);
         }
 
-        .cta-button {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 1rem 2.5rem;
-            border-radius: 50px;
-            font-weight: 700;
-            transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
-            border: 2px solid #64ffda;
-            background: linear-gradient(135deg, #64ffda 0%, #52d1b8 100%);
-            color: #0a192f;
-            box-shadow: 0 4px 25px rgba(100, 255, 218, 0.3);
+        .data-table {
+            border: 1px solid rgba(100, 255, 218, 0.1);
+            border-radius: 8px;
+            overflow: hidden;
         }
 
-        .action-button {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            padding: 1.2rem 2rem;
-            border-radius: 15px;
-            background: linear-gradient(135deg, #64ffda22, #64ffda11);
-            border: 1px solid #64ffda33;
-            transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+        .data-table th {
+            background: rgba(16, 36, 64, 0.8);
+            border-bottom: 1px solid rgba(100, 255, 218, 0.1);
+            padding: 1rem;
+            text-align: left;
+        }
+
+        .data-table td {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(100, 255, 218, 0.05);
+        }
+
+        .progress-ring {
             width: 100%;
+            max-width: 120px;
         }
 
-        .action-button:hover {
-            background: linear-gradient(135deg, #64ffda33, #64ffda18);
-            transform: translateX(10px);
-            box-shadow: 0 8px 25px rgba(100, 255, 218, 0.15);
-        }
-
-        .sparkle {
+        .notification-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--primary);
+            border-radius: 50%;
             position: absolute;
-            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2364ffda'%3E%3Cpath d='M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z'/%3E%3C/svg%3E");
-            width: 20px;
-            height: 20px;
-            animation: float 3s ease-in-out infinite;
-            opacity: 0.5;
+            right: 12px;
+            top: 12px;
         }
     </style>
 </head>
 <body>
-    <div class="progress-bar" id="progressBar"></div>
-    <div id="particleCanvas"></div>
-
-    <nav class="nav">
-        <div class="logo">Replyze<span style="color:#64ffda">CRE</span></div>
-        <div>
-            <a href="/dashboard" class="cta-button">Dashboard</a>
-            <a href="/profile" class="cta-button">Profile</a>
-        </div>
-    </nav>
-
-    <div class="max-w-6xl mx-auto p-6 pt-24">
-        <h1 class="text-4xl font-bold mb-8" data-scroll>Welcome back, <span class="text-[#64ffda]">{{ name }}</span> 👋</h1>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <!-- Email Card -->
-            <div class="dashboard-card group relative" data-scroll>
-                <div class="absolute -top-3 -right-3 sparkle"></div>
-                <div class="text-center">
-                    <div class="stat-value flex items-center justify-center gap-2">
-                        <i class="fas fa-paper-plane text-[#64ffda]/80"></i>
-                        {{ emails_sent }}
-                    </div>
-                    <p class="text-gray-300 mb-4">Emails Sent</p>
-                    <div class="relative mx-auto">
-                        <svg class="progress-ring" width="120" height="120">
-                            <circle class="progress-ring__circle" stroke="#64ffda" stroke-width="6" 
-                                  fill="transparent" r="52" cx="60" cy="60"
-                                  stroke-dasharray="326.56" 
-                                  stroke-dashoffset="326.56" 
-                                  style="stroke-dashoffset: {{ 326.56 * (1 - emails_sent/20) }};">
-                            </circle>
-                        </svg>
-                    </div>
-                    <div class="mt-4 text-sm text-gray-400">
-                        {{ 20 - emails_sent }} sends remaining
-                    </div>
-                </div>
+    <div class="dashboard-grid">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="mb-8">
+                <h1 class="text-2xl font-bold text-[#64ffda]">ReplyzeCRE</h1>
+                <p class="text-sm text-gray-400">Commercial Real Estate Suite</p>
             </div>
 
-            <!-- Status Card -->
-            <div class="dashboard-card" data-scroll>
-                <div class="text-center">
-                    <div class="stat-value flex items-center justify-center gap-2">
-                        <i class="fas fa-clock text-[#64ffda]/80"></i>
-                        {{ time_saved }}
+            <div class="space-y-2">
+                <a href="#" class="flex items-center gap-3 p-2 rounded-lg bg-[#64ffda]/10 text-[#64ffda]">
+                    <i class="fas fa-chart-line"></i>
+                    Dashboard
+                </a>
+                <a href="#" class="flex items-center gap-3 p-2 rounded-lg hover:bg-[#64ffda]/10 text-gray-300 hover:text-[#64ffda] transition-colors">
+                    <i class="fas fa-envelope"></i>
+                    Email Analytics
+                </a>
+                <a href="#" class="flex items-center gap-3 p-2 rounded-lg hover:bg-[#64ffda]/10 text-gray-300 hover:text-[#64ffda] transition-colors">
+                    <i class="fas fa-file-contract"></i>
+                    Lease Management
+                </a>
+                <a href="#" class="flex items-center gap-3 p-2 rounded-lg hover:bg-[#64ffda]/10 text-gray-300 hover:text-[#64ffda] transition-colors">
+                    <i class="fas fa-cog"></i>
+                    Settings
+                </a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="flex justify-between items-center mb-8">
+                <div>
+                    <h2 class="text-2xl font-bold">Welcome back, {{ name }}</h2>
+                    <p class="text-gray-400">Here's your daily performance overview</p>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="relative">
+                        <button class="p-2 hover:bg-[#64ffda]/10 rounded-lg">
+                            <i class="fas fa-bell text-gray-300"></i>
+                            <span class="notification-dot"></span>
+                        </button>
                     </div>
-                    <p class="text-gray-300 mb-6">Minutes Saved</p>
-                    <div class="space-y-4">
-                        <div class="bg-[#64ffda]/15 px-4 py-2 rounded-full border border-[#64ffda]/20">
-                            <i class="fas fa-bolt text-[#64ffda]"></i>
-                            {{ (time_saved/60)|round(1) }} hours saved
-                        </div>
-                        <div class="bg-[#64ffda]/15 px-4 py-2 rounded-full border border-[#64ffda]/20">
-                            {% if ai_enabled %}
-                                <i class="fas fa-check-circle text-green-400"></i>
-                                <span class="text-green-400">AI Active</span>
-                            {% else %}
-                                <i class="fas fa-pause-circle text-red-400"></i>
-                                <span class="text-red-400">AI Inactive</span>
-                            {% endif %}
-                        </div>
+                    <div class="h-10 w-10 rounded-full bg-[#64ffda]/10 flex items-center justify-center">
+                        <i class="fas fa-user text-[#64ffda]"></i>
                     </div>
                 </div>
-            </div>
+            </header>
 
-            <!-- Upgrade Card -->
-            <div class="dashboard-card relative overflow-hidden" data-scroll>
-                <div class="absolute inset-0 bg-gradient-to-br from-[#64ffda]/5 to-transparent"></div>
-                <div class="text-center relative">
-                    <div class="stat-value">2,500</div>
-                    <p class="text-gray-300 mb-6">Monthly Credits</p>
-                    <button class="cta-button hover:scale-105 transition-transform">
-                        <i class="fas fa-rocket mr-2"></i>
-                        Upgrade Plan
-                    </button>
-                    <div class="mt-6 text-sm text-gray-400">
-                        <i class="fas fa-gem text-[#64ffda] mr-2"></i>
-                        Pro features unlocked
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Actions Card -->
-        <div class="dashboard-card mt-8 p-8" data-scroll>
-            <h2 class="text-2xl font-bold mb-6 text-[#64ffda] flex items-center gap-2">
-                <i class="fas fa-cogs"></i>
-                Account Actions
-            </h2>
-            <div class="space-y-4">
-                <form method="POST" action="/disconnect_gmail">
-                    <input type="hidden" name="user_id" value="{{ user_id }}">
-                    <button type="submit" class="action-button hover:border-red-500/50 hover:bg-red-900/10">
-                        <i class="fas fa-unlink text-red-400 text-xl"></i>
+            <!-- Metrics Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="metric-card">
+                    <div class="flex justify-between items-start">
                         <div>
-                            <div class="font-bold">Disconnect Gmail</div>
-                            <div class="text-sm text-gray-400">Revoke email access</div>
+                            <p class="text-gray-400 mb-1">Emails Sent</p>
+                            <p class="text-3xl font-bold">{{ emails_sent }}/20</p>
                         </div>
-                    </button>
-                </form>
-
-                <button class="action-button">
-                    <i class="fas fa-user-shield text-[#64ffda] text-xl"></i>
-                    <div>
-                        <div class="font-bold">Security Settings</div>
-                        <div class="text-sm text-gray-400">2FA • Password • Sessions</div>
+                        <div class="text-[#64ffda]">
+                            <i class="fas fa-paper-plane text-2xl"></i>
+                        </div>
                     </div>
-                </button>
-
-                <button class="action-button">
-                    <i class="fas fa-chart-line text-[#64ffda] text-xl"></i>
-                    <div>
-                        <div class="font-bold">Advanced Analytics</div>
-                        <div class="text-sm text-gray-400">Open rates • Response times</div>
+                    <div class="mt-4">
+                        <div class="h-2 bg-gray-800 rounded-full">
+                            <div class="h-2 bg-[#64ffda] rounded-full" style="width: {{ (emails_sent/20)*100 }}%"></div>
+                        </div>
                     </div>
-                </button>
+                </div>
+
+                <div class="metric-card">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-gray-400 mb-1">Time Saved</p>
+                            <p class="text-3xl font-bold">{{ time_saved }}m</p>
+                        </div>
+                        <div class="text-[#64ffda]">
+                            <i class="fas fa-clock text-2xl"></i>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex items-center gap-2 text-sm">
+                        <span class="text-[#64ffda]">↑ {{ (time_saved/60)|round(1) }}h</span>
+                        <span class="text-gray-400">vs previous day</span>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-gray-400 mb-1">AI Status</p>
+                            <p class="text-3xl font-bold">
+                                {% if ai_enabled %}
+                                    <span class="text-[#64ffda]">Active</span>
+                                {% else %}
+                                    <span class="text-red-400">Inactive</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="text-[#64ffda]">
+                            <i class="fas fa-robot text-2xl"></i>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <button class="text-sm bg-[#64ffda]/10 px-3 py-1 rounded-full">
+                            {% if ai_enabled %}
+                                Manage Settings
+                            {% else %}
+                                Activate AI
+                            {% endif %}
+                        </button>
+                    </div>
+                </div>
             </div>
-        </div>
+
+            <!-- Main Chart -->
+            <div class="metric-card mb-8">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-semibold">Performance Overview</h3>
+                    <div class="flex gap-2 text-sm">
+                        <button class="bg-[#64ffda]/10 px-3 py-1 rounded-full">7D</button>
+                        <button class="hover:bg-[#64ffda]/10 px-3 py-1 rounded-full">30D</button>
+                        <button class="hover:bg-[#64ffda]/10 px-3 py-1 rounded-full">90D</button>
+                    </div>
+                </div>
+                <canvas id="performanceChart" class="w-full h-64"></canvas>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="metric-card">
+                    <h3 class="font-semibold mb-4">Recent Activity</h3>
+                    <div class="data-table">
+                        <table class="w-full">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Action</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>10:32 AM</td>
+                                    <td>LOI Sent to Tenant</td>
+                                    <td><span class="text-[#64ffda]">Completed</span></td>
+                                </tr>
+                                <tr>
+                                    <td>9:15 AM</td>
+                                    <td>RFP Analysis</td>
+                                    <td><span class="text-[#64ffda]">In Progress</span></td>
+                                </tr>
+                                <tr>
+                                    <td>8:45 AM</td>
+                                    <td>Email Campaign</td>
+                                    <td><span class="text-green-400">98% Open Rate</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <h3 class="font-semibold mb-4">Quick Actions</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <button class="p-4 bg-[#64ffda]/10 hover:bg-[#64ffda]/20 rounded-lg transition-colors">
+                            <i class="fas fa-plus text-[#64ffda] mb-2"></i>
+                            New Campaign
+                        </button>
+                        <button class="p-4 bg-[#64ffda]/10 hover:bg-[#64ffda]/20 rounded-lg transition-colors">
+                            <i class="fas fa-file-import text-[#64ffda] mb-2"></i>
+                            Import Leads
+                        </button>
+                        <button class="p-4 bg-[#64ffda]/10 hover:bg-[#64ffda]/20 rounded-lg transition-colors">
+                            <i class="fas fa-chart-pie text-[#64ffda] mb-2"></i>
+                            Generate Report
+                        </button>
+                        <button class="p-4 bg-[#64ffda]/10 hover:bg-[#64ffda]/20 rounded-lg transition-colors">
+                            <i class="fas fa-sliders-h text-[#64ffda] mb-2"></i>
+                            AI Settings
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
     </div>
 
     <script>
-        // Particle System
-        function createParticles() {
-            const container = document.getElementById('particleCanvas');
-            for(let i = 0; i < 50; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'particle';
-                particle.style.cssText = `
-                    width: ${Math.random() * 6 + 2}px;
-                    height: ${Math.random() * 6 + 2}px;
-                    left: ${Math.random() * 100}%;
-                    top: ${Math.random() * 100}%;
-                    animation-duration: ${Math.random() * 20 + 10}s;
-                    background: hsla(170, 100%, 70%, ${Math.random() * 0.2});
-                `;
-                container.appendChild(particle);
-            }
-        }
-        createParticles();
-
-        // Scroll Progress
-        window.addEventListener('scroll', () => {
-            const scrollPercent = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;
-            document.getElementById('progressBar').style.width = scrollPercent + '%';
-        });
-
-        // Scroll Reveal
-        const scrollElements = document.querySelectorAll('[data-scroll]');
-        const elementInView = (el) => {
-            const elementTop = el.getBoundingClientRect().top;
-            return elementTop <= window.innerHeight * 0.9;
-        };
-
-        const displayScrollElement = (element) => {
-            element.setAttribute('data-scroll', 'in');
-        };
-
-        const handleScrollAnimation = () => {
-            scrollElements.forEach((el) => {
-                if (elementInView(el)) displayScrollElement(el);
+        // Chart Initialization
+        document.addEventListener('DOMContentLoaded', function() {
+            const ctx = document.getElementById('performanceChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                    datasets: [{
+                        label: 'Deal Progress',
+                        data: [12, 19, 3, 5, 2, 3, 15],
+                        borderColor: '#64ffda',
+                        borderWidth: 2,
+                        fill: true,
+                        backgroundColor: 'rgba(100, 255, 218, 0.1)',
+                        tension: 0.4,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#64ffda'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            ticks: { color: '#fff' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#fff' }
+                        }
+                    }
+                }
             });
-        };
-
-        window.addEventListener('scroll', handleScrollAnimation);
-        handleScrollAnimation();
-
-        // Progress Ring
-        function updateProgressRing() {
-            const circle = document.querySelector('.progress-ring__circle');
-            if(circle) {
-                const radius = circle.r.baseVal.value;
-                const circumference = radius * 2 * Math.PI;
-                const offset = circumference - ({{ emails_sent/20 }} * circumference);
-                circle.style.strokeDashoffset = offset;
-            }
-        }
-        window.addEventListener('load', updateProgressRing);
+        });
     </script>
 </body>
 </html>
