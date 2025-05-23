@@ -33,7 +33,13 @@ def dashboard():
     count = len([e for e in sent if e["sent_at"] and e["sent_at"].startswith(today)])
     time_saved = count * 3
 
-    profile = supabase.table("profiles").select("full_name, ai_enabled").eq("id", user_id).single().execute().data
+    try:
+        profile_resp = supabase.table("profiles").select("full_name, ai_enabled").eq("id", user_id).limit(1).execute()
+        if not profile_resp.data:
+            return f"User {user_id} not found in profiles table", 404
+        profile = profile_resp.data[0]
+    except Exception as e:
+        return f"Profile query error: {str(e)}", 500
 
     # ✅ Check if Gmail token exists and is valid
     token_response = supabase.table("gmail_tokens").select("credentials").eq("user_email", user_id).execute().data
