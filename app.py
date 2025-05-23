@@ -6,7 +6,7 @@ from supabase import create_client, Client
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
 
-# Connect to Supabase
+# Connect to Supabase 1
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_ANON_KEY = os.environ["SUPABASE_ANON_KEY"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
