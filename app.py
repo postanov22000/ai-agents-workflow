@@ -128,6 +128,7 @@ def oauth2callback():
     )
     email = info["email"]
 
+    # Store Gmail tokens
     supabase.table("gmail_tokens").upsert({
         "user_email": email,
         "credentials": {
@@ -140,7 +141,17 @@ def oauth2callback():
         }
     }).execute()
 
+    # Create user profile if missing
+    existing = supabase.table("profiles").select("id").eq("id", email).execute().data
+    if not existing:
+        supabase.table("profiles").insert({
+            "id": email,
+            "full_name": email.split("@")[0].title(),
+            "ai_enabled": True
+        }).execute()
+
     return redirect(f"/dashboard?user_id={email}")
+
 
 @app.route("/disconnect_gmail", methods=["POST"])
 def disconnect_gmail():
