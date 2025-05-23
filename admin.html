@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Admin Panel | Replyze AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+  <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.1/dist/tailwind.min.css" rel="stylesheet" />
+</head>
+<body class="bg-gray-100 text-gray-900">
+
+  <div class="max-w-5xl mx-auto p-6">
+    <h1 class="text-3xl font-bold mb-6">Admin Dashboard</h1>
+
+    <div hx-get="/api/admin/users" hx-trigger="load" hx-target="#user-list" hx-swap="innerHTML">
+      <p class="text-gray-500">Loading user data...</p>
+    </div>
+
+    <table class="min-w-full mt-4 bg-white rounded-lg shadow-md text-sm">
+      <thead class="bg-gray-200">
+        <tr>
+          <th class="text-left py-2 px-4">User</th>
+          <th class="text-left py-2 px-4">Emails Sent (Today)</th>
+          <th class="text-left py-2 px-4">Responder Status</th>
+          <th class="text-left py-2 px-4">Toggle</th>
+        </tr>
+      </thead>
+      <tbody id="user-list">
+        <!-- filled by HTMX -->
+      </tbody>
+    </table>
+  </div>
+
+  <template id="user-row">
+    <tr class="border-t">
+      <td class="py-2 px-4 font-medium" id="name"></td>
+      <td class="py-2 px-4" id="emails_today"></td>
+      <td class="py-2 px-4" id="status"></td>
+      <td class="py-2 px-4">
+        <button class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
+                _="on click
+                    fetch('/api/admin/toggle_status', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        user_id: get my @data-id,
+                        enable: get my @data-next === 'true'
+                      })
+                    }).then(() => location.reload())"
+                data-id="" data-next="">
+          Toggle
+        </button>
+      </td>
+    </tr>
+  </template>
+
+  <script>
+    document.addEventListener('htmx:afterSwap', function (e) {
+      if (e.detail.target.id === "user-list") {
+        const users = JSON.parse(e.detail.xhr.responseText);
+        const tbody = document.getElementById("user-list");
+        const template = document.getElementById("user-row");
+
+        tbody.innerHTML = "";
+
+        users.forEach(u => {
+          const row = template.content.cloneNode(true);
+          row.querySelector("#name").textContent = u.name;
+          row.querySelector("#emails_today").textContent = u.emails_today;
+          row.querySelector("#status").textContent = u.enabled ? "Active" : "Inactive";
+
+          const toggleBtn = row.querySelector("button");
+          toggleBtn.dataset.id = u.id;
+          toggleBtn.dataset.next = (!u.enabled).toString();
+          toggleBtn.textContent = u.enabled ? "Deactivate" : "Activate";
+
+          tbody.appendChild(row);
+        });
+      }
+    });
+  </script>
+</body>
+</html>
