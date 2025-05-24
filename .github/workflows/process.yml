@@ -9,24 +9,10 @@ permissions:
   contents: read
 
 jobs:
-  trigger-processing:
+  poll-gmail:
     runs-on: ubuntu-latest
     outputs:
-      result: ${{ steps.check-response.outputs.status }}
-    steps:
-      - name: Trigger Main Processing Endpoint
-        id: check-response
-        run: |
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "https://replyzeai.onrender.com/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
-          echo "status=$RESPONSE" >> $GITHUB_OUTPUT
-          if [ "$RESPONSE" -ne 200 ]; then
-            echo "Processing failed with status: $RESPONSE"
-            exit 1
-          fi
-
-  poll-gmail:
-    needs: trigger-processing
-    runs-on: ubuntu-latest
+      result: ${{ steps.poll-result.outputs.status }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -42,9 +28,25 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run Gmail Poller
+        id: poll-result
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-        run: python poll_gmail.py
+        run: |
+          python poll_gmail.py
+          echo "status=success" >> $GITHUB_OUTPUT
+
+  trigger-processing:
+    needs: poll-gmail
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Main Processing Endpoint
+        run: |
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "https://replyzeai.onrender.com/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
+          echo "HTTP status: $RESPONSE"
+          if [ "$RESPONSE" -ne 200 ]; then
+            echo "Processing failed with status: $RESPONSE"
+            exit 1
+          fi
