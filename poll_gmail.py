@@ -46,6 +46,13 @@ def load_credentials(user_email: str):
         }).execute()
     return creds
 
+def get_user_id_from_email(email):
+    response = supabase.table("profiles").select("id").eq("email", email).execute()
+    if not response.data:
+        logger.warning(f"No user_id found for {email}")
+        return None
+    return response.data[0]["id"]
+
 def extract_plaintext(payload):
     if payload["mimeType"] == "text/plain" and "data" in payload["body"]:
         return base64.urlsafe_b64decode(payload["body"]["data"]).decode("utf-8", errors="ignore")
@@ -71,6 +78,11 @@ def poll_gmail_for_user(user_email):
     creds = load_credentials(user_email)
     if not creds:
         logger.warning(f"No creds for {user_email}")
+        return
+
+    user_id = get_user_id_from_email(user_email)
+    if not user_id:
+        logger.warning(f"Could not resolve user_id for {user_email}")
         return
 
     service = build("gmail", "v1", credentials=creds, cache_discovery=False)
@@ -99,7 +111,7 @@ def poll_gmail_for_user(user_email):
             "subject": subject,
             "original_content": body,
             "status": "preprocessing",
-            "gmail_id": msg["id"]  # store Gmail msg ID for deduplication
+            "gmail_id": msg["id"]
         }).execute()
 
         logger.info(f"Inserted email for {user_email}: {subject}")
