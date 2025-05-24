@@ -5,19 +5,27 @@ on:
     - cron: '*/5 * * * *'  # Every 5 minutes
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   trigger-processing:
     runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.check-response.outputs.status }}
     steps:
       - name: Trigger Main Processing Endpoint
+        id: check-response
         run: |
           RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "https://replyzeai.onrender.com/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
+          echo "status=$RESPONSE" >> $GITHUB_OUTPUT
           if [ "$RESPONSE" -ne 200 ]; then
             echo "Processing failed with status: $RESPONSE"
             exit 1
           fi
 
   poll-gmail:
+    needs: trigger-processing
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
