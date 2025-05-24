@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReplyzeAI - CRE Automation Suite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-dark: #0a2f35;
+            --primary-medium: #1d4d4a;
+            --accent-emerald: #34d399;
+            --accent-teal: #2dd4bf;
+        }
+
+        .floating {
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(-2deg); }
+            50% { transform: translateY(-20px) rotate(2deg); }
+        }
+
+        .card-3d {
+            transform: perspective(1000px) rotateX(5deg) rotateY(-5deg);
+            transition: transform 0.4s ease, box-shadow 0.4s ease;
+        }
+
+        .card-3d:hover {
+            transform: perspective(1000px) rotateX(0) rotateY(0);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+
+        .glossy-overlay {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .glossy-overlay::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, 
+                rgba(255,255,255,0) 0%,
+                rgba(255,255,255,0.1) 50%,
+                rgba(255,255,255,0) 100%);
+            transform: rotate(30deg);
+        }
+    </style>
+</head>
+<body class="bg-[#0a2f35] font-[Manrope] text-gray-100">
+    
+    <!-- Animated Hero Section -->
+    <section class="relative overflow-hidden">
+        <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwMCIgaGVpZ2h0D0iNzQwIiB2aWV3Qm94D0iMCAwIDEyMDAgNzQwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoD0IxMjAwIiBoZWlnaHQ9Ijc0MCIgZmlsbD0iIzBhMmYzNSIvPjxwYXRoIGQ9Ik0wIDM3MEgxMjAwVjU0MEEzMDAgMzAwIDAgMDE5MDAgODQwSDBWMzcweiIgZmlsbD0iIzFkNGQ0YSIvPjwvc3ZnPg==')]"></div>
+        
+        <div class="max-w-7xl mx-auto px-4 py-28 text-center relative z-10">
+            <div class="floating">
+                <h1 class="text-5xl md:text-7xl font-extrabold mb-6 bg-gradient-to-r from-[#34d399] to-[#2dd4bf] bg-clip-text text-transparent">
+                   ReplyzeAI
+                </h1>
+                <p class="text-xl md:text-2xl text-emerald-100 mb-8 max-w-2xl mx-auto">
+                    Commercial Real Estate Automation Powered by AI
+                </p>
+                <div class="flex justify-center gap-4 mb-12">
+                    <button class="bg-[#34d399] text-[#0a2f35] px-8 py-4 rounded-xl font-bold hover:bg-[#2dd4bf] transition-all transform hover:-translate-y-1 shadow-lg hover:shadow-xl">
+                        🚀 Start Free Trial
+                    </button>
+                    <button class="border-2 border-emerald-500/30 text-emerald-100 px-8 py-4 rounded-xl font-semibold hover:bg-emerald-900/20 transition-all">
+                        📽️ Watch Demo
+                    </button>
+                </div>
+            </div>
+
+            <div class="mt-20 grid md:grid-cols-3 gap-8 text-left">
+                <!-- Feature Card 1 -->
+                <div class="card-3d bg-[#1d4d4a] p-8 rounded-2xl border border-emerald-900/50 glossy-overlay">
+                    <div class="w-14 h-14 bg-emerald-900/30 rounded-2xl mb-6 flex items-center justify-center text-3xl">
+                        ✍️
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4">AI Email Suite</h3>
+                    <ul class="space-y-4">
+                        <li class="flex items-center">
+                            <div class="w-2 h-2 bg-[#34d399] rounded-full mr-3"></div>
+                            Instant Response Generation
+                        </li>
+                        <li class="flex items-center">
+                            <div class="w-2 h-2 bg-[#34d399] rounded-full mr-3"></div>
+                            Voice & Tone Matching
+                        </li>
+                        <li class="flex items-center">
+                            <div class="w-2 h-2 bg-[#34d399] rounded-full mr-3"></div>
+                            Jargon Optimization
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Feature Card 2 -->
+                <div class="card-3d bg-[#1d4d4a] p-8 rounded-2xl border border-emerald-900/50 glossy-overlay">
+                    <div class="w-14 h-14 bg-emerald-900/30 rounded-2xl mb-6 flex items-center justify-center text-3xl">
+                        💼
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4">Deal Automation</h3>
+                    <ul class="space-y-4">
+                        <li class="flex items-center">
+                            <div class="w-2 h-2 bg-[#34d399] rounded-full mr-3"></div>
+                            Smart Proposal Generator
+                        </li>
+                        <li class="flex items-center">
+                            <div class="w-2 h-2 bg-[#34d399] rounded-full mr-3"></div>
+                            Data Integration
+                        </li>
+                        <li class="flex items-center">
+                            <div class="w-2 h-2 bg-[#34d399] rounded-full mr-3"></div>
+                            Team Collaboration
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Feature Card 3 -->
+                <div class="card-3d bg-[#1d4d4a] p-8 rounded-2xl border border-emerald-900/50 glossy-overlay">
+                    <div class="w-14 h-14 bg-emerald-900/30 rounded-2xl mb-6 flex items-center justify-center text-3xl">
+                        🔒
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4">Security</h3>
+                    <ul class="space-y-4">
+                        <li class="flex items-center">
+                            <div class="w-2 h-2 bg-[#34d399] rounded-full mr-3"></div>
+                            Enterprise Encryption
+                        </li>
+                        <li class="flex items-center">
+                            <div class="w-2 h-2 bg-[#34d399] rounded-full mr-3"></div>
+                            Gmail Integration
+                        </li>
+                        <li class="flex items-center">
+                            <div class="w-2 h-2 bg-[#34d399] rounded-full mr-3"></div>
+                            Access Controls
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="py-20 bg-[#1d4d4a]/40">
+        <div class="max-w-7xl mx-auto px-4 grid md:grid-cols-3 gap-8">
+            <div class="text-center p-8 rounded-2xl bg-gradient-to-br from-[#0a2f35] to-[#1d4d4a] border border-emerald-900/50">
+                <div class="text-4xl font-bold text-[#34d399] mb-2">20+</div>
+                <div class="text-emerald-100">Daily AI Emails</div>
+            </div>
+            <div class="text-center p-8 rounded-2xl bg-gradient-to-br from-[#0a2f35] to-[#1d4d4a] border border-emerald-900/50">
+                <div class="text-4xl font-bold text-[#34d399] mb-2">2.5h</div>
+                <div class="text-emerald-100">Average Time Saved</div>
+            </div>
+            <div class="text-center p-8 rounded-2xl bg-gradient-to-br from-[#0a2f35] to-[#1d4d4a] border border-emerald-900/50">
+                <div class="text-4xl font-bold text-[#34d399] mb-2">98%</div>
+                <div class="text-emerald-100">Accuracy Rate</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Interactive Feature Details -->
+    <section class="py-20">
+        <div class="max-w-7xl mx-auto px-4 grid lg:grid-cols-2 gap-12">
+            <div class="space-y-8">
+                <div class="group relative p-8 rounded-2xl bg-[#1d4d4a] border border-emerald-900/50 hover:border-[#34d399]/30 transition-all">
+                    <div class="text-[#34d399] text-3xl mb-4">✉️</div>
+                    <h3 class="text-2xl font-bold mb-4">Smart Email Automation</h3>
+                    <p class="text-emerald-200">AI-powered responses with natural language processing tailored for CRE transactions.</p>
+                    <div class="absolute inset-0 bg-gradient-to-br from-[#34d399]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                </div>
+
+                <div class="group relative p-8 rounded-2xl bg-[#1d4d4a] border border-emerald-900/50 hover:border-[#34d399]/30 transition-all">
+                    <div class="text-[#34d399] text-3xl mb-4">📈</div>
+                    <h3 class="text-2xl font-bold mb-4">Deal Analytics</h3>
+                    <p class="text-emerald-200">Real-time insights into proposal performance and response rates.</p>
+                    <div class="absolute inset-0 bg-gradient-to-br from-[#34d399]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                </div>
+            </div>
+
+            <div class="bg-[#1d4d4a] rounded-2xl p-8 border border-emerald-900/50">
+                <div class="text-[#34d399] text-3xl mb-6">🔑</div>
+                <h3 class="text-2xl font-bold mb-6">Enterprise Security</h3>
+                <ul class="space-y-6">
+                    <li class="flex items-start">
+                        <div class="w-8 flex-shrink-0 text-[#34d399]">✓</div>
+                        <div>
+                            <h4 class="font-bold mb-2">Military-Grade Encryption</h4>
+                            <p class="text-emerald-200 text-sm">All data encrypted at rest and in transit</p>
+                        </div>
+                    </li>
+                    <li class="flex items-start">
+                        <div class="w-8 flex-shrink-0 text-[#34d399]">✓</div>
+                        <div>
+                            <h4 class="font-bold mb-2">SOC 2 Compliance</h4>
+                            <p class="text-emerald-200 text-sm">Enterprise-grade security protocols</p>
+                        </div>
+                    </li>
+                    <li class="flex items-start">
+                        <div class="w-8 flex-shrink-0 text-[#34d399]">✓</div>
+                        <div>
+                            <h4 class="font-bold mb-2">Role-Based Access</h4>
+                            <p class="text-emerald-200 text-sm">Granular team permissions</p>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Floating CTA -->
+    <div class="fixed bottom-8 right-8">
+        <button class="bg-[#34d399] text-[#0a2f35] px-6 py-3 rounded-xl font-bold hover:bg-[#2dd4bf] transition-all transform hover:scale-105 shadow-lg flex items-center gap-2">
+            <span>💼</span>
+            Start Free Trial
+        </button>
+    </div>
+
+    <script>
+        // Parallax effect
+        document.addEventListener('mousemove', (e) => {
+            const cards = document.querySelectorAll('.card-3d');
+            const mouseX = e.clientX;
+            const mouseY = e.clientY;
+
+            cards.forEach(card => {
+                const rect = card.getBoundingClientRect();
+                const cardX = rect.left + rect.width/2;
+                const cardY = rect.top + rect.height/2;
+                
+                const angleX = (mouseY - cardY) / 30;
+                const angleY = (mouseX - cardX) / -30;
+
+                card.style.transform = `perspective(1000px) rotateX(${angleX}deg) rotateY(${angleY}deg)`;
+            });
+        });
+
+        // Smooth scroll
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+
+        // Initialize animations
+        window.addEventListener('DOMContentLoaded', () => {
+            const floatingElements = document.querySelectorAll('.floating');
+            floatingElements.forEach(el => {
+                el.style.animationDelay = `${Math.random() * 2}s`;
+            });
+        });
+    </script>
+</body>
+</html>
