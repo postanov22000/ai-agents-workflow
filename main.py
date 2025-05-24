@@ -1,181 +1,224 @@
 import os
-import logging
-import requests
-from datetime import datetime, timezone
-from email.mime.text import MIMEText
-import base64
-from googleapiclient.discovery import build
+import json
+from flask import Flask, render_template, request, redirect, jsonify
+from datetime import date
+from supabase import create_client, Client
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
-from supabase import create_client, Client
+from google_auth_oauthlib.flow import Flow
+from google.oauth2 import id_token
+import google.auth.transport.requests as grequests
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+app = Flask(__name__, template_folder="templates")
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
 
-# Parse multiple Hugging Face keys from HF_API_KEY
-HF_API_KEYS = [k.strip() for k in os.environ.get("HF_API_KEY", "").split(",")]
-current_key_index = 0
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_ANON_KEY = os.environ["SUPABASE_ANON_KEY"]
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-# Supabase setup
-def get_supabase() -> Client:
-    return create_client(
-        os.environ["SUPABASE_URL"],
-        os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-    )
+DAILY_LIMIT = 20
 
-supabase = get_supabase()
 
-def load_credentials(sender_email: str) -> Credentials:
-    response = supabase.table('gmail_tokens') \
-        .select('credentials') \
-        .eq('user_email', sender_email) \
-        .execute()
+@app.route("/")
+def home():
+    return redirect("/dashboard")
 
-    if not response.data:
-        raise ValueError(f"No Gmail credentials found for {sender_email}")
 
-    creds_data = response.data[0]['credentials']
-    creds = Credentials(
-        token=creds_data.get('token'),
-        refresh_token=creds_data.get('refresh_token'),
-        token_uri=creds_data.get('token_uri', 'https://oauth2.googleapis.com/token'),
-        client_id=creds_data.get('client_id'),
-        client_secret=creds_data.get('client_secret'),
-        scopes=creds_data.get('scopes', [
+@app.route("/dashboard")
+def dashboard():
+    user_id = request.args.get("user_id")
+    if not user_id:
+        return "Missing user_id", 401
+
+    try:
+        profile = supabase.table("profiles") \
+            .select("full_name, ai_enabled, email") \
+            .eq("id", user_id) \
+            .single() \
+            .execute().data
+    except Exception as e:
+        return f"Profile error: {e}", 500
+
+    today = date.today().isoformat()
+    sent_today = supabase.table("emails") \
+        .select("sent_at") \
+        .eq("user_id", user_id) \
+        .eq("status", "sent") \
+        .execute().data
+
+    emails_sent_today = len([e for e in sent_today if e["sent_at"] and e["sent_at"].startswith(today)])
+    time_saved = emails_sent_today * 3
+
+    # Gmail token status
+    tokens = supabase.table("gmail_tokens").select("credentials").eq("user_id", user_id).execute().data
+    show_reconnect = True
+    if tokens:
+        try:
+            creds_data = tokens[0]["credentials"]
+            creds = Credentials(
+                token=creds_data["token"],
+                refresh_token=creds_data["refresh_token"],
+                token_uri=creds_data["token_uri"],
+                client_id=creds_data["client_id"],
+                client_secret=creds_data["client_secret"],
+                scopes=creds_data["scopes"]
+            )
+            if creds and not creds.expired:
+                show_reconnect = False
+        except Exception as e:
+            print("Token check failed:", e)
+
+    return render_template("dashboard.html",
+                           name=profile["full_name"],
+                           user_id=user_id,
+                           emails_sent=emails_sent_today,
+                           time_saved=time_saved,
+                           ai_enabled=profile.get("ai_enabled", True),
+                           show_reconnect=show_reconnect)
+
+
+@app.route("/connect_gmail")
+def connect_gmail():
+    flow = Flow.from_client_config(
+        {
+            "web": {
+                "client_id": os.environ["GOOGLE_CLIENT_ID"],
+                "client_secret": os.environ["GOOGLE_CLIENT_SECRET"],
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [os.environ["REDIRECT_URI"]],
+            }
+        },
+        scopes=[
             "https://www.googleapis.com/auth/gmail.send",
+            "https://www.googleapis.com/auth/gmail.readonly",
             "https://www.googleapis.com/auth/userinfo.email",
             "openid"
-        ])
+        ]
     )
+    flow.redirect_uri = os.environ["REDIRECT_URI"]
+    authorization_url, _ = flow.authorization_url(
+        access_type="offline",
+        prompt="consent",
+        include_granted_scopes="true"
+    )
+    return redirect(authorization_url)
 
-    if creds.expired:
-        creds.refresh(Request())
-        supabase.table('gmail_tokens').upsert({
-            'user_email': sender_email,
-            'credentials': {
-                'token': creds.token,
-                'refresh_token': creds.refresh_token,
-                'token_uri': creds.token_uri,
-                'client_id': creds.client_id,
-                'client_secret': creds.client_secret,
-                'scopes': creds.scopes
+
+@app.route("/oauth2callback")
+def oauth2callback():
+    try:
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": os.environ["GOOGLE_CLIENT_ID"],
+                    "client_secret": os.environ["GOOGLE_CLIENT_SECRET"],
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [os.environ["REDIRECT_URI"]],
+                }
+            },
+            scopes=[
+                "https://www.googleapis.com/auth/gmail.send",
+                "https://www.googleapis.com/auth/gmail.readonly",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "openid"
+            ]
+        )
+        flow.redirect_uri = os.environ["REDIRECT_URI"]
+        flow.fetch_token(authorization_response=request.url)
+        credentials = flow.credentials
+
+        id_info = id_token.verify_oauth2_token(
+            credentials.id_token,
+            grequests.Request(),
+            os.environ["GOOGLE_CLIENT_ID"]
+        )
+        email = id_info.get("email")
+        if not email:
+            raise ValueError("No email found in ID token")
+
+        # Lookup or create profile
+        profile = supabase.table("profiles").select("id").eq("email", email).execute().data
+        if not profile:
+            new_profile = supabase.table("profiles").insert({
+                "email": email,
+                "full_name": id_info.get("name") or email.split("@")[0],
+                "ai_enabled": True
+            }).execute().data
+            user_id = new_profile[0]["id"]
+        else:
+            user_id = profile[0]["id"]
+
+        # Upsert credentials
+        supabase.table("gmail_tokens").upsert({
+            "user_id": user_id,
+            "credentials": {
+                "token": credentials.token,
+                "refresh_token": credentials.refresh_token,
+                "token_uri": credentials.token_uri,
+                "client_id": credentials.client_id,
+                "client_secret": credentials.client_secret,
+                "scopes": credentials.scopes,
             }
         }).execute()
 
-    return creds
+        return redirect(f"/dashboard?user_id={user_id}")
 
-def create_message(to: str, subject: str, body: str) -> dict:
-    message = MIMEText(body)
-    message["to"] = to
-    message["subject"] = subject
+    except Exception as e:
+        app.logger.error(f"OAuth2 callback failed: {e}", exc_info=True)
+        return f"<h1>Authentication failed</h1><p>{str(e)}</p>", 500
+
+
+@app.route("/disconnect_gmail", methods=["POST"])
+def disconnect_gmail():
+    user_id = request.form.get("user_id")
+    supabase.table("gmail_tokens").delete().eq("user_id", user_id).execute()
+    return redirect(f"/dashboard?user_id={user_id}")
+
+
+@app.route("/admin")
+def admin():
+    return render_template("admin.html")
+
+
+@app.route("/api/admin/users")
+def api_admin_users():
+    today = date.today().isoformat()
+    users = supabase.table("profiles").select("*").execute().data
+    results = []
+    for user in users:
+        sent = supabase.table("emails") \
+            .select("sent_at") \
+            .eq("user_id", user["id"]) \
+            .eq("status", "sent") \
+            .execute().data
+        count = len([e for e in sent if e["sent_at"] and e["sent_at"].startswith(today)])
+        results.append({
+            "id": user["id"],
+            "name": user["full_name"],
+            "email": user["email"],
+            "enabled": user.get("ai_enabled", True),
+            "emails_today": count
+        })
+    return jsonify(results)
+
+
+@app.route("/api/admin/toggle_status", methods=["POST"])
+def api_toggle_status():
+    user_id = request.json.get("user_id")
+    enable = request.json.get("enable", True)
+    supabase.table("profiles").update({"ai_enabled": enable}).eq("id", user_id).execute()
+    return jsonify({"success": True})
+
+
+@app.route("/debug_env")
+def debug_env():
     return {
-        "raw": base64.urlsafe_b64encode(message.as_bytes()).decode()
+        "GOOGLE_CLIENT_ID": os.environ.get("GOOGLE_CLIENT_ID"),
+        "REDIRECT_URI": os.environ.get("REDIRECT_URI")
     }
 
-def process_single_email(email: dict) -> None:
-    email_id = email["id"]
-
-    try:
-        supabase.table("emails").update({"status": "processing"}).eq("id", email_id).execute()
-
-        # Extract input for proposal generation
-        market = "SoHo"  # TODO: Parse from email['original_content'] or assign dynamically
-        deal_type = "retail"
-        cap_rate = "5.2%"  # Static for now, can parse later
-        tenant_type = "national"
-        style = "assertive"
-
-        # Call generate-proposal edge function
-        proposal_url = os.environ.get("GENERATE_PROPOSAL_FUNCTION_URL")
-        if not proposal_url:
-            raise ValueError("Missing GENERATE_PROPOSAL_FUNCTION_URL in environment variables")
-
-        response = requests.post(
-            proposal_url,
-            json={
-                "market": market,
-                "deal_type": deal_type,
-                "cap_rate": cap_rate,
-                "tenant_type": tenant_type,
-                "style": style
-            },
-            headers={
-                "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}",
-                "Content-Type": "application/json"
-            },
-            timeout=60
-        )
-
-        if response.status_code != 200:
-            raise ValueError(f"Proposal generation failed: {response.status_code} - {response.text[:300]}")
-
-        reply = response.json().get("result", "").strip()
-        if not reply:
-            raise ValueError("Proposal function returned an empty response.")
-
-        # Save the result
-        supabase.table("emails").update({
-            "processed_content": reply,
-            "status": "ready_to_send",
-            "processed_at": datetime.now(timezone.utc).isoformat()
-        }).eq("id", email_id).execute()
-
-    except Exception as e:
-        logger.error(f"Processing failed for email {email_id}: {str(e)}")
-        supabase.table("emails").update({
-            "status": "error",
-            "error_message": str(e)[:500]
-        }).eq("id", email_id).execute()
-
-
-def send_single_email(email: dict) -> None:
-    email_id = email["id"]
-    try:
-        sender = email["sender_email"]
-        recipient = email["recipient_email"]
-        subject = email.get("subject") or "Re: Your inquiry"
-        body = email["processed_content"]
-
-        creds = load_credentials(sender)
-        service = build("gmail", "v1", credentials=creds, cache_discovery=False)
-        msg = create_message(recipient, subject, body)
-        service.users().messages().send(userId="me", body=msg).execute()
-
-        supabase.table("emails").update({
-            "status": "sent",
-            "sent_at": datetime.now(timezone.utc).isoformat()
-        }).eq("id", email_id).execute()
-
-    except Exception as e:
-        logger.error(f"Sending failed for email {email_id}: {str(e)}")
-        supabase.table("emails").update({
-            "status": "failed",
-            "error_message": str(e)[:500]
-        }).eq("id", email_id).execute()
-
-def run_worker() -> str:
-    try:
-        logger.info("Starting email processing")
-
-        preprocessing = supabase.table("emails").select("*").eq("status", "preprocessing").execute().data
-        for email in preprocessing:
-            process_single_email(email)
-
-        ready = supabase.table("emails").select("*").eq("status", "ready_to_send").execute().data
-        for email in ready:
-            send_single_email(email)
-
-        result = f"Processed {len(preprocessing)} emails, sent {len(ready)} emails"
-        logger.info(result)
-        return result
-
-    except Exception as e:
-        logger.error(f"Worker failed: {str(e)}")
-        return f"Error: {str(e)}"
 
 if __name__ == "__main__":
-    run_worker()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
