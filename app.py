@@ -252,7 +252,7 @@ def trigger_process():
 
     # Call the Edge Function
     response = requests.post(
-        EDGE_FUNCTION_URL,
+        EDGE_FUNCTION_URL = "https://replyzeai.functions.supabase.co/generate-response",
         json={"email_ids": email_ids},
         headers={"Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"}
     )
