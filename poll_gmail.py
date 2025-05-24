@@ -93,7 +93,7 @@ def poll_gmail_for_user(user_email):
 
         # Insert into Supabase
         supabase.table("emails").insert({
-            "user_id": user_email,
+            "user_id": user_id,
             "sender_email": sender,
             "recipient_email": user_email,
             "subject": subject,
