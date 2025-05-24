@@ -188,5 +188,13 @@ def api_toggle_status():
     supabase.table("profiles").update({"ai_enabled": enable}).eq("id", user_id).execute()
     return jsonify({"success": True})
 
+@app.route("/debug_env")
+def debug_env():
+    return {
+        "GOOGLE_CLIENT_ID": os.environ.get("GOOGLE_CLIENT_ID"),
+        "REDIRECT_URI": os.environ.get("REDIRECT_URI")
+    }
+
+
 if __name__ == "__main__":
     app.run(debug=True)
