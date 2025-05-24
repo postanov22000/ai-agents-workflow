@@ -234,5 +234,43 @@ def debug_env():
         "REDIRECT_URI": os.environ.get("REDIRECT_URI")
     }
 
+
+
+@app.route("/process")
+def process():
+    token = request.args.get("token")
+    expected = os.environ.get("PROCESS_SECRET_TOKEN")
+
+    if not token:
+        app.logger.warning("Missing token in request")
+        return "Missing token", 400
+
+    if token != expected:
+        app.logger.warning("Invalid token in request")
+        return "Unauthorized", 403
+
+    try:
+        # Call the Edge Function to generate responses
+        edge_fn_url = f"{SUPABASE_URL}/functions/v1/generate-response"
+        headers = {
+            "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        response = requests.post(edge_fn_url, headers=headers, json={})
+
+        if response.status_code != 200:
+            app.logger.error(f"Edge function failed: {response.text}")
+            return f"Edge function error: {response.text}", 500
+
+        app.logger.info("Processing triggered successfully.")
+        return "Processing started", 200
+
+    except Exception as e:
+        app.logger.error(f"Process route failed: {str(e)}", exc_info=True)
+        return f"Server error: {str(e)}", 500
+
+
+
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
