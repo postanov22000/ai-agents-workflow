@@ -238,38 +238,30 @@ def debug_env():
 
 
 @app.route("/process")
-def process():
+def trigger_process():
     token = request.args.get("token")
-    expected = os.environ.get("PROCESS_SECRET_TOKEN")
+    if not token or not is_valid_token(token):
+        return "Unauthorized", 401
 
-    if not token:
-        app.logger.warning("Missing token in request")
-        return "Missing token", 400
+    # Fetch emails with status "preprocessing"
+    result = supabase.table("emails").select("id").eq("status", "preprocessing").execute()
+    email_ids = [row["id"] for row in result.data]
 
-    if token != expected:
-        app.logger.warning("Invalid token in request")
-        return "Unauthorized", 403
+    if not email_ids:
+        return "No emails to process", 204
 
-    try:
-        # Call the Edge Function to generate responses
-        edge_fn_url = f"{SUPABASE_URL}/functions/v1/generate-response"
-        headers = {
-            "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
-            "Content-Type": "application/json"
-        }
+    # Call the Edge Function
+    response = requests.post(
+        EDGE_FUNCTION_URL,
+        json={"email_ids": email_ids},
+        headers={"Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"}
+    )
 
-        response = requests.post(edge_fn_url, headers=headers, json={})
+    if response.status_code != 200:
+        app.logger.error(f"Edge function failed: {response.text}")
+        return f"Edge function failed: {response.text}", 500
 
-        if response.status_code != 200:
-            app.logger.error(f"Edge function failed: {response.text}")
-            return f"Edge function error: {response.text}", 500
-
-        app.logger.info("Processing triggered successfully.")
-        return "Processing started", 200
-
-    except Exception as e:
-        app.logger.error(f"Process route failed: {str(e)}", exc_info=True)
-        return f"Server error: {str(e)}", 500
+    return "Processing triggered", 200
 
 
 
