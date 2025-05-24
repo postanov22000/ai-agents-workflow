@@ -1,5 +1,6 @@
 import os
 import json
+import requests
 from flask import Flask, render_template, request, redirect, jsonify
 from datetime import date
 from supabase import create_client, Client
