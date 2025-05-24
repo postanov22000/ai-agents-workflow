@@ -29,37 +29,37 @@ def dashboard():
         return "Missing user_id", 401
 
     try:
-        # Fetch profile by UUID
         profile_resp = supabase.table("profiles") \
             .select("full_name, ai_enabled, email") \
             .eq("id", user_id) \
             .single() \
             .execute()
-        
+
         profile = profile_resp.data
     except Exception as e:
         return f"Profile query error: {str(e)}", 500
 
     today = date.today().isoformat()
-    sent = supabase.table("emails") \
+    sent_resp = supabase.table("emails") \
         .select("sent_at") \
         .eq("user_id", user_id) \
         .eq("status", "sent") \
-        .execute().data
-    
+        .execute()
+
+    sent = sent_resp.data
     emails_sent_today = len([e for e in sent if e["sent_at"] and e["sent_at"].startswith(today)])
     time_saved = emails_sent_today * 3
 
-    # Check Gmail token status
     token_resp = supabase.table("gmail_tokens") \
         .select("credentials") \
         .eq("user_id", user_id) \
-        .execute().data
-    
+        .execute()
+
+    token_data = token_resp.data
     show_reconnect = True
-    if token_resp:
+    if token_data:
         try:
-            creds_data = token_resp[0]["credentials"]
+            creds_data = token_data[0]["credentials"]
             creds = Credentials(
                 token=creds_data["token"],
                 refresh_token=creds_data["refresh_token"],
@@ -112,7 +112,6 @@ def connect_gmail():
 @app.route("/oauth2callback")
 def oauth2callback():
     try:
-        # Initialize OAuth flow
         flow = Flow.from_client_config(
             {
                 "web": {
@@ -131,46 +130,41 @@ def oauth2callback():
             ]
         )
         flow.redirect_uri = os.environ["REDIRECT_URI"]
-        
-        # Fetch tokens from Google
         flow.fetch_token(authorization_response=request.url)
         credentials = flow.credentials
 
-        # Verify ID token
         id_info = id_token.verify_oauth2_token(
             credentials.id_token,
             grequests.Request(),
             os.environ["GOOGLE_CLIENT_ID"]
         )
-        email = id_info.get('email')
+
+        email = id_info.get("email")
         if not email:
             raise ValueError("No email found in Google response")
 
-        # Find or create user profile using email
         profile_resp = supabase.table("profiles") \
             .select("id") \
             .eq("email", email) \
             .execute()
 
-        if not profile_resp.data:
-            # Create new profile with UUID
-            new_profile = supabase.table("profiles").insert({
+        profile_data = profile_resp.data
+
+        if not profile_data:
+            new_profile_resp = supabase.table("profiles").insert({
                 "email": email,
-                "full_name": id_info.get('name') or email.split('@')[0],
+                "full_name": id_info.get("name") or email.split('@')[0],
                 "ai_enabled": True
-            }).execute().data
-            
+            }).execute()
+
+            new_profile = new_profile_resp.data
             if not new_profile:
                 raise ValueError("Failed to create new profile")
-            
             user_id = new_profile[0]['id']
-            app.logger.info(f"Created new profile: {user_id}")
         else:
-            user_id = profile_resp.data[0]['id']
-            app.logger.info(f"Existing profile found: {user_id}")
+            user_id = profile_data[0]['id']
 
-        # Store/update Gmail credentials with UUID reference
-        upsert_response = supabase.table("gmail_tokens").upsert({
+        token_payload = {
             "user_id": user_id,
             "credentials": {
                 "token": credentials.token,
@@ -180,20 +174,14 @@ def oauth2callback():
                 "client_secret": credentials.client_secret,
                 "scopes": credentials.scopes
             }
-        }).execute()
-
-        if upsert_response.error:
-            raise ValueError(f"Token upsert failed: {upsert_response.error}")
+        }
+        supabase.table("gmail_tokens").upsert(token_payload).execute()
 
         return redirect(f"/dashboard?user_id={user_id}")
 
     except Exception as e:
         app.logger.error(f"OAuth Error: {str(e)}", exc_info=True)
-        return f"""
-        <h1>Authentication Failed</h1>
-        <p>{str(e)}</p>
-        <p>Please try again or contact support.</p>
-        """, 500
+        return f"<h1>Authentication Failed</h1><p>{str(e)}</p>", 500
 
 @app.route("/disconnect_gmail", methods=["POST"])
 def disconnect_gmail():
@@ -209,15 +197,15 @@ def admin():
 def api_admin_users():
     users = supabase.table("profiles").select("*").execute().data
     today = date.today().isoformat()
-
     results = []
+
     for user in users:
         sent = supabase.table("emails") \
             .select("sent_at") \
             .eq("user_id", user["id"]) \
             .eq("status", "sent") \
             .execute().data
-        
+
         count = len([e for e in sent if e["sent_at"] and e["sent_at"].startswith(today)])
         results.append({
             "id": user["id"],
