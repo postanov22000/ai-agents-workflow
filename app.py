@@ -28,24 +28,35 @@ def dashboard():
     if not user_id:
         return "Missing user_id", 401
 
-    today = date.today().isoformat()
-    sent = supabase.table("emails").select("sent_at").eq("user_id", user_id).eq("status", "sent").execute().data
-    emails_sent_today = len([e for e in sent if e["sent_at"] and e["sent_at"].startswith(today)])
-    time_saved = emails_sent_today * 3
-
-    # Fetch user profile
     try:
-        profile_resp = supabase.table("profiles").select("full_name, ai_enabled").eq("id", user_id).limit(1).execute()
-        if not profile_resp.data:
-            return f"User {user_id} not found in profiles table", 404
-        profile = profile_resp.data[0]
+        # Fetch profile by UUID
+        profile_resp = supabase.table("profiles") \
+            .select("full_name, ai_enabled, email") \
+            .eq("id", user_id) \
+            .single() \
+            .execute()
+        
+        profile = profile_resp.data
     except Exception as e:
         return f"Profile query error: {str(e)}", 500
 
-    # Check if Gmail token is expired
-    token_resp = supabase.table("gmail_tokens").select("credentials").eq("user_email", user_id).execute().data
-    show_reconnect = True
+    today = date.today().isoformat()
+    sent = supabase.table("emails") \
+        .select("sent_at") \
+        .eq("user_id", user_id) \
+        .eq("status", "sent") \
+        .execute().data
+    
+    emails_sent_today = len([e for e in sent if e["sent_at"] and e["sent_at"].startswith(today)])
+    time_saved = emails_sent_today * 3
 
+    # Check Gmail token status
+    token_resp = supabase.table("gmail_tokens") \
+        .select("credentials") \
+        .eq("user_id", user_id) \
+        .execute().data
+    
+    show_reconnect = True
     if token_resp:
         try:
             creds_data = token_resp[0]["credentials"]
@@ -57,11 +68,8 @@ def dashboard():
                 client_secret=creds_data["client_secret"],
                 scopes=creds_data["scopes"]
             )
-
-            if creds.expired:
-                creds.refresh(Request())
-
-            show_reconnect = False
+            if not creds.expired:
+                show_reconnect = False
         except Exception as e:
             print("Token check failed:", e)
 
@@ -76,23 +84,24 @@ def dashboard():
 
 @app.route("/connect_gmail")
 def connect_gmail():
-    flow = Flow.from_client_config({
-        "web": {
-            "client_id": os.environ["GOOGLE_CLIENT_ID"],
-            "client_secret": os.environ["GOOGLE_CLIENT_SECRET"],
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [os.environ["REDIRECT_URI"]],
-        }
-    },
-    scopes=[
-        "https://www.googleapis.com/auth/gmail.send",
-        "https://www.googleapis.com/auth/gmail.readonly",
-        "https://www.googleapis.com/auth/userinfo.email",
-        "openid"
-    ])
+    flow = Flow.from_client_config(
+        {
+            "web": {
+                "client_id": os.environ["GOOGLE_CLIENT_ID"],
+                "client_secret": os.environ["GOOGLE_CLIENT_SECRET"],
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [os.environ["REDIRECT_URI"]]
+            }
+        },
+        scopes=[
+            "https://www.googleapis.com/auth/gmail.send",
+            "https://www.googleapis.com/auth/gmail.readonly",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "openid"
+        ]
+    )
     flow.redirect_uri = os.environ["REDIRECT_URI"]
-
     authorization_url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
@@ -102,61 +111,74 @@ def connect_gmail():
 
 @app.route("/oauth2callback")
 def oauth2callback():
-    flow = Flow.from_client_config({
-        "web": {
-            "client_id": os.environ["GOOGLE_CLIENT_ID"],
-            "client_secret": os.environ["GOOGLE_CLIENT_SECRET"],
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [os.environ["REDIRECT_URI"]],
-        }
-    },
-    scopes=[
-        "https://www.googleapis.com/auth/gmail.send",
-        "https://www.googleapis.com/auth/gmail.readonly",
-        "https://www.googleapis.com/auth/userinfo.email",
-        "openid"
-    ])
-    flow.redirect_uri = os.environ["REDIRECT_URI"]
-    flow.fetch_token(authorization_response=request.url)
+    try:
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": os.environ["GOOGLE_CLIENT_ID"],
+                    "client_secret": os.environ["GOOGLE_CLIENT_SECRET"],
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [os.environ["REDIRECT_URI"]]
+                }
+            },
+            scopes=[
+                "https://www.googleapis.com/auth/gmail.send",
+                "https://www.googleapis.com/auth/gmail.readonly",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "openid"
+            ]
+        )
+        flow.redirect_uri = os.environ["REDIRECT_URI"]
+        flow.fetch_token(authorization_response=request.url)
 
-    credentials = flow.credentials
-    info = id_token.verify_oauth2_token(
-        credentials.id_token,
-        grequests.Request(),
-        os.environ["GOOGLE_CLIENT_ID"]
-    )
-    email = info["email"]
+        credentials = flow.credentials
+        info = id_token.verify_oauth2_token(
+            credentials.id_token,
+            grequests.Request(),
+            os.environ["GOOGLE_CLIENT_ID"]
+        )
+        email = info["email"]
 
-    # Store Gmail credentials
-    supabase.table("gmail_tokens").upsert({
-        "user_email": email,
-        "credentials": {
-            "token": credentials.token,
-            "refresh_token": credentials.refresh_token,
-            "token_uri": credentials.token_uri,
-            "client_id": credentials.client_id,
-            "client_secret": credentials.client_secret,
-            "scopes": credentials.scopes
-        }
-    }).execute()
+        # Find or create user profile
+        profile_resp = supabase.table("profiles") \
+            .select("id") \
+            .eq("email", email) \
+            .execute()
 
-    # Ensure profile exists for this user
-    profile_resp = supabase.table("profiles").select("id").eq("id", email).execute()
-    if not profile_resp.data:
-        supabase.table("profiles").insert({
-            "id": email,
-            "full_name": email.split("@")[0].replace(".", " ").title(),
-            "ai_enabled": True
+        if not profile_resp.data:
+            # Create new profile with UUID
+            new_profile = supabase.table("profiles").insert({
+                "email": email,
+                "full_name": email.split("@")[0].replace(".", " ").title(),
+                "ai_enabled": True
+            }).execute().data[0]
+            user_id = new_profile["id"]
+        else:
+            user_id = profile_resp.data[0]["id"]
+
+        # Store Gmail tokens with UUID reference
+        supabase.table("gmail_tokens").upsert({
+            "user_id": user_id,
+            "credentials": {
+                "token": credentials.token,
+                "refresh_token": credentials.refresh_token,
+                "token_uri": credentials.token_uri,
+                "client_id": credentials.client_id,
+                "client_secret": credentials.client_secret,
+                "scopes": credentials.scopes
+            }
         }).execute()
 
-    return redirect(f"/dashboard?user_id={email}")
+        return redirect(f"/dashboard?user_id={user_id}")
 
+    except Exception as e:
+        return f"OAuth Error: {str(e)}", 500
 
 @app.route("/disconnect_gmail", methods=["POST"])
 def disconnect_gmail():
     user_id = request.form.get("user_id")
-    supabase.table("gmail_tokens").delete().eq("user_email", user_id).execute()
+    supabase.table("gmail_tokens").delete().eq("user_id", user_id).execute()
     return redirect(f"/dashboard?user_id={user_id}")
 
 @app.route("/admin")
@@ -170,11 +192,17 @@ def api_admin_users():
 
     results = []
     for user in users:
-        sent = supabase.table("emails").select("sent_at").eq("user_id", user["id"]).eq("status", "sent").execute().data
+        sent = supabase.table("emails") \
+            .select("sent_at") \
+            .eq("user_id", user["id"]) \
+            .eq("status", "sent") \
+            .execute().data
+        
         count = len([e for e in sent if e["sent_at"] and e["sent_at"].startswith(today)])
         results.append({
             "id": user["id"],
             "name": user["full_name"],
+            "email": user["email"],
             "enabled": user.get("ai_enabled", True),
             "emails_today": count
         })
@@ -185,7 +213,10 @@ def api_admin_users():
 def api_toggle_status():
     user_id = request.json.get("user_id")
     enable = request.json.get("enable", True)
-    supabase.table("profiles").update({"ai_enabled": enable}).eq("id", user_id).execute()
+    supabase.table("profiles") \
+        .update({"ai_enabled": enable}) \
+        .eq("id", user_id) \
+        .execute()
     return jsonify({"success": True})
 
 @app.route("/debug_env")
@@ -195,6 +226,5 @@ def debug_env():
         "REDIRECT_URI": os.environ.get("REDIRECT_URI")
     }
 
-
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
