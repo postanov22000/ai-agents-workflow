@@ -240,56 +240,67 @@ def debug_env():
 
 @app.route("/process")
 def trigger_process():
+    # 1) Authenticate the request
     token = request.args.get("token")
-    PROCESS_TOKEN = os.environ.get("PROCESS_TOKEN", "00000001001100100001101110111001")
-
-    if not token or token != PROCESS_TOKEN:
+    expected = os.environ.get("PROCESS_TOKEN", "00000001001100100001101110111001")
+    if token != expected:
         return "Unauthorized", 401
 
-    # Step 1: Fetch emails with status "preprocessing"
-    result = supabase.table("emails").select("id").eq("status", "preprocessing").execute()
-    email_ids = [row["id"] for row in result.data]
+    # 2) Fetch all emails awaiting processing
+    try:
+        pre_resp = supabase.table("emails") \
+            .select("id") \
+            .eq("status", "preprocessing") \
+            .execute()
+        email_ids = [row["id"] for row in pre_resp.data]
+    except Exception as e:
+        app.logger.error(f"Error querying preprocessing emails: {e}", exc_info=True)
+        return "Database query failed", 500
 
-    app.logger.info(f"Found {len(email_ids)} emails to process: {email_ids}")
-
+    app.logger.info(f"Found {len(email_ids)} preprocessing emails: {email_ids}")
     if not email_ids:
         return "No emails to process", 204
 
-    # Step 2: Update emails to "processing"
-    updated = supabase.table("emails") \
-        .update({"status": "processing"}) \
-        .in_("id", email_ids) \
-        .execute()
-
-    if not updated.data:
-        app.logger.error("Failed to mark emails as processing.")
-        return "Update failed", 500
-
-    # Step 3: Call edge function once with all email_ids
-    EDGE_FUNCTION_URL = "https://replyzeai.functions.supabase.co/generate-response"
+    # 3) Mark them as "processing"
     try:
-        edge_resp = requests.post(
-            EDGE_FUNCTION_URL,
-            json={"email_ids": email_ids},
-            headers={"Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}"}
-        )
-
-        if edge_resp.status_code == 200:
-            data = edge_resp.json()
-            succeeded = [r["id"] for r in data.get("results", []) if r["status"] == "success"]
-            failed = [r["id"] for r in data.get("results", []) if r["status"] == "failed"]
-            return jsonify({
-                "processed": succeeded,
-                "failed": failed,
-                "summary": f"{len(succeeded)} succeeded, {len(failed)} failed"
-            }), 200
-        else:
-            app.logger.error(f"Edge function failed: {edge_resp.text}")
-            return "Edge function call failed", 500
-
+        supabase.table("emails") \
+            .update({"status": "processing"}) \
+            .in_("id", email_ids) \
+            .execute()
     except Exception as e:
-        app.logger.error(f"Error calling edge function: {str(e)}", exc_info=True)
-        return "Internal server error", 500
+        app.logger.error(f"Error updating to processing: {e}", exc_info=True)
+        return "Failed to update statuses", 500
+
+    # 4) Build the Edge Function URL dynamically from SUPABASE_URL
+    project_ref = SUPABASE_URL.split("https://", 1)[1].split(".", 1)[0]
+    edge_url    = f"https://{project_ref}.functions.supabase.co/generate-response"
+
+    # 5) Call the Edge Function
+    headers = {
+        "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}",
+        "apikey":        os.environ['SUPABASE_SERVICE_ROLE_KEY'],
+        "Content-Type":  "application/json"
+    }
+    try:
+        resp = requests.post(edge_url, json={"email_ids": email_ids}, headers=headers)
+    except Exception as e:
+        app.logger.error(f"Error calling edge function: {e}", exc_info=True)
+        return "Edge function invocation failed", 500
+
+    if resp.status_code != 200:
+        app.logger.error(f"Edge function returned {resp.status_code}: {resp.text}")
+        return f"Edge function error: {resp.status_code}", 500
+
+    # 6) Parse results and return summary
+    results   = resp.json().get("results", [])
+    succeeded = [r["id"] for r in results if r.get("status") == "success"]
+    failed    = [r["id"] for r in results if r.get("status") == "failed"]
+
+    return jsonify({
+        "processed": succeeded,
+        "failed":    failed,
+        "summary":   f"{len(succeeded)} succeeded, {len(failed)} failed"
+    }), 200
 
 
 
