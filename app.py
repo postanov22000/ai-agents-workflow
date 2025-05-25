@@ -244,9 +244,9 @@ def debug_env():
 def trigger_process():
     # 1) Authenticate
     token = request.args.get("token")
-    PROCESS_TOKEN = os.environ.get("PROCESS_TOKEN", "<your-fallback-token>")
-    if token != PROCESS_TOKEN:
-        return "Unauthorized", 401
+    PROCESS_TOKEN = os.environ.get("PROCESS_SECRET_TOKEN", "00000001001100100001101110111001")
+    if not token or token != PROCESS_TOKEN:
+         return "Unauthorized", 401
 
     # 2) Fetch all "preprocessing" emails
     try:
