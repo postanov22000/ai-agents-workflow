@@ -250,6 +250,8 @@ def trigger_process():
     result = supabase.table("emails").select("id").eq("status", "preprocessing").execute()
     email_ids = [row["id"] for row in result.data]
 
+    app.logger.info(f"Found {len(email_ids)} emails to process: {email_ids}")
+
     if not email_ids:
         return "No emails to process", 204
 
@@ -260,7 +262,8 @@ def trigger_process():
         .execute()
 
     if not update_resp.data:
-        app.logger.error(f"Failed to update email status. Response: {update_resp}")
+        app.logger.error(f"Failed to update email status. Tried to update: {email_ids}")
+        app.logger.error(f"Update response: {update_resp}")
         return "Status update failed", 500
 
     # 📤 Step 2: Call the Edge Function
@@ -276,6 +279,7 @@ def trigger_process():
         return f"Edge function failed: {response.text}", 500
 
     return "Processing triggered", 200
+
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
