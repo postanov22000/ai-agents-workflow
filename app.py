@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+from flask import abort
 from flask import Flask, render_template, request, redirect, jsonify
 from datetime import date
 from supabase import create_client, Client
@@ -238,67 +239,63 @@ def debug_env():
 
 
 
+
 @app.route("/process")
 def trigger_process():
-    # 1) Verify the cron token
-    token = request.args.get("token", "")
-    EXPECTED = os.environ.get("PROCESS_TOKEN", "00000001001100100001101110111001")
-    if token != EXPECTED:
+    # 1) Authenticate
+    token = request.args.get("token")
+    expected = os.environ.get("PROCESS_TOKEN", "00000001001100100001101110111001")
+    if token != expected:
         return "Unauthorized", 401
 
-    # 2) Fetch all emails waiting to be processed
+    # 2) Load all emails still in 'preprocessing'
     try:
-        pre = supabase.table("emails") \
+        rows = supabase.table("emails") \
             .select("id") \
             .eq("status", "preprocessing") \
             .execute()
-        email_ids = [row["id"] for row in pre.data]
     except Exception as e:
-        app.logger.error(f"DB query error: {e}", exc_info=True)
-        return "Database query failed", 500
+        app.logger.error("Database fetch failed: %s", e, exc_info=True)
+        return "Database error", 500
 
-    app.logger.info(f"Found {len(email_ids)} preprocessing emails: {email_ids}")
+    email_ids = [r["id"] for r in rows.data]
+    app.logger.info("Found %d emails to process", len(email_ids))
+
     if not email_ids:
+        # nothing to do
         return "No emails to process", 204
 
-    # 3) Mark them all as "processing" so we don’t pick them up again
+    # 3) Immediately mark them 'processing' so we don't pick them up again
     try:
-        upd = supabase.table("emails") \
+        supabase.table("emails") \
             .update({"status": "processing"}) \
             .in_("id", email_ids) \
             .execute()
-        if not upd.data:
-            app.logger.error(f"Failed to mark emails as processing: {upd}")
-            return "Status update failed", 500
     except Exception as e:
-        app.logger.error(f"Error updating statuses: {e}", exc_info=True)
+        app.logger.error("Failed to mark processing: %s", e, exc_info=True)
         return "Failed to update statuses", 500
 
-    # 4) Call the Edge Function via the Supabase Functions REST endpoint
-    #    We dynamically derive the project ref from SUPABASE_URL
-    project_ref = SUPABASE_URL.replace("https://", "").split(".")[0]
-    edge_url    = f"https://{project_ref}.functions.supabase.co/generate-response"
-    headers = {
-        "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}",
-        "apikey":        os.environ['SUPABASE_SERVICE_ROLE_KEY'],
-        "Content-Type":  "application/json"
-    }
-
+    # 4) Invoke your Supabase Edge Function cleanly via the client
     try:
-        resp = requests.post(edge_url, json={"email_ids": email_ids}, headers=headers, timeout=60)
+        fn = supabase.functions.invoke(
+            "generate-response",
+            {
+                "body": { "email_ids": email_ids }
+            }
+        )
     except Exception as e:
-        app.logger.error(f"Edge invocation error: {e}", exc_info=True)
-        return "Edge function invocation failed", 500
+        app.logger.error("Edge invocation error: %s", e, exc_info=True)
+        return "Edge invocation failed", 500
 
-    if resp.status_code != 200:
-        app.logger.error(f"Edge function returned {resp.status_code}: {resp.text}")
-        return f"Edge function error: {resp.status_code}", 500
+    # 5) Check for errors from the function
+    if fn.get("error"):
+        app.logger.error("Edge function returned error: %s", fn["error"])
+        return f"Edge function error: {fn['error']}", 500
 
-    # 5) Parse and return the Edge Function’s result summary
-    payload   = resp.json()
-    results   = payload.get("results", [])
-    succeeded = [r["id"] for r in results if r.get("status") == "success"]
-    failed    = [r["id"] for r in results if r.get("status") == "failed"]
+    # fn["data"] should be your { results: [...] } object
+    data = fn.get("data", {})
+    succeeded = [r["id"] for r in data.get("results", []) if r.get("status") == "success"]
+    failed    = [r["id"] for r in data.get("results", []) if r.get("status") == "failed"]
 
     return jsonify({
         "processed": succeeded,
