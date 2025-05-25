@@ -246,7 +246,7 @@ import base64
 @app.route("/process")
 def trigger_process():
     token = request.args.get("token")
-    PROCESS_TOKEN = os.environ.get("PROCESS_TOKEN")
+    PROCESS_TOKEN = os.environ.get("PROCESS_SECRET_TOKEN")
     if token != PROCESS_TOKEN:
         return "Unauthorized", 401
 
