@@ -1,6 +1,8 @@
+import base64
 import os
 import json
 import requests
+from email.mime.text import MIMEText
 from flask import abort
 from flask import Flask, render_template, request, redirect, jsonify
 from datetime import date
@@ -239,9 +241,6 @@ def debug_env():
 
 
 
-
-from email.mime.text import MIMEText
-import base64
 
 @app.route("/process")
 def trigger_process():
