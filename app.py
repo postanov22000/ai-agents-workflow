@@ -244,64 +244,69 @@ def debug_env():
 def trigger_process():
     # 1) Authenticate
     token = request.args.get("token")
-    expected = os.environ.get("PROCESS_TOKEN", "00000001001100100001101110111001")
-    if token != expected:
+    PROCESS_TOKEN = os.environ.get("PROCESS_TOKEN", "<your-fallback-token>")
+    if token != PROCESS_TOKEN:
         return "Unauthorized", 401
 
-    # 2) Load all emails still in 'preprocessing'
+    # 2) Fetch all "preprocessing" emails
     try:
-        rows = supabase.table("emails") \
+        resp = supabase.table("emails") \
             .select("id") \
             .eq("status", "preprocessing") \
             .execute()
+        email_ids = [r["id"] for r in resp.data]
     except Exception as e:
-        app.logger.error("Database fetch failed: %s", e, exc_info=True)
-        return "Database error", 500
+        app.logger.error(f"DB query failed: {e}", exc_info=True)
+        return "DB error", 500
 
-    email_ids = [r["id"] for r in rows.data]
-    app.logger.info("Found %d emails to process", len(email_ids))
-
+    app.logger.info(f"Found {len(email_ids)} emails to process: {email_ids}")
     if not email_ids:
-        # nothing to do
         return "No emails to process", 204
 
-    # 3) Immediately mark them 'processing' so we don't pick them up again
+    # 3) Mark them as "processing"
     try:
-        supabase.table("emails") \
+        update = supabase.table("emails") \
             .update({"status": "processing"}) \
             .in_("id", email_ids) \
             .execute()
+        if not update.data:
+            raise RuntimeError("No rows updated")
     except Exception as e:
-        app.logger.error("Failed to mark processing: %s", e, exc_info=True)
-        return "Failed to update statuses", 500
+        app.logger.error(f"Failed to update to processing: {e}", exc_info=True)
+        return "Update failed", 500
 
-    # 4) Invoke your Supabase Edge Function cleanly via the client
+    # 4) Build your edge URL (you can also hard-code this in an env var)
+    #    Supabase Edge Functions live at: https://<project>.functions.supabase.co/<fn-name>
+    project_ref = SUPABASE_URL.split("https://",1)[1].split(".",1)[0]
+    edge_url = f"https://{project_ref}.functions.supabase.co/generate-response"
+
+    # 5) Call it
+    headers = {
+        "Content-Type":  "application/json",
+        "apikey":        os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+        "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}"
+    }
     try:
-        fn = supabase.functions.invoke(
-            "generate-response",
-            {
-                "body": { "email_ids": email_ids }
-            }
-        )
+        edge_resp = requests.post(edge_url, json={"email_ids": email_ids}, headers=headers, timeout=30)
     except Exception as e:
-        app.logger.error("Edge invocation error: %s", e, exc_info=True)
+        app.logger.error(f"Edge invocation error: {e}", exc_info=True)
         return "Edge invocation failed", 500
 
-    # 5) Check for errors from the function
-    if fn.get("error"):
-        app.logger.error("Edge function returned error: %s", fn["error"])
-        return f"Edge function error: {fn['error']}", 500
+    if edge_resp.status_code != 200:
+        app.logger.error(f"Edge function failed: {edge_resp.status_code} {edge_resp.text}")
+        return f"Edge error {edge_resp.status_code}", 500
 
-    # fn["data"] should be your { results: [...] } object
-    data = fn.get("data", {})
-    succeeded = [r["id"] for r in data.get("results", []) if r.get("status") == "success"]
-    failed    = [r["id"] for r in data.get("results", []) if r.get("status") == "failed"]
-
+    # 6) Parse and return
+    body = edge_resp.json()
+    results = body.get("results", [])
+    succeeded = [r["id"] for r in results if r.get("status") == "success"]
+    failed    = [r["id"] for r in results if r.get("status") == "failed"]
     return jsonify({
         "processed": succeeded,
         "failed":    failed,
         "summary":   f"{len(succeeded)} succeeded, {len(failed)} failed"
     }), 200
+
 
 
 
