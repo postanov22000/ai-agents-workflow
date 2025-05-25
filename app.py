@@ -240,7 +240,9 @@ def debug_env():
 @app.route("/process")
 def trigger_process():
     token = request.args.get("token")
-    if not token or not is_valid_token(token):
+    PROCESS_TOKEN = os.environ.get("PROCESS_TOKEN", "00000001001100100001101110111001")  # fallback
+
+    if not token or token != PROCESS_TOKEN:
         return "Unauthorized", 401
 
     # Fetch emails with status "preprocessing"
@@ -251,10 +253,11 @@ def trigger_process():
         return "No emails to process", 204
 
     # Call the Edge Function
+    EDGE_FUNCTION_URL = "https://replyzeai.functions.supabase.co/generate-response"
     response = requests.post(
-        EDGE_FUNCTION_URL = "https://replyzeai.functions.supabase.co/generate-response",
+        EDGE_FUNCTION_URL,
         json={"email_ids": email_ids},
-        headers={"Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"}
+        headers={"Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}"}
     )
 
     if response.status_code != 200:
@@ -262,6 +265,7 @@ def trigger_process():
         return f"Edge function failed: {response.text}", 500
 
     return "Processing triggered", 200
+
 
 
 
