@@ -248,134 +248,107 @@ def debug_env():
 
 @app.route("/process")
 def trigger_process():
-    # 1) Authn
-    token = request.args.get("token", "")
-    if token != os.environ.get("PROCESS_SECRET_TOKEN"):
+    # 1) Authenticate
+    token = request.args.get("token")
+    PROCESS_TOKEN = os.environ.get("PROCESS_SECRET_TOKEN")
+    if not token or token != PROCESS_TOKEN:
         return "Unauthorized", 401
 
-    # 2) Pull all preprocessing emails
-    try:
-        pre = supabase.table("emails") \
-            .select("id") \
-            .eq("status", "preprocessing") \
-            .execute()
-        pre_ids = [r["id"] for r in pre.data]
-    except Exception as e:
-        app.logger.error("DB error reading preprocessing: %s", e, exc_info=True)
-        return "DB error", 500
+    # 2) Fetch and mark preprocessing → processing
+    pre_q = supabase.table("emails").select("id").eq("status", "preprocessing").execute()
+    email_ids = [row["id"] for row in pre_q.data]
+    if not email_ids:
+        return "No emails to process", 204
 
-    # 2a) Kick off AI generation if any
-    if pre_ids:
-        # mark 'processing'
-        supabase.table("emails") \
-            .update({"status": "processing"}) \
-            .in_("id", pre_ids) \
-            .execute()
+    supabase.table("emails").update({"status": "processing"}).in_("id", email_ids).execute()
 
-        # build your Edge Function URL
-        project_ref = SUPABASE_URL.split("https://", 1)[1].split(".", 1)[0]
-        edge_url    = f"https://skxzfkudduqrubtgtodp.functions.supabase.co/generate-response"
+    # 3) Call your Edge Function once
+    project_ref = SUPABASE_URL.split("https://",1)[1].split(".",1)[0]
+    edge_url    = f"https://skxzfkudduqrubtgtodp.functions.supabase.co/generate-response"
+    edge_resp = requests.post(
+        edge_url,
+        json={"email_ids": email_ids},
+        headers={
+            "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}",
+            "apikey":        os.environ['SUPABASE_SERVICE_ROLE_KEY'],
+            "Content-Type":  "application/json"
+        },
+        timeout=60
+    )
+    if edge_resp.status_code != 200:
+        app.logger.error("Edge function failed: %s", edge_resp.text)
+        return f"Edge function error: {edge_resp.status_code}", 500
 
-        edge_resp = requests.post(
-            edge_url,
-            json={"email_ids": pre_ids},
-            headers={"Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}"},
-            timeout=60
-        )
-        if edge_resp.status_code != 200:
-            app.logger.error("Edge Fn failed %s: %s", edge_resp.status_code, edge_resp.text)
-            return "Edge error", 500
+    # 4) Send out every ready_to_send email
+    sent = []
+    failed = []
 
-    # 3) Fetch all ready_to_send
-    try:
-        ready = supabase.table("emails") \
-            .select("id, user_id, recipient_email, subject, processed_content") \
-            .eq("status", "ready_to_send") \
-            .execute().data
-    except Exception as e:
-        app.logger.error("DB error reading ready_to_send: %s", e, exc_info=True)
-        return "DB error", 500
+    # fetch all ready_to_send rows
+    ready = supabase.table("emails") \
+        .select("id, user_id, recipient_email, processed_content") \
+        .eq("status", "ready_to_send") \
+        .execute().data
 
-    sent_ids = []
     for row in ready:
-        em_id = row["id"]
-        u     = row["user_id"]
-        to    = row["recipient_email"]
-        subj  = row["subject"]
-        body  = row["processed_content"] or ""
+        em_id  = row["id"]
+        user_id = row["user_id"]
+        to_addr = row["recipient_email"]
+        body    = row["processed_content"] or ""
+        try:
+            # load that user's Gmail creds
+            tok = supabase.table("gmail_tokens") \
+                .select("credentials") \
+                .eq("user_id", user_id) \
+                .single() \
+                .execute().data["credentials"]
 
-        # Load exactly one token row
-        tokens = supabase.table("gmail_tokens") \
-            .select("credentials") \
-            .eq("user_id", u) \
-            .limit(1) \
-            .execute().data
+            creds = Credentials(
+                token=tok["token"],
+                refresh_token=tok["refresh_token"],
+                token_uri=tok["token_uri"],
+                client_id=tok["client_id"],
+                client_secret=tok["client_secret"],
+                scopes=tok["scopes"]
+            )
 
-        if not tokens:
-            app.logger.error("No Gmail token for user %s, skipping %s", u, em_id)
-            continue
-
-        creds_data = tokens[0]["credentials"]
-        creds = Credentials(
-            token=creds_data["token"],
-            refresh_token=creds_data["refresh_token"],
-            token_uri=creds_data["token_uri"],
-            client_id=creds_data["client_id"],
-            client_secret=creds_data["client_secret"],
-            scopes=creds_data["scopes"]
-        )
-
-        # Refresh if needed
-        if not creds.valid:
-            try:
+            # refresh if needed
+            if creds.expired and creds.refresh_token:
                 creds.refresh(GoogleRequest())
-                supabase.table("gmail_tokens").upsert({
-                    "user_id": u,
-                    "credentials": {
-                        "token": creds.token,
-                        "refresh_token": creds.refresh_token,
-                        "token_uri": creds.token_uri,
-                        "client_id": creds.client_id,
-                        "client_secret": creds.client_secret,
-                        "scopes": creds.scopes
-                    }
-                }).execute()
-            except Exception as e:
-                app.logger.error("Failed to refresh creds for %s: %s", u, e)
-                continue
 
-        # Build raw message
-        m = MIMEText(body, "plain", "utf-8")
-        m["To"]      = to
-        m["Subject"] = f"Re: {subj}"
-        raw = base64.urlsafe_b64encode(m.as_bytes()).decode()
+            service = build("gmail", "v1", credentials=creds, cache_discovery=False)
 
-        # Send via Gmail REST API
-        resp = requests.post(
-            "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
-            headers={
-                "Authorization": f"Bearer {creds.token}",
-                "Content-Type":  "application/json"
-            },
-            json={"raw": raw},
-            timeout=30
-        )
+            # build a simple text/plain message
+            msg = MIMEText(body, "plain")
+            msg["to"] = to_addr
+            msg["from"] = "me"
+            msg["subject"] = "Re: your inquiry"
+            raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
-        if resp.status_code == 200:
-            sent_ids.append(em_id)
-            supabase.table("emails") \
-                .update({
-                    "status":  "sent",
-                    "sent_at": datetime.utcnow().isoformat()
-                }).eq("id", em_id).execute()
-        else:
-            app.logger.error("Send failed for %s: %s", em_id, resp.text)
+            send_resp = service.users().messages().send(
+                userId="me",
+                body={"raw": raw}
+            ).execute()
+
+            # mark sent
+            supabase.table("emails").update({
+                "status":  "sent",
+                "sent_at": datetime.utcnow().isoformat()
+            }).eq("id", em_id).execute()
+
+            sent.append(em_id)
+            app.logger.info("Sent %s → msgId %s", em_id, send_resp.get("id"))
+
+        except Exception as e:
+            failed.append(em_id)
+            app.logger.error("Send failed for %s: %s", em_id, e, exc_info=True)
 
     return jsonify({
-        "generated": len(pre_ids),
-        "sent":      len(sent_ids),
-        "sent_ids":  sent_ids
+        "processed_by_edge": email_ids,
+        "sent":  sent,
+        "failed": failed,
+        "summary": f"{len(sent)} sent, {len(failed)} failed"
     }), 200
+
 
 
 
