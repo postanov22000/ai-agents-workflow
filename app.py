@@ -247,64 +247,50 @@ def trigger_process():
         return "Unauthorized", 401
 
     # Step 1: Fetch emails with status "preprocessing"
-    try:
-        result = supabase.table("emails").select("id").eq("status", "preprocessing").execute()
-        email_ids = [row["id"] for row in result.data]
-    except Exception as e:
-        app.logger.error(f"Failed to query emails: {e}", exc_info=True)
-        return "Error querying emails", 500
+    result = supabase.table("emails").select("id").eq("status", "preprocessing").execute()
+    email_ids = [row["id"] for row in result.data]
 
     app.logger.info(f"Found {len(email_ids)} emails to process: {email_ids}")
 
     if not email_ids:
         return "No emails to process", 204
 
-    # Step 2: Update each email and trigger edge function
-    failed = []
-    succeeded = []
+    # Step 2: Update emails to "processing"
+    updated = supabase.table("emails") \
+        .update({"status": "processing"}) \
+        .in_("id", email_ids) \
+        .execute()
 
-    for email_id in email_ids:
-        try:
-            update_resp = supabase.table("emails") \
-                .update({"status": "processing"}) \
-                .eq("id", email_id) \
-                .execute()
+    if not updated.data:
+        app.logger.error("Failed to mark emails as processing.")
+        return "Update failed", 500
 
-            if not update_resp.data:
-                app.logger.warning(f"Failed to update status for {email_id}")
-                failed.append(email_id)
-                continue
+    # Step 3: Call edge function once with all email_ids
+    EDGE_FUNCTION_URL = "https://replyzeai.functions.supabase.co/generate-response"
+    try:
+        edge_resp = requests.post(
+            EDGE_FUNCTION_URL,
+            json={"email_ids": email_ids},
+            headers={"Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}"}
+        )
 
-            # Construct the Edge Function URL dynamically
-            SUPABASE_URL = os.environ["SUPABASE_URL"]
-            project_ref = SUPABASE_URL.split("https://")[1].split(".")[0]
-            edge_url = f"https://{project_ref}.functions.supabase.co/generate-response"
+        if edge_resp.status_code == 200:
+            data = edge_resp.json()
+            succeeded = [r["id"] for r in data.get("results", []) if r["status"] == "success"]
+            failed = [r["id"] for r in data.get("results", []) if r["status"] == "failed"]
+            return jsonify({
+                "processed": succeeded,
+                "failed": failed,
+                "summary": f"{len(succeeded)} succeeded, {len(failed)} failed"
+            }), 200
+        else:
+            app.logger.error(f"Edge function failed: {edge_resp.text}")
+            return "Edge function call failed", 500
 
-            headers = {
-                "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}",
-                "Content-Type": "application/json"
-            }
+    except Exception as e:
+        app.logger.error(f"Error calling edge function: {str(e)}", exc_info=True)
+        return "Internal server error", 500
 
-            payload = {"email_id": email_id}
-
-            edge_resp = requests.post(edge_url, json=payload, headers=headers)
-
-            if edge_resp.status_code == 200:
-                app.logger.info(f"Triggered edge function for {email_id}")
-                succeeded.append(email_id)
-            else:
-                app.logger.error(f"Edge function failed for {email_id}: {edge_resp.status_code} {edge_resp.text}")
-                failed.append(email_id)
-
-        except Exception as e:
-            app.logger.error(f"Exception while processing {email_id}: {str(e)}", exc_info=True)
-            failed.append(email_id)
-
-    return jsonify({
-        "processed": succeeded,
-        "failed": failed,
-        "summary": f"{len(succeeded)} succeeded, {len(failed)} failed"
-    }), 200
 
 
 if __name__ == "__main__":
