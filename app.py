@@ -287,14 +287,14 @@ def trigger_process():
     # 5) Send each ready_to_send via Gmail
     sent, failed = [], []
     ready = supabase.table("emails") \
-        .select("id,user_id,recipient_email,processed_content") \
+        .select("id,user_id,sender_email,processed_content") \
         .eq("status", "ready_to_send") \
         .execute().data
 
     for row in ready:
         em_id = row["id"]
         uid   = row["user_id"]
-        to    = row["recipient_email"]
+        to    = row["sender_email"]
         body  = row["processed_content"] or ""
 
         # fetch one token row
