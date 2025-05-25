@@ -240,72 +240,93 @@ def debug_env():
 
 
 
+from email.mime.text import MIMEText
+import base64
+
 @app.route("/process")
 def trigger_process():
-    # 1) Authenticate
     token = request.args.get("token")
-    PROCESS_TOKEN = os.environ.get("PROCESS_SECRET_TOKEN", "00000001001100100001101110111001")
-    if not token or token != PROCESS_TOKEN:
-         return "Unauthorized", 401
+    PROCESS_TOKEN = os.environ.get("PROCESS_TOKEN")
+    if token != PROCESS_TOKEN:
+        return "Unauthorized", 401
 
-    # 2) Fetch all "preprocessing" emails
-    try:
-        resp = supabase.table("emails") \
-            .select("id") \
-            .eq("status", "preprocessing") \
-            .execute()
-        email_ids = [r["id"] for r in resp.data]
-    except Exception as e:
-        app.logger.error(f"DB query failed: {e}", exc_info=True)
-        return "DB error", 500
-
-    app.logger.info(f"Found {len(email_ids)} emails to process: {email_ids}")
+    # 1) Grab all awaiting generation
+    pre = supabase.table("emails").select("id").eq("status", "preprocessing").execute()
+    email_ids = [r["id"] for r in pre.data]
     if not email_ids:
         return "No emails to process", 204
 
-    # 3) Mark them as "processing"
-    try:
-        update = supabase.table("emails") \
-            .update({"status": "processing"}) \
-            .in_("id", email_ids) \
-            .execute()
-        if not update.data:
-            raise RuntimeError("No rows updated")
-    except Exception as e:
-        app.logger.error(f"Failed to update to processing: {e}", exc_info=True)
-        return "Update failed", 500
+    # 2) Mark generating
+    supabase.table("emails").update({"status":"processing"}).in_("id", email_ids).execute()
 
-    # 4) Build your edge URL (you can also hard-code this in an env var)
-    #    Supabase Edge Functions live at: https://<project>.functions.supabase.co/<fn-name>
+    # 3) Fire your edge function
     project_ref = SUPABASE_URL.split("https://",1)[1].split(".",1)[0]
-    edge_url = f"https://{project_ref}.functions.supabase.co/generate-response"
+    edge_url    = f"https://{project_ref}.functions.supabase.co/generate-response"
+    resp = requests.post(edge_url,
+                         json={"email_ids": email_ids},
+                         headers={"Authorization":f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}"})
+    if resp.status_code!=200:
+        app.logger.error("Edge function failed: %s", resp.text)
+        return "Edge function error", 500
 
-    # 5) Call it
-    headers = {
-        "Content-Type":  "application/json",
-        "apikey":        os.environ["SUPABASE_SERVICE_ROLE_KEY"],
-        "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}"
-    }
-    try:
-        edge_resp = requests.post(edge_url, json={"email_ids": email_ids}, headers=headers, timeout=30)
-    except Exception as e:
-        app.logger.error(f"Edge invocation error: {e}", exc_info=True)
-        return "Edge invocation failed", 500
+    # 4) Load the results
+    results = resp.json().get("results", [])
+    # 5) For each that succeeded, send via Gmail
+    sent_ok = []
+    for r in results:
+        if r["status"] != "success":
+            continue
 
-    if edge_resp.status_code != 200:
-        app.logger.error(f"Edge function failed: {edge_resp.status_code} {edge_resp.text}")
-        return f"Edge error {edge_resp.status_code}", 500
+        em_id = r["id"]
+        # fetch the row
+        row = supabase.table("emails").select(
+            "recipient_email, processed_content, subject, user_id"
+        ).eq("id", em_id).single().execute().data
+        to_addr = row["recipient_email"]
+        body    = row["processed_content"]
+        subject = row["subject"]
+        user_id = row["user_id"]
 
-    # 6) Parse and return
-    body = edge_resp.json()
-    results = body.get("results", [])
-    succeeded = [r["id"] for r in results if r.get("status") == "success"]
-    failed    = [r["id"] for r in results if r.get("status") == "failed"]
+        # load that user's Gmail creds
+        tok = supabase.table("gmail_tokens").select("credentials").eq("user_id", user_id).single().execute().data
+        creds = tok["credentials"]
+        google_creds = Credentials(
+            token=creds["token"],
+            refresh_token=creds["refresh_token"],
+            token_uri=creds["token_uri"],
+            client_id=creds["client_id"],
+            client_secret=creds["client_secret"],
+            scopes=creds["scopes"]
+        )
+
+        # build and send MIME message
+        msg = MIMEText(body, "plain", "utf-8")
+        msg["To"]      = to_addr
+        msg["Subject"] = f"Re: {subject}"
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+
+        send_resp = requests.post(
+            "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+            headers={"Authorization":f"Bearer {google_creds.token}",
+                     "Content-Type":"application/json"},
+            json={"raw": raw}
+        )
+        if send_resp.status_code == 200:
+            sent_ok.append(em_id)
+            # mark sent
+            supabase.table("emails").update({
+                "status":"sent",
+                "sent_at": date.today().isoformat()
+            }).eq("id", em_id).execute()
+        else:
+            app.logger.error("Failed sending %s: %s", em_id, send_resp.text)
+
     return jsonify({
-        "processed": succeeded,
-        "failed":    failed,
-        "summary":   f"{len(succeeded)} succeeded, {len(failed)} failed"
+        "generated": len(results),
+        "sent":      len(sent_ok),
+        "sent_ids":  sent_ok
     }), 200
+
 
 
 
