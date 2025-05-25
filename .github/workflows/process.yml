@@ -12,7 +12,7 @@ jobs:
   poll-gmail:
     runs-on: ubuntu-latest
     outputs:
-      result: ${{ steps.poll-result.outputs.status }}
+      status: ${{ steps.poll-result.outputs.status }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -36,6 +36,7 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
           python poll_gmail.py
+          # always succeed this step, and publish a dummy output
           echo "status=success" >> $GITHUB_OUTPUT
 
   trigger-processing:
@@ -46,7 +47,8 @@ jobs:
         run: |
           RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "https://replyzeai.onrender.com/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
           echo "HTTP status: $RESPONSE"
-          if [ "$RESPONSE" -ne 200 ]; then
-            echo "Processing failed with status: $RESPONSE"
+          # accept both 200 (processed) and 204 (nothing to do) as success
+          if [[ "$RESPONSE" != "200" && "$RESPONSE" != "204" ]]; then
+            echo "::error::Processing failed with status: $RESPONSE"
             exit 1
           fi
