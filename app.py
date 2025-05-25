@@ -237,6 +237,7 @@ def debug_env():
 
 
 
+
 @app.route("/process")
 def trigger_process():
     token = request.args.get("token")
@@ -252,16 +253,15 @@ def trigger_process():
     if not email_ids:
         return "No emails to process", 204
 
-    # 🔄 Step 1: Update status to "processing" immediately
+    # 🔄 Step 1: Update status to "processing"
     update_resp = supabase.table("emails") \
         .update({"status": "processing"}) \
         .in_("id", email_ids) \
         .execute()
 
     if not update_resp.data:
-    app.logger.error(f"Failed to update email status. Response: {update_resp}")
-    return "Status update failed", 500
-
+        app.logger.error(f"Failed to update email status. Response: {update_resp}")
+        return "Status update failed", 500
 
     # 📤 Step 2: Call the Edge Function
     EDGE_FUNCTION_URL = "https://replyzeai.functions.supabase.co/generate-response"
@@ -276,10 +276,6 @@ def trigger_process():
         return f"Edge function failed: {response.text}", 500
 
     return "Processing triggered", 200
-
-
-
-
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
