@@ -247,15 +247,19 @@ def trigger_process():
         return "Unauthorized", 401
 
     # Step 1: Fetch emails with status "preprocessing"
-    result = supabase.table("emails").select("id").eq("status", "preprocessing").execute()
-    email_ids = [row["id"] for row in result.data]
+    try:
+        result = supabase.table("emails").select("id").eq("status", "preprocessing").execute()
+        email_ids = [row["id"] for row in result.data]
+    except Exception as e:
+        app.logger.error(f"Failed to query emails: {e}", exc_info=True)
+        return "Error querying emails", 500
 
     app.logger.info(f"Found {len(email_ids)} emails to process: {email_ids}")
 
     if not email_ids:
         return "No emails to process", 204
 
-    # Step 2: Update each email to "processing" and call Edge Function individually
+    # Step 2: Update each email and trigger edge function
     failed = []
     succeeded = []
 
@@ -271,19 +275,25 @@ def trigger_process():
                 failed.append(email_id)
                 continue
 
-            # Step 3: Call edge function for that email
-            EDGE_FUNCTION_URL = "https://replyzeai.functions.supabase.co/generate-response"
-            edge_resp = requests.post(
-                EDGE_FUNCTION_URL,
-                json={"email_id": email_id},
-                headers={"Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}"}
-            )
+            # Construct the Edge Function URL dynamically
+            SUPABASE_URL = os.environ["SUPABASE_URL"]
+            project_ref = SUPABASE_URL.split("https://")[1].split(".")[0]
+            edge_url = f"https://{project_ref}.functions.supabase.co/generate-response"
+
+            headers = {
+                "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}",
+                "Content-Type": "application/json"
+            }
+
+            payload = {"email_id": email_id}
+
+            edge_resp = requests.post(edge_url, json=payload, headers=headers)
 
             if edge_resp.status_code == 200:
                 app.logger.info(f"Triggered edge function for {email_id}")
                 succeeded.append(email_id)
             else:
-                app.logger.error(f"Edge function failed for {email_id}: {edge_resp.text}")
+                app.logger.error(f"Edge function failed for {email_id}: {edge_resp.status_code} {edge_resp.text}")
                 failed.append(email_id)
 
         except Exception as e:
@@ -295,7 +305,6 @@ def trigger_process():
         "failed": failed,
         "summary": f"{len(succeeded)} succeeded, {len(failed)} failed"
     }), 200
-
 
 
 if __name__ == "__main__":
