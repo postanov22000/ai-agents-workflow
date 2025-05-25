@@ -246,26 +246,31 @@ def debug_env():
 
 
 
+
 @app.route("/process")
 def trigger_process():
-    # 1) Authenticate
+    # 1) Auth
     token = request.args.get("token")
     PROCESS_TOKEN = os.environ.get("PROCESS_SECRET_TOKEN")
-    if not token or token != PROCESS_TOKEN:
+    if token != PROCESS_TOKEN:
         return "Unauthorized", 401
 
-    # 2) Fetch and mark preprocessing → processing
-    pre_q = supabase.table("emails").select("id").eq("status", "preprocessing").execute()
-    email_ids = [row["id"] for row in pre_q.data]
+    # 2) Grab all awaiting-preprocessing
+    pre = supabase.table("emails").select("id").eq("status", "preprocessing").execute()
+    email_ids = [r["id"] for r in pre.data]
     if not email_ids:
         return "No emails to process", 204
 
-    supabase.table("emails").update({"status": "processing"}).in_("id", email_ids).execute()
+    # 3) Mark them 'processing'
+    supabase.table("emails") \
+        .update({"status": "processing"}) \
+        .in_("id", email_ids) \
+        .execute()
 
-    # 3) Call your Edge Function once
+    # 4) Call Edge Function
     project_ref = SUPABASE_URL.split("https://",1)[1].split(".",1)[0]
     edge_url    = f"https://skxzfkudduqrubtgtodp.functions.supabase.co/generate-response"
-    edge_resp = requests.post(
+    resp = requests.post(
         edge_url,
         json={"email_ids": email_ids},
         headers={
@@ -275,58 +280,58 @@ def trigger_process():
         },
         timeout=60
     )
-    if edge_resp.status_code != 200:
-        app.logger.error("Edge function failed: %s", edge_resp.text)
-        return f"Edge function error: {edge_resp.status_code}", 500
+    if resp.status_code != 200:
+        app.logger.error("Edge function failed: %s", resp.text)
+        return f"Edge function error {resp.status_code}", 500
 
-    # 4) Send out every ready_to_send email
-    sent = []
-    failed = []
-
-    # fetch all ready_to_send rows
+    # 5) Send each ready_to_send via Gmail
+    sent, failed = [], []
     ready = supabase.table("emails") \
-        .select("id, user_id, recipient_email, processed_content") \
+        .select("id,user_id,recipient_email,processed_content") \
         .eq("status", "ready_to_send") \
         .execute().data
 
     for row in ready:
-        em_id  = row["id"]
-        user_id = row["user_id"]
-        to_addr = row["recipient_email"]
-        body    = row["processed_content"] or ""
+        em_id = row["id"]
+        uid   = row["user_id"]
+        to    = row["recipient_email"]
+        body  = row["processed_content"] or ""
+
+        # fetch one token row
+        tok_rows = supabase.table("gmail_tokens") \
+            .select("credentials") \
+            .eq("user_id", uid) \
+            .limit(1) \
+            .execute().data
+
+        if not tok_rows:
+            app.logger.warning("No Gmail token for user %s, skipping %s", uid, em_id)
+            failed.append(em_id)
+            continue
+
+        creds_data = tok_rows[0]["credentials"]
+        creds = Credentials(
+            token=creds_data["token"],
+            refresh_token=creds_data["refresh_token"],
+            token_uri=creds_data["token_uri"],
+            client_id=creds_data["client_id"],
+            client_secret=creds_data["client_secret"],
+            scopes=creds_data["scopes"]
+        )
+        # refresh if needed
+        if creds.expired and creds.refresh_token:
+            creds.refresh(GoogleRequest())
+
         try:
-            # load that user's Gmail creds
-            tok = supabase.table("gmail_tokens") \
-                .select("credentials") \
-                .eq("user_id", user_id) \
-                .single() \
-                .execute().data["credentials"]
-
-            creds = Credentials(
-                token=tok["token"],
-                refresh_token=tok["refresh_token"],
-                token_uri=tok["token_uri"],
-                client_id=tok["client_id"],
-                client_secret=tok["client_secret"],
-                scopes=tok["scopes"]
-            )
-
-            # refresh if needed
-            if creds.expired and creds.refresh_token:
-                creds.refresh(GoogleRequest())
-
-            service = build("gmail", "v1", credentials=creds, cache_discovery=False)
-
-            # build a simple text/plain message
+            svc = build("gmail", "v1", credentials=creds, cache_discovery=False)
             msg = MIMEText(body, "plain")
-            msg["to"] = to_addr
-            msg["from"] = "me"
-            msg["subject"] = "Re: your inquiry"
+            msg["to"]      = to
+            msg["from"]    = "me"
+            msg["subject"] = "Re: your email"
             raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
-            send_resp = service.users().messages().send(
-                userId="me",
-                body={"raw": raw}
+            send_res = svc.users().messages().send(
+                userId="me", body={"raw": raw}
             ).execute()
 
             # mark sent
@@ -336,17 +341,17 @@ def trigger_process():
             }).eq("id", em_id).execute()
 
             sent.append(em_id)
-            app.logger.info("Sent %s → msgId %s", em_id, send_resp.get("id"))
+            app.logger.info("Sent %s → %s", em_id, send_res.get("id"))
 
         except Exception as e:
             failed.append(em_id)
             app.logger.error("Send failed for %s: %s", em_id, e, exc_info=True)
 
     return jsonify({
-        "processed_by_edge": email_ids,
-        "sent":  sent,
-        "failed": failed,
-        "summary": f"{len(sent)} sent, {len(failed)} failed"
+        "processed":      email_ids,
+        "sent":           sent,
+        "failed":         failed,
+        "summary":        f"{len(sent)} sent, {len(failed)} failed"
     }), 200
 
 
