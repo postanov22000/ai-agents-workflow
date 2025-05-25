@@ -261,7 +261,7 @@ def trigger_process():
 
     # 3) Fire your edge function
     project_ref = SUPABASE_URL.split("https://",1)[1].split(".",1)[0]
-    edge_url    = f"https://{project_ref}.functions.supabase.co/generate-response"
+    edge_url    = f"https://skxzfkudduqrubtgtodp.functions.supabase.co/generate-response"
     resp = requests.post(edge_url,
                          json={"email_ids": email_ids},
                          headers={"Authorization":f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}"})
