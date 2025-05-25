@@ -3,11 +3,11 @@ import os
 import json
 import requests
 from google.auth.transport.requests import Request as GoogleRequest
-from datetime import datetime
+from datetime import date, datetime
 from email.mime.text import MIMEText
 from flask import abort
+from googleapiclient.discovery import build
 from flask import Flask, render_template, request, redirect, jsonify
-from datetime import date
 from supabase import create_client, Client
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
