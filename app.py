@@ -258,9 +258,10 @@ def trigger_process():
         .in_("id", email_ids) \
         .execute()
 
-    if update_resp.error:
-        app.logger.error(f"Failed to update email status: {update_resp.error}")
-        return f"Status update failed: {update_resp.error}", 500
+    if not update_resp.data:
+    app.logger.error(f"Failed to update email status. Response: {update_resp}")
+    return "Status update failed", 500
+
 
     # 📤 Step 2: Call the Edge Function
     EDGE_FUNCTION_URL = "https://replyzeai.functions.supabase.co/generate-response"
