@@ -344,6 +344,89 @@
             animation: typing 8s steps(40) infinite;
         }
 
+        /* where it was featured the right ward animations */
+
+.brand-logo {
+    filter: brightness(0) saturate(100%) invert(89%) sepia(21%) saturate(1153%) hue-rotate(102deg) brightness(105%) contrast(101%);
+    transition: all 0.3s ease;
+    height: 35px; /* Uniform height */
+}
+        
+        .featured-on {
+        padding: 4rem 0;
+        background: rgba(10, 25, 47, 0.8);
+        position: relative;
+        overflow: hidden;
+        border-top: 1px solid rgba(100, 255, 218, 0.1);
+        border-bottom: 1px solid rgba(100, 255, 218, 0.1);
+    }
+
+    .section-title {
+        text-align: center;
+        color: #64ffda;
+        font-size: 1.2rem;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        margin-bottom: 2rem;
+        opacity: 0;
+        transform: translateY(30px);
+        transition: all 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    .logos-scroll {
+        position: relative;
+        width: 100%;
+        overflow: hidden;
+    }
+
+    .logos-track {
+        display: flex;
+        width: 200%;
+        animation: scrollRight 40s linear infinite;
+    }
+
+    .logo-item {
+        padding: 0 4rem;
+        display: flex;
+        align-items: center;
+        font-weight: 700;
+        font-size: 1.5rem;
+        filter: drop-shadow(0 0 15px rgba(100, 255, 218, 0.2));
+        transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    .logo-item:hover {
+        transform: translateY(-5px) scale(1.1);
+        filter: drop-shadow(0 0 25px rgba(100, 255, 218, 0.4));
+    }
+
+    @keyframes scrollRight {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(-50%); }
+    }
+
+    /* Custom Logo Styling */
+    .ph-logo {
+        width: 180px;
+        height: 40px;
+    }
+
+    .tc-logo {
+        height: 30px;
+        filter: brightness(0) saturate(100%) invert(89%) sepia(21%) saturate(1153%) hue-rotate(102deg) brightness(105%) contrast(101%);
+    }
+
+    @media (max-width: 768px) {
+        .logos-track {
+            animation-duration: 25s;
+        }
+        
+        .logo-item {
+            padding: 0 2rem;
+            font-size: 1.2rem;
+        }
+    }
+
         /* 3D Feature Cards */
         .features-grid {
             display: grid;
@@ -473,6 +556,37 @@
             </div>
         </div>
     </section>
+
+<section class="featured-on" id="featured">
+    <h3 class="section-title" data-scroll>Trusted by Top CRE Innovators</h3>
+    
+    <div class="logos-scroll" data-scroll>
+        <div class="logos-track">
+            <!-- Duplicate logos for seamless loop -->
+            <div class="logo-item">
+                <svg class="ph-logo" style="fill:#64ffda">toppng.com-new-product-hunt-logo-411x317.png</svg>
+            </div>
+            <div class="logo-item">𝕏</div>
+            <div class="logo-item" style="color:#64ffda">Forbes Proptech</div>
+            <div class="logo-item">
+                <img src="toppng.com-new-product-hunt-logo-411x317.png" alt="product-hunt" class="ph-logo">
+            </div>
+            <div class="logo-item">CREtech®</div>
+            
+            <!-- Mirrored duplicates -->
+            <div class="logo-item">
+                <svg class="ph-logo" style="fill:#64ffda">  <!-- product hunt --> </svg>
+            </div>
+            <div class="logo-item">𝕏</div>
+            <div class="logo-item" style="color:#64ffda">Forbes Proptech</div>
+            <div class="logo-item">
+                <img src="pngfind.com-techcrunch-logo-png-5307471.png" alt="TechCrunch" class="tc-logo">
+            </div>
+            <div class="logo-item">CREtech®</div>
+        </div>
+    </div>
+</section>
+    
 <section class="highlights" id="highlights">
     <div class="highlights-grid">
         <div class="highlight-card" data-scroll>
