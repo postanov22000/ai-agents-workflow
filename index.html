@@ -167,6 +167,7 @@
     }
 
     /* Navigation button specific styles */
+        
     .nav .cta-button {
         background: transparent;
         border: 2px solid #64ffda;
@@ -199,7 +200,59 @@
             max-width: 300px;
         }
     }
+        .highlights-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 2rem;
+        padding: 4rem 8%;
+        position: relative;
+        z-index: 1;
+    }
+
+    .highlight-card {
+        background: rgba(16, 36, 64, 0.6);
+        border-radius: 15px;
+        padding: 2rem;
+        border: 1px solid rgba(100, 255, 218, 0.2);
+        transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+        transform-style: preserve-3d;
+    }
+
+    .highlight-card:hover {
+        transform: translateZ(20px) rotateX(-3deg) rotateY(3deg);
+        box-shadow: 0 15px 30px rgba(10, 25, 47, 0.4);
+        background: rgba(16, 36, 64, 0.8);
+    }
+
+    .highlight-icon {
+        font-size: 2.5rem;
+        margin-bottom: 1.5rem;
+        text-shadow: 0 0 25px rgba(100, 255, 218, 0.3);
+        transform: translateZ(30px);
+    }
+
+    .highlight-card h3 {
+        color: #64ffda;
+        margin-bottom: 1rem;
+        font-size: 1.4rem;
+    }
+
+    .highlight-card p {
+        color: #8892b0;
+        line-height: 1.6;
+        font-size: 1rem;
+    }
+
+    @media (max-width: 768px) {
+        .highlights-grid {
+            grid-template-columns: 1fr;
+            padding: 2rem 5%;
+        }
         
+        .highlight-card {
+            margin-bottom: 1.5rem;
+        }
+    }
         /* Hero Section */
         .hero {
             padding: 15rem 8% 8rem;
@@ -392,7 +445,7 @@
     <div id="particleCanvas"></div>
 
     <nav class="nav">
-        <div class="logo">Replyze<span style="color:#64ffda">CRE</span></div>
+        <div class="logo">ReplyzeAI<span style="color:#64ffda"> CRE</span></div>
         <div>
             <a href="features.html" class="cta-button">Solutions</a>
             <a href="temporary.html" class="cta-button">Pricing</a>
@@ -401,9 +454,9 @@
     </nav>
 
     <section class="hero">
-        <h1 data-scroll>Automate CRE Comms & <span style="color:#64ffda">Close Deals 3X Faster</span></h1>
-        <p data-scroll>Used by <strong>83 top brokerages</strong> to manage <strong>200+ monthly RFPs</strong></p>
-        <a href="temporary2.html" class="cta-button" data-scroll style="animation-delay: 0.7s">Claim Free Broker Access →</a>
+        <h1 data-scroll>Plug-and-Play AI for CRE<span style="color:#64ffda">Save 5 Hours/Week & Earn $100K+ in Commissions</span></h1>
+        <p data-scroll>Fully automated —<strong>no onboarding calls, no integrations.</strong> Generate your first AI-crafted reply <strong>in under 5 seconds.</strong></p>
+        <a href="temporary2.html" class="cta-button" data-scroll style="animation-delay: 0.7s">Start in 5 Seconds—Get 20 Free Replies →</a>
 
         <div class="demo-container" data-scroll>
             <div class="demo-box">
@@ -420,7 +473,25 @@
             </div>
         </div>
     </section>
-
+<section class="highlights" id="highlights">
+    <div class="highlights-grid">
+        <div class="highlight-card" data-scroll>
+            <div class="highlight-icon">📦</div>
+            <h3>Plug & Play</h3>
+            <p>CRM-integrated solution working within your existing Outlook/Gmail workflow</p>
+        </div>
+        <div class="highlight-card" data-scroll>
+            <div class="highlight-icon">⚙️</div>
+            <h3>Automated Tone Learning</h3>
+            <p>AI adapts to your communication style & market-specific terminology</p>
+        </div>
+        <div class="highlight-card" data-scroll>
+            <div class="highlight-icon">🚀</div>
+            <h3>5-Second Onboarding</h3>
+            <p>Start automating LOIs & tenant responses with just your CRM login</p>
+        </div>
+    </div>
+</section>
     <section class="features" id="features">
         <div class="features-grid">
             <div class="feature-card" data-scroll>
