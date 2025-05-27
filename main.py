@@ -47,7 +47,7 @@ def dashboard():
         .execute().data
 
     emails_sent_today = len([e for e in sent_today if e["sent_at"] and e["sent_at"].startswith(today)])
-    time_saved = emails_sent_today * 3
+    time_saved = emails_sent_today * 5.5
 
     # Gmail token status
     tokens = supabase.table("gmail_tokens").select("credentials").eq("user_id", user_id).execute().data
