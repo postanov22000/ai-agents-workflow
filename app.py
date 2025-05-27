@@ -54,7 +54,7 @@ def dashboard():
 
     sent = sent_resp.data
     emails_sent_today = len([e for e in sent if e["sent_at"] and e["sent_at"].startswith(today)])
-    time_saved = emails_sent_today * 3
+    time_saved = emails_sent_today * 5.5
 
     token_resp = supabase.table("gmail_tokens") \
         .select("credentials") \
