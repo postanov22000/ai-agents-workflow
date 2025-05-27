@@ -325,7 +325,7 @@ def trigger_process():
         try:
             svc = build("gmail", "v1", credentials=creds, cache_discovery=False)
             msg = MIMEText(body, "plain")
-            msg["to"]      = to
+            msg["to"]      = "to"
             msg["from"]    = "me"
             msg["subject"] = "Re: your email"
             raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
