@@ -354,9 +354,10 @@
     }
 
     .gallery-container {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 3rem;
+        display: flex;
+        gap: 2rem;
+        align-items: center;
+        justify-content: center;
         position: relative;
     }
 
@@ -369,6 +370,19 @@
         opacity: 0;
         transform: translateY(50px) scale(0.95);
         border: 2px solid #64ffda33;
+        box-shadow: 0 15px 35px rgba(10, 25, 47, 0.5);
+    }
+
+    /* First image - Portrait (545×807) */
+    .gallery-item:first-child {
+        width: 545px;
+        height: 807px;
+    }
+
+    /* Second image - Square (1:1) */
+    .gallery-item:last-child {
+        width: 545px;
+        height: 545px;
     }
 
     .gallery-item.active {
@@ -378,14 +392,14 @@
     }
 
     .gallery-item.next {
-        opacity: 0.4;
-        transform: translateY(30px) scale(0.9);
+        opacity: 0.7;
+        transform: translateY(30px) scale(0.95);
         z-index: 1;
     }
 
     .gallery-item img {
         width: 100%;
-        height: 500px;
+        height: 100%;
         object-fit: cover;
         border-radius: 13px;
     }
@@ -403,6 +417,30 @@
         color: #64ffda;
         font-size: 1.2rem;
         text-shadow: 0 2px 10px rgba(10, 25, 47, 0.8);
+        font-weight: 600;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 1200px) {
+        .gallery-container {
+            flex-direction: column;
+        }
+        
+        .gallery-item:first-child,
+        .gallery-item:last-child {
+            width: 100%;
+            max-width: 545px;
+            height: auto;
+            aspect-ratio: auto;
+        }
+        
+        .gallery-item:first-child {
+            aspect-ratio: 545/807;
+        }
+        
+        .gallery-item:last-child {
+            aspect-ratio: 1/1;
+        }
     }
 
         /* where it was featured the right ward animations */
@@ -871,22 +909,14 @@
 
         // the before and after 
     
+   // Enhanced scroll handling with touch support
     let currentImageIndex = 0;
     const galleryItems = document.querySelectorAll('.gallery-item');
-    let isScrolling = false;
-
-    // Debounce scroll function
-    function debounce(func, wait = 100) {
-        let timeout;
-        return function(...args) {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => {
-                func.apply(this, args);
-            }, wait);
-        };
-    }
+    let scrollTimeout;
 
     function updateGallery(direction) {
+        clearTimeout(scrollTimeout);
+        
         galleryItems[currentImageIndex].classList.remove('active');
         currentImageIndex = (direction === 'next') ? 
             (currentImageIndex + 1) % galleryItems.length : 
@@ -897,22 +927,30 @@
         
         const nextIndex = (currentImageIndex + 1) % galleryItems.length;
         galleryItems[nextIndex].classList.add('next');
+        
+        // Prevent rapid firing
+        scrollTimeout = setTimeout(() => {}, 800);
     }
 
-    const handleWheel = debounce((e) => {
-        if (isScrolling) return;
-        isScrolling = true;
-        
-        const direction = e.deltaY > 0 ? 'next' : 'prev';
-        updateGallery(direction);
-        
-        setTimeout(() => {
-            isScrolling = false;
-        }, 800);
-    });
+    // Wheel/touch handler
+    const handleScroll = (e) => {
+        if (e.type === 'wheel') {
+            const direction = e.deltaY > 0 ? 'next' : 'prev';
+            updateGallery(direction);
+        } else if (e.type === 'touchmove') {
+            const touch = e.touches[0];
+            const startY = touch.clientY;
+            
+            document.addEventListener('touchend', (endEvent) => {
+                const endY = endEvent.changedTouches[0].clientY;
+                const direction = startY > endY ? 'next' : 'prev';
+                updateGallery(direction);
+            }, { once: true });
+        }
+    };
 
-    window.addEventListener('wheel', handleWheel);
-
+    window.addEventListener('wheel', handleScroll, { passive: false });
+    window.addEventListener('touchmove', handleScroll, { passive: false });
         
         // Particle System
         function createParticles() {
