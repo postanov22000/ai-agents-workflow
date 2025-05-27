@@ -344,6 +344,67 @@
             animation: typing 8s steps(40) infinite;
         }
 
+        /* the before and after images */
+
+        .image-gallery {
+        padding: 4rem 8%;
+        position: relative;
+        min-height: 80vh;
+        overflow: hidden;
+    }
+
+    .gallery-container {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 3rem;
+        position: relative;
+    }
+
+    .gallery-item {
+        position: relative;
+        border-radius: 15px;
+        overflow: hidden;
+        transform-style: preserve-3d;
+        transition: all 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+        opacity: 0;
+        transform: translateY(50px) scale(0.95);
+        border: 2px solid #64ffda33;
+    }
+
+    .gallery-item.active {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        z-index: 2;
+    }
+
+    .gallery-item.next {
+        opacity: 0.4;
+        transform: translateY(30px) scale(0.9);
+        z-index: 1;
+    }
+
+    .gallery-item img {
+        width: 100%;
+        height: 500px;
+        object-fit: cover;
+        border-radius: 13px;
+    }
+
+    .image-overlay {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 2rem;
+        background: linear-gradient(transparent, #0a192fdd);
+    }
+
+    .image-caption {
+        color: #64ffda;
+        font-size: 1.2rem;
+        text-shadow: 0 2px 10px rgba(10, 25, 47, 0.8);
+    }
+
         /* where it was featured the right ward animations */
 
 .brand-logo {
@@ -652,6 +713,24 @@
         </div>
     </section>
 
+<section class="image-gallery" id="gallery">
+    <div class="gallery-container">
+        <div class="gallery-item active" data-scroll>
+            <img src="cre-dashboard-mockup.jpg" alt="AI Lease Negotiation Interface">
+            <div class="image-overlay">
+                <p class="image-caption">AI-Powered Lease Term Dashboard</p>
+            </div>
+        </div>
+        <div class="gallery-item next" data-scroll>
+            <img src="rfp-automation-visual.jpg" alt="Automated RFP Generation">
+            <div class="image-overlay">
+                <p class="image-caption">Automated Tenant Improvement Analysis</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+    
 <section class="featured-on" id="featured">
     <h3 class="section-title" data-scroll>Trusted by Top CRE Innovators</h3>
     
@@ -789,6 +868,52 @@
     </section>
 
     <script>
+
+        // the before and after 
+    
+    let currentImageIndex = 0;
+    const galleryItems = document.querySelectorAll('.gallery-item');
+    let isScrolling = false;
+
+    // Debounce scroll function
+    function debounce(func, wait = 100) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
+                func.apply(this, args);
+            }, wait);
+        };
+    }
+
+    function updateGallery(direction) {
+        galleryItems[currentImageIndex].classList.remove('active');
+        currentImageIndex = (direction === 'next') ? 
+            (currentImageIndex + 1) % galleryItems.length : 
+            (currentImageIndex - 1 + galleryItems.length) % galleryItems.length;
+        
+        galleryItems.forEach(item => item.classList.remove('next'));
+        galleryItems[currentImageIndex].classList.add('active');
+        
+        const nextIndex = (currentImageIndex + 1) % galleryItems.length;
+        galleryItems[nextIndex].classList.add('next');
+    }
+
+    const handleWheel = debounce((e) => {
+        if (isScrolling) return;
+        isScrolling = true;
+        
+        const direction = e.deltaY > 0 ? 'next' : 'prev';
+        updateGallery(direction);
+        
+        setTimeout(() => {
+            isScrolling = false;
+        }, 800);
+    });
+
+    window.addEventListener('wheel', handleWheel);
+
+        
         // Particle System
         function createParticles() {
             const container = document.getElementById('particleCanvas');
