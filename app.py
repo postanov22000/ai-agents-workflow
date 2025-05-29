@@ -267,22 +267,39 @@ def trigger_process():
         .in_("id", email_ids) \
         .execute()
 
-    # 4) Call Edge Function
-    project_ref = SUPABASE_URL.split("https://",1)[1].split(".",1)[0]
-    edge_url    = f"https://skxzfkudduqrubtgtodp.functions.supabase.co/generate-response"
-    resp = requests.post(
-        edge_url,
-        json={"email_ids": email_ids},
-        headers={
-            "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}",
-            "apikey":        os.environ['SUPABASE_SERVICE_ROLE_KEY'],
-            "Content-Type":  "application/json"
-        },
-        timeout=60
-    )
-    if resp.status_code != 200:
-        app.logger.error("Edge function failed: %s", resp.text)
-        return f"Edge function error {resp.status_code}", 500
+    # 4) Call Edge Function with Retry Logic (handles Hugging Face 429)
+    edge_url = "https://skxzfkudduqrubtgtodp.functions.supabase.co/generate-response"
+    MAX_RETRIES = 5
+    RETRY_BACKOFF_BASE = 2
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            resp = requests.post(
+                edge_url,
+                json={"email_ids": email_ids},
+                headers={
+                    "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}",
+                    "apikey":        os.environ['SUPABASE_SERVICE_ROLE_KEY'],
+                    "Content-Type":  "application/json"
+                },
+                timeout=60
+            )
+
+            if resp.status_code == 200:
+                break
+            elif resp.status_code == 429:
+                wait = RETRY_BACKOFF_BASE ** attempt
+                app.logger.warning(f"[Retry {attempt+1}/{MAX_RETRIES}] Hugging Face rate-limited. Waiting {wait}s...")
+                time.sleep(wait)
+            else:
+                app.logger.error("Edge function failed (%s): %s", resp.status_code, resp.text)
+                return f"Edge function error {resp.status_code}", 500
+        except requests.RequestException as e:
+            wait = RETRY_BACKOFF_BASE ** attempt
+            app.logger.error(f"[Retry {attempt+1}/{MAX_RETRIES}] Edge call exception: {e}. Retrying in {wait}s...")
+            time.sleep(wait)
+    else:
+        return "Exceeded max retries calling Edge function", 429
 
     # 5) Send each ready_to_send via Gmail
     sent, failed = [], []
@@ -318,7 +335,7 @@ def trigger_process():
             client_secret=creds_data["client_secret"],
             scopes=creds_data["scopes"]
         )
-        # refresh if needed
+
         if creds.expired and creds.refresh_token:
             creds.refresh(GoogleRequest())
 
@@ -334,7 +351,6 @@ def trigger_process():
                 userId="me", body={"raw": raw}
             ).execute()
 
-            # mark sent
             supabase.table("emails").update({
                 "status":  "sent",
                 "sent_at": datetime.utcnow().isoformat()
@@ -348,11 +364,12 @@ def trigger_process():
             app.logger.error("Send failed for %s: %s", em_id, e, exc_info=True)
 
     return jsonify({
-        "processed":      email_ids,
-        "sent":           sent,
-        "failed":         failed,
-        "summary":        f"{len(sent)} sent, {len(failed)} failed"
+        "processed": email_ids,
+        "sent":      sent,
+        "failed":    failed,
+        "summary":   f"{len(sent)} sent, {len(failed)} failed"
     }), 200
+
 
 
 
