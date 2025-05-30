@@ -72,6 +72,7 @@ def dashboard():
                 token_uri=creds_data["token_uri"],
                 client_id=creds_data["client_id"],
                 client_secret=creds_data["client_secret"],
+                user_email=creds_data["user_email"],
                 scopes=creds_data["scopes"]
             )
             if not creds.expired:
