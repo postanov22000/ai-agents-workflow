@@ -174,7 +174,7 @@ def oauth2callback():
         token_payload = {
             "user_id": user_id,
             "credentials": {
-                "user_email": credentials.user_email,
+                "user_email": email,
                 "token": credentials.token,
                 "refresh_token": credentials.refresh_token,
                 "token_uri": credentials.token_uri,
