@@ -141,59 +141,51 @@ def oauth2callback():
         flow.fetch_token(authorization_response=request.url)
         credentials = flow.credentials
 
+        # Verify ID token and extract user info
         id_info = id_token.verify_oauth2_token(
             credentials.id_token,
             grequests.Request(),
             os.environ["GOOGLE_CLIENT_ID"]
         )
-
         email = id_info.get("email")
         if not email:
             raise ValueError("No email found in Google response")
 
-        # --- NEW LOGIC: Use Supabase Auth to get/create user and its ID ---
-        # This handles both new sign-ups and existing users, providing the user_id
-        try:
-            # Try to sign in the user if they already exist in auth.users
-            auth_response = supabase.auth.sign_in_with_id_token({
-                "provider": "google",
-                "id_token": credentials.id_token
-            })
-            user_id = auth_response.user.id
-            print(f"DEBUG: Successfully signed in via ID token. User ID: {user_id}")
-        except Exception as auth_error:
-            # If sign_in_with_id_token fails (e.g., new user), sign them up
-            # Note: A random password is used as Google handles the primary authentication
-            auth_response = supabase.auth.sign_up({
+        # Look up auth.users UUID using service role key
+        auth_user_resp = requests.get(
+            f"{SUPABASE_URL}/auth/v1/users?email={email}",
+            headers={
+                "apikey": os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+                "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}"
+            }
+        )
+
+        if auth_user_resp.status_code != 200:
+            raise Exception("Failed to look up user UUID from Supabase auth.users")
+
+        auth_users = auth_user_resp.json().get("users", [])
+        if not auth_users:
+            raise Exception("No user found in auth.users for email")
+
+        uuid = auth_users[0]["id"]
+
+        # Check if profile exists
+        profile_resp = supabase.table("profiles").select("id").eq("id", uuid).execute()
+        profile_data = profile_resp.data
+
+        if not profile_data:
+            # Insert profile using UUID from auth.users
+            new_profile_resp = supabase.table("profiles").insert({
+                "id": uuid,
                 "email": email,
-                "password": os.urandom(16).hex(), # Random password
-                "options": {
-                    "data": {
-                        "full_name": id_info.get("name") or email.split('@')[0]
-                    }
-                }
-            })
-            if auth_response.user:
-                user_id = auth_response.user.id
-                print(f"DEBUG: Successfully signed up new user. User ID: {user_id}")
-            else:
-                # If even signup fails, raise the original auth error
-                raise RuntimeError("User creation failed in Supabase Auth.") from auth_error
-        # --- END NEW AUTH LOGIC ---
+                "full_name": id_info.get("name") or email.split('@')[0],
+                "ai_enabled": True
+            }).execute()
+            user_id = new_profile_resp.data[0]['id']
+        else:
+            user_id = profile_data[0]['id']
 
-        # Create/update profile with same UUID
-        # Use upsert with on_conflict to handle existing emails
-        profile_data = {
-            "id": user_id, # User ID from auth.users
-            "email": email,
-            "full_name": id_info.get("name") or email.split('@')[0],
-            "ai_enabled": True
-        }
-        print(f"DEBUG: Attempting to upsert profile_data: {profile_data}")
-        # Use upsert with on_conflict="email" to update if email already exists
-        supabase.table("profiles").upsert(profile_data, on_conflict="email").execute()
-
-        # Store token with same UUID
+        # Store Gmail credentials
         token_payload = {
             "user_id": user_id,
             "user_email": email,
@@ -206,7 +198,6 @@ def oauth2callback():
                 "scopes": credentials.scopes
             }
         }
-        # Assuming user_id is unique in gmail_tokens, if not, use on_conflict="user_id"
         supabase.table("gmail_tokens").upsert(token_payload).execute()
 
         return redirect(f"/dashboard?user_id={user_id}")
@@ -214,6 +205,7 @@ def oauth2callback():
     except Exception as e:
         app.logger.error(f"OAuth Error: {str(e)}", exc_info=True)
         return f"<h1>Authentication Failed</h1><p>{str(e)}</p>", 500
+
 
 @app.route("/disconnect_gmail", methods=["POST"])
 def disconnect_gmail():
