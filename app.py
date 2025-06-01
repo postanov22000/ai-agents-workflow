@@ -134,19 +134,40 @@ def oauth2callback():
         if not email:
             raise ValueError("No email found in Google response")
 
-        profile_resp = supabase.table("profiles").select("id").eq("email", email).execute()
-        profile_data = profile_resp.data
-
-        if not profile_data:
-            new_profile_resp = supabase.table("profiles").insert({
+        # Use Supabase Auth to get consistent UUID
+        try:
+            # Check if user exists
+            auth_response = supabase.auth.sign_in_with_id_token({
+                "provider": "google",
+                "id_token": credentials.id_token
+            })
+            user_id = auth_response.user.id
+        except Exception as auth_error:
+            # Create new user if doesn't exist
+            auth_response = supabase.auth.sign_up({
                 "email": email,
-                "full_name": id_info.get("name") or email.split('@')[0],
-                "ai_enabled": True
-            }).execute()
-            user_id = new_profile_resp.data[0]['id']
-        else:
-            user_id = profile_data[0]['id']
+                "password": os.urandom(16).hex(),  # Random password
+                "options": {
+                    "data": {
+                        "full_name": id_info.get("name") or email.split('@')[0]
+                    }
+                }
+            })
+            if auth_response.user:
+                user_id = auth_response.user.id
+            else:
+                raise RuntimeError("User creation failed") from auth_error
 
+        # Create/update profile with same UUID
+        profile_data = {
+            "id": user_id,
+            "email": email,
+            "full_name": id_info.get("name") or email.split('@')[0],
+            "ai_enabled": True
+        }
+        supabase.table("profiles").upsert(profile_data).execute()
+
+        # Store token with same UUID
         token_payload = {
             "user_id": user_id,
             "user_email": email,
