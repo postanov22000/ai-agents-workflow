@@ -141,52 +141,48 @@ def oauth2callback():
         flow.fetch_token(authorization_response=request.url)
         credentials = flow.credentials
 
-        # Verify ID token and extract user info
+        # Verify ID token to get email and user info
         id_info = id_token.verify_oauth2_token(
             credentials.id_token,
             grequests.Request(),
             os.environ["GOOGLE_CLIENT_ID"]
         )
         email = id_info.get("email")
+        full_name = id_info.get("name") or email.split('@')[0]
+
         if not email:
-            raise ValueError("No email found in Google response")
+            raise ValueError("No email found in Google ID token")
 
-        # Look up auth.users UUID using service role key
-        auth_user_resp = requests.get(
-            f"{SUPABASE_URL}/auth/v1/users?email={email}",
-            headers={
-                "apikey": os.environ["SUPABASE_SERVICE_ROLE_KEY"],
-                "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}"
-            }
-        )
+        # Use Supabase Admin API to find UUID by email
+        auth_url = f"{SUPABASE_URL}/auth/v1/admin/users"
+        headers = {
+            "apikey": os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+            "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}"
+        }
+        resp = requests.get(auth_url, headers=headers, params={"email": email})
 
-        if auth_user_resp.status_code != 200:
-            raise Exception("Failed to look up user UUID from Supabase auth.users")
+        if resp.status_code != 200:
+            raise Exception(f"Supabase Admin API error: {resp.status_code} {resp.text}")
 
-        auth_users = auth_user_resp.json().get("users", [])
-        if not auth_users:
-            raise Exception("No user found in auth.users for email")
+        users = resp.json().get("users", [])
+        matching_users = [u for u in users if u["email"] == email]
+        if not matching_users:
+            raise Exception("User not found in Supabase Auth")
 
-        uuid = auth_users[0]["id"]
+        user_id = matching_users[0]["id"]
 
-        # Check if profile exists
-        profile_resp = supabase.table("profiles").select("id").eq("id", uuid).execute()
-        profile_data = profile_resp.data
-
-        if not profile_data:
-            # Insert profile using UUID from auth.users
-            new_profile_resp = supabase.table("profiles").insert({
-                "id": uuid,
+        # Ensure profile exists
+        profile_resp = supabase.table("profiles").select("id").eq("id", user_id).execute()
+        if not profile_resp.data:
+            supabase.table("profiles").insert({
+                "id": user_id,
                 "email": email,
-                "full_name": id_info.get("name") or email.split('@')[0],
+                "full_name": full_name,
                 "ai_enabled": True
             }).execute()
-            user_id = new_profile_resp.data[0]['id']
-        else:
-            user_id = profile_data[0]['id']
 
-        # Store Gmail credentials
-        token_payload = {
+        # Store or update Gmail credentials
+        creds_payload = {
             "user_id": user_id,
             "user_email": email,
             "credentials": {
@@ -198,12 +194,12 @@ def oauth2callback():
                 "scopes": credentials.scopes
             }
         }
-        supabase.table("gmail_tokens").upsert(token_payload).execute()
+        supabase.table("gmail_tokens").upsert(creds_payload).execute()
 
         return redirect(f"/dashboard?user_id={user_id}")
 
     except Exception as e:
-        app.logger.error(f"OAuth Error: {str(e)}", exc_info=True)
+        app.logger.error(f"OAuth2 Callback Error: {str(e)}", exc_info=True)
         return f"<h1>Authentication Failed</h1><p>{str(e)}</p>", 500
 
 
