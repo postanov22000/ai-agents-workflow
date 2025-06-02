@@ -270,11 +270,6 @@ def trigger_process():
 
     # Helper to call an Edge Function endpoint with retry on 429
     def call_edge(endpoint_path: str, payload: dict) -> bool:
-        """
-        endpoint_path is e.g. "/detect-jargon" or "/generate-response", etc.
-        payload is the JSON body to post.
-        Returns True if status_code == 200, False otherwise.
-        """
         url = f"{EDGE_BASE_URL}{endpoint_path}"
         headers = {
             "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}",
@@ -288,7 +283,9 @@ def trigger_process():
                     return True
                 elif resp.status_code == 429:
                     wait = RETRY_BACKOFF_BASE ** attempt
-                    app.logger.warning(f"[{endpoint_path}] Rate‐limited, retry {attempt+1}/{MAX_RETRIES} after {wait}s")
+                    app.logger.warning(
+                        f"[{endpoint_path}] Rate‐limited, retry {attempt+1}/{MAX_RETRIES} after {wait}s"
+                    )
                     time.sleep(wait)
                     continue
                 else:
@@ -298,44 +295,35 @@ def trigger_process():
                 wait = RETRY_BACKOFF_BASE ** attempt
                 app.logger.error(f"[{endpoint_path}] Exception: {e}, retrying in {wait}s")
                 time.sleep(wait)
-        # If we exhaust all retries:
         app.logger.error(f"[{endpoint_path}] Exceeded max retries.")
         return False
 
 
-    # We’ll collect all IDs we ever hand off to an Edge Function
     all_processed = []
 
-
-    #### STAGE 1 → Detect Jargon
-    # Look for any email with status = "awaiting_jargon".  For each one:
-    #  a) Mark it → "processing" so that Edge Function sees it
-    #  b) Call POST /detect-jargon with { "text": original_content }
+    #### STAGE 1 → Detect Jargon (was “awaiting_jargon”, now “preprocessing”)
     jargon_rows = supabase.table("emails") \
         .select("id, original_content") \
-        .eq("status", "awaiting_jargon") \
+        .eq("status", "preprocessing") \
         .execute().data or []
 
     if jargon_rows:
         jargon_ids = [r["id"] for r in jargon_rows]
-        # Mark them processing
+        # Mark them “processing” so next stages see it
         supabase.table("emails") \
             .update({"status": "processing"}) \
             .in_("id", jargon_ids) \
             .execute()
 
-        # Call the Edge Function _one at a time_, since it expects { "text": ... }
-        # (If you want to batch, you could modify detect-jargon to accept email_ids instead of text,
-        # but the code you gave expects a single "text" per request.)
+        # Call the Edge Function for each email’s original_content
         for row in jargon_rows:
-            single_payload = { "text": row["original_content"] }
-            success = call_edge("/detect-jargon", single_payload)
+            payload = { "text": row["original_content"] }
+            success = call_edge("/detect-jargon", payload)
             if success:
                 all_processed.append(row["id"])
 
 
     #### STAGE 2 → Generate Response
-    # Next, any email whose status was (or became) "awaiting_response"
     resp_pending = supabase.table("emails") \
         .select("id") \
         .eq("status", "awaiting_response") \
@@ -343,22 +331,16 @@ def trigger_process():
 
     if resp_pending:
         resp_ids = [r["id"] for r in resp_pending]
-        # Mark them processing
         supabase.table("emails") \
             .update({"status": "processing"}) \
             .in_("id", resp_ids) \
             .execute()
 
-        # Now call the Edge Function in one batch:
-        payload = { "email_ids": resp_ids }
-        success = call_edge("/generate-response", payload)
-        if success:
+        if call_edge("/generate-response", {"email_ids": resp_ids}):
             all_processed.extend(resp_ids)
 
 
     #### STAGE 3 → Personalize Template
-    # Any email whose status is now "ready_to_personalize"
-    # We assume each row has columns: template_text (string), past_emails (JSON array), deal_data (JSON object).
     per_pending = supabase.table("emails") \
         .select("id, template_text, past_emails, deal_data") \
         .eq("status", "ready_to_personalize") \
@@ -366,30 +348,26 @@ def trigger_process():
 
     if per_pending:
         per_ids = [r["id"] for r in per_pending]
-        # Mark processing
         supabase.table("emails") \
             .update({"status": "processing"}) \
             .in_("id", per_ids) \
             .execute()
 
-        # We’ll send one request per email, because personalize-template expects those three fields
         for row in per_pending:
-            template_text = row.get("template_text") or ""
-            past_emails   = row.get("past_emails") or []
-            deal_data     = row.get("deal_data") or {}
+            template_text = row.get("template_text", "")
+            past_emails   = row.get("past_emails", []) or []
+            deal_data     = row.get("deal_data", {}) or {}
 
             payload = {
                 "template_text": template_text,
                 "past_emails":   past_emails,
                 "deal_data":     deal_data
             }
-            success = call_edge("/personalize-template", payload)
-            if success:
+            if call_edge("/personalize-template", payload):
                 all_processed.append(row["id"])
 
 
     #### STAGE 4 → Generate Proposal
-    # Any email whose status is "awaiting_proposal"
     prop_pending = supabase.table("emails") \
         .select("id, market, deal_type, cap_rate, tenant_type, style") \
         .eq("status", "awaiting_proposal") \
@@ -397,13 +375,11 @@ def trigger_process():
 
     if prop_pending:
         prop_ids = [r["id"] for r in prop_pending]
-        # Mark processing
         supabase.table("emails") \
             .update({"status": "processing"}) \
             .in_("id", prop_ids) \
             .execute()
 
-        # One request per email (since generate-proposal needs those five fields)
         for row in prop_pending:
             payload = {
                 "market":      row.get("market"),
@@ -412,13 +388,11 @@ def trigger_process():
                 "tenant_type": row.get("tenant_type"),
                 "style":       row.get("style")
             }
-            success = call_edge("/generate-proposal", payload)
-            if success:
+            if call_edge("/generate-proposal", payload):
                 all_processed.append(row["id"])
 
 
     #### STAGE 5 → Send Emails via Gmail
-    # Finally, anything that ended up with status = "ready_to_send" should be mailed
     sent, failed = [], []
     ready_list = supabase.table("emails") \
         .select("id, user_id, sender_email, processed_content") \
@@ -431,7 +405,6 @@ def trigger_process():
         to    = row["sender_email"]
         body  = row["processed_content"] or ""
 
-        # Fetch OAuth token for this user
         tok_rows = supabase.table("gmail_tokens") \
             .select("credentials") \
             .eq("user_id", uid) \
@@ -452,7 +425,6 @@ def trigger_process():
             client_secret=creds_data["client_secret"],
             scopes=creds_data["scopes"]
         )
-        # Refresh if needed
         if creds.expired and creds.refresh_token:
             creds.refresh(GoogleRequest())
 
@@ -464,27 +436,28 @@ def trigger_process():
             msg["subject"] = "Re: your email"
             raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
-            send_res = svc.users().messages().send(userId="me", body={"raw": raw}).execute()
+            send_res = svc.users().messages().send(
+                userId="me", body={"raw": raw}
+            ).execute()
 
-            # Mark as sent
             supabase.table("emails").update({
                 "status":  "sent",
                 "sent_at": datetime.utcnow().isoformat()
             }).eq("id", em_id).execute()
 
             sent.append(em_id)
-            app.logger.info(f"Sent email {em_id} → Gmail message ID {send_res.get('id')}")
+            app.logger.info(f"Sent email {em_id} → Gmail ID {send_res.get('id')}")
         except Exception as e:
             failed.append(em_id)
             app.logger.error(f"Send failed for {em_id}: {e}", exc_info=True)
 
-    # Return a summary
     return jsonify({
         "processed": all_processed,
         "sent":      sent,
         "failed":    failed,
-        "summary":   f"{len(sent)} sent, {len(failed)} failed, {len(all_processed)} processed through Edge Fn"
+        "summary":   f"{len(sent)} sent, {len(failed)} failed, {len(all_processed)} processed"
     }), 200
+
 
 
 if __name__ == "__main__":
