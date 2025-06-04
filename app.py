@@ -1,41 +1,97 @@
-import base64
 import os
-import json
+import time
+import base64
 import requests
-from google.auth.transport.requests import Request as GoogleRequest
+
 from datetime import date, datetime
 from email.mime.text import MIMEText
+
 from flask import Flask, render_template, request, redirect, jsonify
+
 from supabase import create_client, Client
+
 from google.oauth2.credentials import Credentials
-from google.auth.transport.requests import Request
+from google.auth.transport.requests import Request as GoogleRequest
+from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 import google.auth.transport.requests as grequests
-import time  # Used in /process retry logic
-from googleapiclient.discovery import build  # ← Fix: ensure build is imported
 
 app = Flask(__name__, template_folder="templates")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
 
+# --- Supabase setup ---
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_ANON_KEY = os.environ["SUPABASE_ANON_KEY"]
+SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
+# --- Constants ---
 DAILY_LIMIT = 20
 
+# Edge Function base URL (no trailing slash; points directly at "clever-service")
+# e.g. "https://<PROJECT_REF>.functions.supabase.co/functions/v1/clever-service"
+EDGE_BASE_URL = os.environ.get("EDGE_BASE_URL", "").rstrip("/")
+
+# Rates/retries for calling the Edge Function
+MAX_RETRIES = 5
+RETRY_BACKOFF_BASE = 2
+
+# ---------------------------------------------------------------------------
+# Helper to call the single clever-service endpoint with retry on 429
+def call_edge(payload: dict) -> bool:
+    """
+    POSTs `payload` (which must include an "action" field) to the
+    clever-service URL. Retries up to MAX_RETRIES times if status == 429.
+    Returns True if status_code == 200, False otherwise.
+    """
+    url = EDGE_BASE_URL
+    headers = {
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "apikey":        SUPABASE_SERVICE_ROLE_KEY,
+        "Content-Type":  "application/json"
+    }
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=60)
+            if resp.status_code == 200:
+                return True
+            elif resp.status_code == 429:
+                wait = RETRY_BACKOFF_BASE ** attempt
+                app.logger.warning(f"[clever-service] Rate‐limited, retry {attempt+1}/{MAX_RETRIES} after {wait}s")
+                time.sleep(wait)
+                continue
+            else:
+                app.logger.error(f"[clever-service] Failed ({resp.status_code}): {resp.text}")
+                return False
+        except requests.RequestException as e:
+            wait = RETRY_BACKOFF_BASE ** attempt
+            app.logger.error(f"[clever-service] Exception: {e}, retrying in {wait}s")
+            time.sleep(wait)
+    app.logger.error("[clever-service] Exceeded max retries.")
+    return False
+
+# ---------------------------------------------------------------------------
+# Routes for Flask application
 
 @app.route("/")
 def home():
-    # You must supply a user_id when redirecting to /dashboard
+    """
+    Redirect to /dashboard with a user_id parameter.
+    In production, replace this with a proper login or session check.
+    """
     user_id = request.args.get("user_id")
     if user_id:
         return redirect(f"/dashboard?user_id={user_id}")
     return "Missing user_id", 401
 
-
 @app.route("/dashboard")
 def dashboard():
+    """
+    Renders the dashboard for a given user_id.
+    Shows stats: emails sent today, time saved, and whether Gmail is connected.
+    """
     user_id = request.args.get("user_id")
     if not user_id:
         return "Missing user_id", 401
@@ -50,6 +106,7 @@ def dashboard():
     except Exception as e:
         return f"Profile query error: {str(e)}", 500
 
+    # Calculate emails sent today and time saved
     today = date.today().isoformat()
     sent_resp = supabase.table("emails") \
         .select("sent_at") \
@@ -57,12 +114,10 @@ def dashboard():
         .eq("status", "sent") \
         .execute()
     sent = sent_resp.data or []
-    emails_sent_today = len([
-        e for e in sent
-        if e["sent_at"] and e["sent_at"].startswith(today)
-    ])
+    emails_sent_today = len([e for e in sent if e["sent_at"] and e["sent_at"].startswith(today)])
     time_saved = emails_sent_today * 5.5
 
+    # Check Gmail token status to decide whether to show "Reconnect" button
     token_resp = supabase.table("gmail_tokens") \
         .select("credentials") \
         .eq("user_id", user_id) \
@@ -72,7 +127,7 @@ def dashboard():
     if token_data:
         try:
             creds_data = token_data[0]["credentials"]
-            # Fix: remove user_email from Credentials constructor
+            # Construct Credentials without passing user_email:
             creds = Credentials(
                 token=creds_data["token"],
                 refresh_token=creds_data["refresh_token"],
@@ -96,9 +151,11 @@ def dashboard():
         show_reconnect=show_reconnect
     )
 
-
 @app.route("/connect_gmail")
 def connect_gmail():
+    """
+    Initiates Gmail OAuth flow.
+    """
     flow = Flow.from_client_config(
         {
             "web": {
@@ -124,9 +181,13 @@ def connect_gmail():
     )
     return redirect(authorization_url)
 
-
 @app.route("/oauth2callback")
 def oauth2callback():
+    """
+    Handles OAuth2 callback from Google.
+    Verifies ID token, finds (or creates) Supabase profile,
+    then upserts Gmail credentials in supabase.gmail_tokens.
+    """
     try:
         flow = Flow.from_client_config(
             {
@@ -149,7 +210,7 @@ def oauth2callback():
         flow.fetch_token(authorization_response=request.url)
         credentials = flow.credentials
 
-        # Verify ID token to get email and user info
+        # Verify ID token to get the user’s email and name
         id_info = id_token.verify_oauth2_token(
             credentials.id_token,
             grequests.Request(),
@@ -161,11 +222,11 @@ def oauth2callback():
         if not email:
             raise ValueError("No email found in Google ID token")
 
-        # Use Supabase Admin API to find UUID by email
+        # Look up the Supabase Auth user by email via Admin API
         auth_url = f"{SUPABASE_URL}/auth/v1/admin/users"
         headers = {
-            "apikey": os.environ["SUPABASE_SERVICE_ROLE_KEY"],
-            "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}"
+            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"
         }
         resp = requests.get(auth_url, headers=headers, params={"email": email})
         if resp.status_code != 200:
@@ -174,11 +235,12 @@ def oauth2callback():
         users = resp.json().get("users", [])
         matching_users = [u for u in users if u["email"] == email]
         if not matching_users:
+            # If user not found in Supabase Auth, you may want to sign them up here.
             raise Exception("User not found in Supabase Auth")
 
         user_id = matching_users[0]["id"]
 
-        # Ensure profile exists
+        # Ensure a profile exists in the "profiles" table
         profile_resp = supabase.table("profiles").select("id").eq("id", user_id).execute()
         if not profile_resp.data:
             supabase.table("profiles").insert({
@@ -188,7 +250,7 @@ def oauth2callback():
                 "ai_enabled": True
             }).execute()
 
-        # Store or update Gmail credentials
+        # Store or update Gmail credentials in supabase.gmail_tokens
         creds_payload = {
             "user_id": user_id,
             "user_email": email,
@@ -209,21 +271,27 @@ def oauth2callback():
         app.logger.error(f"OAuth2 Callback Error: {str(e)}", exc_info=True)
         return f"<h1>Authentication Failed</h1><p>{str(e)}</p>", 500
 
-
 @app.route("/disconnect_gmail", methods=["POST"])
 def disconnect_gmail():
+    """
+    Deletes the Gmail token for a user, effectively disconnecting them.
+    """
     user_id = request.form.get("user_id")
     supabase.table("gmail_tokens").delete().eq("user_id", user_id).execute()
     return redirect(f"/dashboard?user_id={user_id}")
 
-
 @app.route("/admin")
 def admin():
+    """
+    Renders an admin dashboard (protected in production).
+    """
     return render_template("admin.html")
-
 
 @app.route("/api/admin/users")
 def api_admin_users():
+    """
+    Returns JSON listing all profiles, their daily email count, and AI‐enabled status.
+    """
     users = supabase.table("profiles").select("*").execute().data or []
     today = date.today().isoformat()
     results = []
@@ -233,10 +301,7 @@ def api_admin_users():
             .eq("user_id", user["id"]) \
             .eq("status", "sent") \
             .execute().data or []
-        count = len([
-            e for e in sent
-            if e["sent_at"] and e["sent_at"].startswith(today)
-        ])
+        count = len([e for e in sent if e["sent_at"] and e["sent_at"].startswith(today)])
         results.append({
             "id": user["id"],
             "name": user["full_name"],
@@ -246,128 +311,115 @@ def api_admin_users():
         })
     return jsonify(results)
 
-
 @app.route("/api/admin/toggle_status", methods=["POST"])
 def api_toggle_status():
+    """
+    Toggles AI‐enabled status for a given user_id.
+    """
     user_id = request.json.get("user_id")
     enable = request.json.get("enable", True)
     supabase.table("profiles").update({"ai_enabled": enable}).eq("id", user_id).execute()
     return jsonify({"success": True})
 
-
 @app.route("/debug_env")
 def debug_env():
+    """
+    Returns key environment variables for debugging purposes.
+    """
     return {
         "GOOGLE_CLIENT_ID": os.environ.get("GOOGLE_CLIENT_ID"),
-        "REDIRECT_URI": os.environ.get("REDIRECT_URI")
+        "REDIRECT_URI": os.environ.get("REDIRECT_URI"),
+        "EDGE_BASE_URL": os.environ.get("EDGE_BASE_URL")
     }
-
 
 @app.route("/process")
 def trigger_process():
+    """
+    Main processing pipeline endpoint. Call this with:
+      GET /process?token=<PROCESS_SECRET_TOKEN>
+    The pipeline flows through:
+      1) Detect Jargon (preprocessing → processing → awaiting_response)
+      2) Generate Response (awaiting_response → processing → ready_to_send)
+      3) Personalize Template (ready_to_personalize → processing → awaiting_proposal)
+      4) Generate Proposal (awaiting_proposal → processing → ready_to_send)
+      5) Send via Gmail    (ready_to_send → sent)
+    """
     # 1) Token‐based auth
     token = request.args.get("token")
     PROCESS_TOKEN = os.environ.get("PROCESS_SECRET_TOKEN")
     if token != PROCESS_TOKEN:
         return "Unauthorized", 401
 
-    # Base URL of your deployed Deno/Edge Function (v1 root + clever-service)
-    EDGE_BASE_URL = os.environ.get("EDGE_BASE_URL", "").rstrip("/")
-    # Example: "https://skxzfkudduqrubtgtodp.supabase.co/functions/v1/clever-service"
-
-    MAX_RETRIES = 5
-    RETRY_BACKOFF_BASE = 2
-
-    # Helper to call the single “clever-service” endpoint with retry on 429
-    def call_edge(payload: dict) -> bool:
-        url = EDGE_BASE_URL
-        headers = {
-            "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_ROLE_KEY']}",
-            "apikey":        os.environ['SUPABASE_SERVICE_ROLE_KEY'],
-            "Content-Type":  "application/json"
-        }
-        for attempt in range(MAX_RETRIES):
-            try:
-                resp = requests.post(url, json=payload, headers=headers, timeout=60)
-                if resp.status_code == 200:
-                    return True
-                elif resp.status_code == 429:
-                    wait = RETRY_BACKOFF_BASE ** attempt
-                    app.logger.warning(f"[clever-service] Rate‐limited, retry {attempt+1}/{MAX_RETRIES} after {wait}s")
-                    time.sleep(wait)
-                    continue
-                else:
-                    app.logger.error(f"[clever-service] Failed ({resp.status_code}): {resp.text}")
-                    return False
-            except requests.RequestException as e:
-                wait = RETRY_BACKOFF_BASE ** attempt
-                app.logger.error(f"[clever-service] Exception: {e}, retrying in {wait}s")
-                time.sleep(wait)
-        app.logger.error("[clever-service] Exceeded max retries.")
-        return False
-
     all_processed = []
 
     #### STAGE 1 → Detect Jargon (preprocessing → processing → awaiting_response)
-    jargon_rows = supabase.table("emails") \
-        .select("id, original_content") \
-        .eq("status", "preprocessing") \
-        .execute().data or []
-
+    jargon_rows = (
+        supabase.table("emails")
+        .select("id, original_content")
+        .eq("status", "preprocessing")
+        .execute()
+        .data
+        or []
+    )
     if jargon_rows:
         jargon_ids = [r["id"] for r in jargon_rows]
-        # Mark them “processing”
-        supabase.table("emails") \
-            .update({"status": "processing"}) \
-            .in_("id", jargon_ids) \
-            .execute()
+        # Mark them “processing” immediately so no duplicate work
+        supabase.table("emails").update({"status": "processing"}).in_("id", jargon_ids).execute()
 
         for row in jargon_rows:
             payload = {
                 "action": "detect-jargon",
-                "text":   row["original_content"]
+                "text": row["original_content"]
             }
             success = call_edge(payload)
             if success:
-                # Now update status → awaiting_response
-                supabase.table("emails") \
-                    .update({"status": "awaiting_response"}) \
-                    .eq("id", row["id"]) \
-                    .execute()
+                supabase.table("emails").update({"status": "awaiting_response"}).eq("id", row["id"]).execute()
                 all_processed.append(row["id"])
+            else:
+                supabase.table("emails").update({
+                    "status": "error",
+                    "error_message": "detect-jargon failed"
+                }).eq("id", row["id"]).execute()
 
     #### STAGE 2 → Generate Response (awaiting_response → processing → ready_to_send)
-    resp_pending = supabase.table("emails") \
-        .select("id") \
-        .eq("status", "awaiting_response") \
-        .execute().data or []
-
+    resp_pending = (
+        supabase.table("emails")
+        .select("id")
+        .eq("status", "awaiting_response")
+        .execute()
+        .data
+        or []
+    )
     if resp_pending:
         resp_ids = [r["id"] for r in resp_pending]
-        supabase.table("emails") \
-            .update({"status": "processing"}) \
-            .in_("id", resp_ids) \
-            .execute()
+        supabase.table("emails").update({"status": "processing"}).in_("id", resp_ids).execute()
 
         payload = {
             "action":    "generate-response",
             "email_ids": resp_ids
         }
         if call_edge(payload):
-            all_processed.extend(resp_ids)
+            for eid in resp_ids:
+                supabase.table("emails").update({"status": "ready_to_send"}).eq("id", eid).execute()
+                all_processed.append(eid)
+        else:
+            supabase.table("emails").update({
+                "status": "error",
+                "error_message": "generate-response failed"
+            }).in_("id", resp_ids).execute()
 
     #### STAGE 3 → Personalize Template (ready_to_personalize → processing → awaiting_proposal)
-    per_pending = supabase.table("emails") \
-        .select("id, template_text, past_emails, deal_data") \
-        .eq("status", "ready_to_personalize") \
-        .execute().data or []
-
+    per_pending = (
+        supabase.table("emails")
+        .select("id, template_text, past_emails, deal_data")
+        .eq("status", "ready_to_personalize")
+        .execute()
+        .data
+        or []
+    )
     if per_pending:
         per_ids = [r["id"] for r in per_pending]
-        supabase.table("emails") \
-            .update({"status": "processing"}) \
-            .in_("id", per_ids) \
-            .execute()
+        supabase.table("emails").update({"status": "processing"}).in_("id", per_ids).execute()
 
         for row in per_pending:
             payload = {
@@ -378,24 +430,26 @@ def trigger_process():
             }
             success = call_edge(payload)
             if success:
-                supabase.table("emails") \
-                    .update({"status": "awaiting_proposal"}) \
-                    .eq("id", row["id"]) \
-                    .execute()
+                supabase.table("emails").update({"status": "awaiting_proposal"}).eq("id", row["id"]).execute()
                 all_processed.append(row["id"])
+            else:
+                supabase.table("emails").update({
+                    "status": "error",
+                    "error_message": "personalize-template failed"
+                }).eq("id", row["id"]).execute()
 
     #### STAGE 4 → Generate Proposal (awaiting_proposal → processing → ready_to_send)
-    prop_pending = supabase.table("emails") \
-        .select("id, market, deal_type, cap_rate, tenant_type, style") \
-        .eq("status", "awaiting_proposal") \
-        .execute().data or []
-
+    prop_pending = (
+        supabase.table("emails")
+        .select("id, market, deal_type, cap_rate, tenant_type, style")
+        .eq("status", "awaiting_proposal")
+        .execute()
+        .data
+        or []
+    )
     if prop_pending:
         prop_ids = [r["id"] for r in prop_pending]
-        supabase.table("emails") \
-            .update({"status": "processing"}) \
-            .in_("id", prop_ids) \
-            .execute()
+        supabase.table("emails").update({"status": "processing"}).in_("id", prop_ids).execute()
 
         for row in prop_pending:
             payload = {
@@ -408,35 +462,47 @@ def trigger_process():
             }
             success = call_edge(payload)
             if success:
-                supabase.table("emails") \
-                    .update({"status": "ready_to_send"}) \
-                    .eq("id", row["id"]) \
-                    .execute()
+                supabase.table("emails").update({"status": "ready_to_send"}).eq("id", row["id"]).execute()
                 all_processed.append(row["id"])
+            else:
+                supabase.table("emails").update({
+                    "status": "error",
+                    "error_message": "generate-proposal failed"
+                }).eq("id", row["id"]).execute()
 
     #### STAGE 5 → Send Emails via Gmail (ready_to_send → sent)
     sent, failed = [], []
-    ready_list = supabase.table("emails") \
-        .select("id, user_id, sender_email, processed_content") \
-        .eq("status", "ready_to_send") \
-        .execute().data or []
-
+    ready_list = (
+        supabase.table("emails")
+        .select("id, user_id, sender_email, processed_content")
+        .eq("status", "ready_to_send")
+        .execute()
+        .data
+        or []
+    )
     for row in ready_list:
         em_id = row["id"]
         uid = row["user_id"]
         to = row["sender_email"]
         body = row["processed_content"] or ""
 
-        # Fetch Gmail OAuth token
-        tok_rows = supabase.table("gmail_tokens") \
-            .select("credentials") \
-            .eq("user_id", uid) \
-            .limit(1) \
-            .execute().data or []
-
+        # Fetch Gmail OAuth token for this user
+        tok_rows = (
+            supabase.table("gmail_tokens")
+            .select("credentials")
+            .eq("user_id", uid)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
         if not tok_rows:
             app.logger.warning(f"No Gmail token for user {uid}, skipping email {em_id}")
             failed.append(em_id)
+            supabase.table("emails").update({
+                "status": "error",
+                "error_message": "No Gmail token"
+            }).eq("id", em_id).execute()
             continue
 
         creds_data = tok_rows[0]["credentials"]
@@ -452,17 +518,18 @@ def trigger_process():
             creds.refresh(GoogleRequest())
 
         try:
-            svc = build("gmail", "v1", credentials=creds, cache_discovery=False)
+            service = build("gmail", "v1", credentials=creds, cache_discovery=False)
             msg = MIMEText(body, "plain")
             msg["to"] = to
             msg["from"] = "me"
             msg["subject"] = "Re: your email"
             raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
-            send_res = svc.users().messages().send(
+            send_res = service.users().messages().send(
                 userId="me", body={"raw": raw}
             ).execute()
 
+            # Update status → "sent"
             supabase.table("emails").update({
                 "status": "sent",
                 "sent_at": datetime.utcnow().isoformat()
@@ -473,6 +540,10 @@ def trigger_process():
         except Exception as e:
             failed.append(em_id)
             app.logger.error(f"Send failed for {em_id}: {e}", exc_info=True)
+            supabase.table("emails").update({
+                "status": "error",
+                "error_message": str(e)
+            }).eq("id", em_id).execute()
 
     return jsonify({
         "processed": all_processed,
@@ -481,6 +552,6 @@ def trigger_process():
         "summary":   f"{len(sent)} sent, {len(failed)} failed, {len(all_processed)} processed"
     }), 200
 
-
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
