@@ -26,26 +26,22 @@ SUPABASE_ANON_KEY = os.environ["SUPABASE_ANON_KEY"]
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-# --- Constants ---
-DAILY_LIMIT = 20
-
-# Edge Function base URL (no trailing slash; points directly at "clever-service")
+# Edge Function base URL *without* trailing slash or endpoint
 # e.g. "https://<PROJECT_REF>.functions.supabase.co/functions/v1/clever-service"
 EDGE_BASE_URL = os.environ.get("EDGE_BASE_URL", "").rstrip("/")
 
-# Rates/retries for calling the Edge Function
+# Retry configuration for calling the Edge Function
 MAX_RETRIES = 5
 RETRY_BACKOFF_BASE = 2
 
 # ---------------------------------------------------------------------------
-# Helper to call the single clever-service endpoint with retry on 429
-def call_edge(payload: dict) -> bool:
+def call_edge(endpoint_path: str, payload: dict) -> bool:
     """
-    POSTs `payload` (which must include an "action" field) to the
-    clever-service URL. Retries up to MAX_RETRIES times if status == 429.
-    Returns True if status_code == 200, False otherwise.
+    POSTs `payload` to the clever-service endpoint at:
+      EDGE_BASE_URL + endpoint_path
+    Retries up to MAX_RETRIES times on 429. Returns True if status_code == 200.
     """
-    url = EDGE_BASE_URL
+    url = f"{EDGE_BASE_URL}{endpoint_path}"
     headers = {
         "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
         "apikey":        SUPABASE_SERVICE_ROLE_KEY,
@@ -59,27 +55,24 @@ def call_edge(payload: dict) -> bool:
                 return True
             elif resp.status_code == 429:
                 wait = RETRY_BACKOFF_BASE ** attempt
-                app.logger.warning(f"[clever-service] Rate‐limited, retry {attempt+1}/{MAX_RETRIES} after {wait}s")
+                app.logger.warning(f"[{endpoint_path}] Rate‐limited, retry {attempt+1}/{MAX_RETRIES} after {wait}s")
                 time.sleep(wait)
                 continue
             else:
-                app.logger.error(f"[clever-service] Failed ({resp.status_code}): {resp.text}")
+                app.logger.error(f"[{endpoint_path}] Failed ({resp.status_code}): {resp.text}")
                 return False
         except requests.RequestException as e:
             wait = RETRY_BACKOFF_BASE ** attempt
-            app.logger.error(f"[clever-service] Exception: {e}, retrying in {wait}s")
+            app.logger.error(f"[{endpoint_path}] Exception: {e}, retrying in {wait}s")
             time.sleep(wait)
-    app.logger.error("[clever-service] Exceeded max retries.")
+    app.logger.error(f"[{endpoint_path}] Exceeded max retries.")
     return False
 
 # ---------------------------------------------------------------------------
-# Routes for Flask application
-
 @app.route("/")
 def home():
     """
     Redirect to /dashboard with a user_id parameter.
-    In production, replace this with a proper login or session check.
     """
     user_id = request.args.get("user_id")
     if user_id:
@@ -90,7 +83,6 @@ def home():
 def dashboard():
     """
     Renders the dashboard for a given user_id.
-    Shows stats: emails sent today, time saved, and whether Gmail is connected.
     """
     user_id = request.args.get("user_id")
     if not user_id:
@@ -127,7 +119,6 @@ def dashboard():
     if token_data:
         try:
             creds_data = token_data[0]["credentials"]
-            # Construct Credentials without passing user_email:
             creds = Credentials(
                 token=creds_data["token"],
                 refresh_token=creds_data["refresh_token"],
@@ -184,9 +175,10 @@ def connect_gmail():
 @app.route("/oauth2callback")
 def oauth2callback():
     """
-    Handles OAuth2 callback from Google.
-    Verifies ID token, finds (or creates) Supabase profile,
-    then upserts Gmail credentials in supabase.gmail_tokens.
+    Handles OAuth2 callback from Google:
+    - Verifies ID token
+    - Finds or creates Supabase profile
+    - Upserts Gmail credentials in supabase.gmail_tokens
     """
     try:
         flow = Flow.from_client_config(
@@ -235,7 +227,6 @@ def oauth2callback():
         users = resp.json().get("users", [])
         matching_users = [u for u in users if u["email"] == email]
         if not matching_users:
-            # If user not found in Supabase Auth, you may want to sign them up here.
             raise Exception("User not found in Supabase Auth")
 
         user_id = matching_users[0]["id"]
@@ -274,7 +265,7 @@ def oauth2callback():
 @app.route("/disconnect_gmail", methods=["POST"])
 def disconnect_gmail():
     """
-    Deletes the Gmail token for a user, effectively disconnecting them.
+    Deletes the Gmail token for a user.
     """
     user_id = request.form.get("user_id")
     supabase.table("gmail_tokens").delete().eq("user_id", user_id).execute()
@@ -283,14 +274,14 @@ def disconnect_gmail():
 @app.route("/admin")
 def admin():
     """
-    Renders an admin dashboard (protected in production).
+    Renders an admin dashboard (should be protected in production).
     """
     return render_template("admin.html")
 
 @app.route("/api/admin/users")
 def api_admin_users():
     """
-    Returns JSON listing all profiles, their daily email count, and AI‐enabled status.
+    Returns JSON of all profiles and their daily email count.
     """
     users = supabase.table("profiles").select("*").execute().data or []
     today = date.today().isoformat()
@@ -314,7 +305,7 @@ def api_admin_users():
 @app.route("/api/admin/toggle_status", methods=["POST"])
 def api_toggle_status():
     """
-    Toggles AI‐enabled status for a given user_id.
+    Toggles AI-enabled status for a given user_id.
     """
     user_id = request.json.get("user_id")
     enable = request.json.get("enable", True)
@@ -324,7 +315,7 @@ def api_toggle_status():
 @app.route("/debug_env")
 def debug_env():
     """
-    Returns key environment variables for debugging purposes.
+    Returns key environment variables for debugging.
     """
     return {
         "GOOGLE_CLIENT_ID": os.environ.get("GOOGLE_CLIENT_ID"),
@@ -337,14 +328,14 @@ def trigger_process():
     """
     Main processing pipeline endpoint. Call this with:
       GET /process?token=<PROCESS_SECRET_TOKEN>
-    The pipeline flows through:
+    Pipeline steps:
       1) Detect Jargon (preprocessing → processing → awaiting_response)
       2) Generate Response (awaiting_response → processing → ready_to_send)
       3) Personalize Template (ready_to_personalize → processing → awaiting_proposal)
       4) Generate Proposal (awaiting_proposal → processing → ready_to_send)
-      5) Send via Gmail    (ready_to_send → sent)
+      5) Send via Gmail (ready_to_send → sent)
     """
-    # 1) Token‐based auth
+    # 1) Token-based auth
     token = request.args.get("token")
     PROCESS_TOKEN = os.environ.get("PROCESS_SECRET_TOKEN")
     if token != PROCESS_TOKEN:
@@ -363,15 +354,12 @@ def trigger_process():
     )
     if jargon_rows:
         jargon_ids = [r["id"] for r in jargon_rows]
-        # Mark them “processing” immediately so no duplicate work
+        # Mark them as "processing" so they won't be re-picked
         supabase.table("emails").update({"status": "processing"}).in_("id", jargon_ids).execute()
 
         for row in jargon_rows:
-            payload = {
-                "action": "detect-jargon",
-                "text": row["original_content"]
-            }
-            success = call_edge(payload)
+            payload = {"text": row["original_content"]}
+            success = call_edge("/detect-jargon", payload)
             if success:
                 supabase.table("emails").update({"status": "awaiting_response"}).eq("id", row["id"]).execute()
                 all_processed.append(row["id"])
@@ -394,11 +382,8 @@ def trigger_process():
         resp_ids = [r["id"] for r in resp_pending]
         supabase.table("emails").update({"status": "processing"}).in_("id", resp_ids).execute()
 
-        payload = {
-            "action":    "generate-response",
-            "email_ids": resp_ids
-        }
-        if call_edge(payload):
+        payload = {"email_ids": resp_ids}
+        if call_edge("/generate-response", payload):
             for eid in resp_ids:
                 supabase.table("emails").update({"status": "ready_to_send"}).eq("id", eid).execute()
                 all_processed.append(eid)
@@ -423,12 +408,11 @@ def trigger_process():
 
         for row in per_pending:
             payload = {
-                "action":        "personalize-template",
                 "template_text": row.get("template_text") or "",
                 "past_emails":   row.get("past_emails") or [],
                 "deal_data":     row.get("deal_data") or {}
             }
-            success = call_edge(payload)
+            success = call_edge("/personalize-template", payload)
             if success:
                 supabase.table("emails").update({"status": "awaiting_proposal"}).eq("id", row["id"]).execute()
                 all_processed.append(row["id"])
@@ -453,14 +437,13 @@ def trigger_process():
 
         for row in prop_pending:
             payload = {
-                "action":      "generate-proposal",
                 "market":      row.get("market"),
                 "deal_type":   row.get("deal_type"),
                 "cap_rate":    row.get("cap_rate"),
                 "tenant_type": row.get("tenant_type"),
                 "style":       row.get("style")
             }
-            success = call_edge(payload)
+            success = call_edge("/generate-proposal", payload)
             if success:
                 supabase.table("emails").update({"status": "ready_to_send"}).eq("id", row["id"]).execute()
                 all_processed.append(row["id"])
