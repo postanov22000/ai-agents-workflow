@@ -176,11 +176,13 @@ def connect_gmail():
 def oauth2callback():
     """
     Handles OAuth2 callback from Google:
-    - Verifies ID token
-    - Finds or creates Supabase profile
-    - Upserts Gmail credentials in supabase.gmail_tokens
+      - Verifies ID token
+      - Finds or creates Supabase profile
+      - Upserts Gmail credentials in supabase.gmail_tokens
+      - Redirects to /complete-profile so the user can enter their display name & signature
     """
     try:
+        # Reconstruct the OAuth flow
         flow = Flow.from_client_config(
             {
                 "web": {
@@ -202,7 +204,7 @@ def oauth2callback():
         flow.fetch_token(authorization_response=request.url)
         credentials = flow.credentials
 
-        # Verify ID token to get the user’s email and name
+        # Verify the ID token to get the user's email (and possibly name)
         id_info = id_token.verify_oauth2_token(
             credentials.id_token,
             grequests.Request(),
@@ -214,7 +216,7 @@ def oauth2callback():
         if not email:
             raise ValueError("No email found in Google ID token")
 
-        # Look up the Supabase Auth user by email via Admin API
+        # Use Supabase Admin API to look up the Auth user by email
         auth_url = f"{SUPABASE_URL}/auth/v1/admin/users"
         headers = {
             "apikey": SUPABASE_SERVICE_ROLE_KEY,
@@ -231,7 +233,7 @@ def oauth2callback():
 
         user_id = matching_users[0]["id"]
 
-        # Ensure a profile exists in the "profiles" table
+        # Ensure a row exists in the "profiles" table (with at least id & email)
         profile_resp = supabase.table("profiles").select("id").eq("id", user_id).execute()
         if not profile_resp.data:
             supabase.table("profiles").insert({
@@ -241,7 +243,7 @@ def oauth2callback():
                 "ai_enabled": True
             }).execute()
 
-        # Store or update Gmail credentials in supabase.gmail_tokens
+        # Store or update the Gmail credentials in supabase.gmail_tokens
         creds_payload = {
             "user_id": user_id,
             "user_email": email,
@@ -256,11 +258,76 @@ def oauth2callback():
         }
         supabase.table("gmail_tokens").upsert(creds_payload).execute()
 
-        return redirect(f"/dashboard?user_id={user_id}")
+        # Redirect to the "complete profile" page so the user can enter their display name & signature
+        return redirect(f"/complete-profile?user_id={user_id}")
 
     except Exception as e:
         app.logger.error(f"OAuth2 Callback Error: {str(e)}", exc_info=True)
         return f"<h1>Authentication Failed</h1><p>{str(e)}</p>", 500
+
+
+@app.route("/complete-profile", methods=["GET", "POST"])
+def complete_profile():
+    """
+    After Gmail signup, show a form asking the user for:
+      • display_name
+      • signature (their email footer)
+    On POST, save those fields into the profiles table and redirect to /dashboard.
+    """
+    user_id = request.args.get("user_id")
+    if not user_id:
+        return "Missing user_id", 401
+
+    if request.method == "POST":
+        # Read submitted values
+        display_name = request.form.get("display_name", "").strip()
+        signature = request.form.get("signature", "").strip()
+
+        # Update the profiles table with the new fields
+        supabase.table("profiles") \
+            .update({
+                "display_name": display_name,
+                "signature": signature
+            }) \
+            .eq("id", user_id) \
+            .execute()
+
+        # Redirect to dashboard once profile is complete
+        return redirect(f"/dashboard?user_id={user_id}")
+
+    # GET → render a simple form for name and signature
+    form_html = """
+    <!doctype html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Complete Your Profile</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 2rem; }
+        label { font-weight: bold; display: block; margin-top: 1rem; }
+        input[type="text"], textarea { width: 100%; padding: 0.5rem; margin-top: 0.5rem; }
+        button { margin-top: 1.5rem; padding: 0.75rem 1.5rem; font-size: 1rem; }
+      </style>
+    </head>
+    <body>
+      <h2>Welcome! Please complete your profile</h2>
+      <form method="post" action="/complete-profile?user_id={{ user_id }}">
+        <label for="display_name">Name to display:</label>
+        <input type="text" id="display_name" name="display_name" placeholder="e.g. Sarah Miller" required>
+
+        <label for="signature">Email signature / footer:</label>
+        <textarea id="signature" name="signature" rows="6" placeholder="e.g. 
+Best regards,
+Sarah Miller
+Sales Manager | ABC Inc
+📞 +1 555 123 4567" required></textarea>
+
+        <button type="submit">Save Profile</button>
+      </form>
+    </body>
+    </html>
+    """
+    return render_template_string(form_html, user_id=user_id)
 
 @app.route("/disconnect_gmail", methods=["POST"])
 def disconnect_gmail():
