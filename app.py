@@ -6,7 +6,7 @@ import requests
 from datetime import date, datetime
 from email.mime.text import MIMEText
 
-from flask import Flask, render_template, request, redirect, jsonify
+from flask import Flask, render_template, render_template_string, request, redirect, jsonify
 
 from supabase import create_client, Client
 
