@@ -6,7 +6,7 @@ import requests
 from datetime import date, datetime
 from email.mime.text import MIMEText
 
-from flask import Flask, render_template, render_template_string, request, redirect, jsonify
+from flask import Flask, render_template, request, redirect, jsonify
 
 from supabase import create_client, Client
 
@@ -268,22 +268,14 @@ def oauth2callback():
 
 @app.route("/complete-profile", methods=["GET", "POST"])
 def complete_profile():
-    """
-    After Gmail signup, show a form asking the user for:
-      • display_name
-      • signature (their email footer)
-    On POST, save those fields into the profiles table and redirect to /dashboard.
-    """
     user_id = request.args.get("user_id")
     if not user_id:
         return "Missing user_id", 401
 
     if request.method == "POST":
-        # Read submitted values
         display_name = request.form.get("display_name", "").strip()
-        signature = request.form.get("signature", "").strip()
+        signature    = request.form.get("signature", "").strip()
 
-        # Update the profiles table with the new fields
         supabase.table("profiles") \
             .update({
                 "display_name": display_name,
@@ -292,42 +284,11 @@ def complete_profile():
             .eq("id", user_id) \
             .execute()
 
-        # Redirect to dashboard once profile is complete
         return redirect(f"/dashboard?user_id={user_id}")
 
-    # GET → render a simple form for name and signature
-    form_html = """
-    <!doctype html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <title>Complete Your Profile</title>
-      <style>
-        body { font-family: Arial, sans-serif; margin: 2rem; }
-        label { font-weight: bold; display: block; margin-top: 1rem; }
-        input[type="text"], textarea { width: 100%; padding: 0.5rem; margin-top: 0.5rem; }
-        button { margin-top: 1.5rem; padding: 0.75rem 1.5rem; font-size: 1rem; }
-      </style>
-    </head>
-    <body>
-      <h2>Welcome! Please complete your profile</h2>
-      <form method="post" action="/complete-profile?user_id={{ user_id }}">
-        <label for="display_name">Name to display:</label>
-        <input type="text" id="display_name" name="display_name" placeholder="e.g. Sarah Miller" required>
+    # On GET, render your full styled template
+    return render_template("complete_profile.html", user_id=user_id)
 
-        <label for="signature">Email signature / footer:</label>
-        <textarea id="signature" name="signature" rows="6" placeholder="e.g. 
-Best regards,
-Sarah Miller
-Sales Manager | ABC Inc
-📞 +1 555 123 4567" required></textarea>
-
-        <button type="submit">Save Profile</button>
-      </form>
-    </body>
-    </html>
-    """
-    return render_template_string(form_html, user_id=user_id)
 
 @app.route("/disconnect_gmail", methods=["POST"])
 def disconnect_gmail():
