@@ -361,9 +361,9 @@ def trigger_process():
       2) Generate Response (awaiting_response → processing → ready_to_send)
       3) Personalize Template (ready_to_personalize → processing → awaiting_proposal)
       4) Generate Proposal (awaiting_proposal → processing → ready_to_send)
-      5) Send via Gmail (ready_to_send → sent)
+      5) Send via Gmail (ready_to_send → sent, appending user signature)
     """
-    # 1) Token-based auth
+    # 1) Token‐based auth
     token = request.args.get("token")
     PROCESS_TOKEN = os.environ.get("PROCESS_SECRET_TOKEN")
     if token != PROCESS_TOKEN:
@@ -382,7 +382,7 @@ def trigger_process():
     )
     if jargon_rows:
         jargon_ids = [r["id"] for r in jargon_rows]
-        # Mark them as "processing" so they won't be re-picked
+        # Mark them as "processing" so they won't be re‐picked
         supabase.table("emails").update({"status": "processing"}).in_("id", jargon_ids).execute()
 
         for row in jargon_rows:
@@ -481,7 +481,7 @@ def trigger_process():
                     "error_message": "generate-proposal failed"
                 }).eq("id", row["id"]).execute()
 
-    #### STAGE 5 → Send Emails via Gmail (ready_to_send → sent)
+    #### STAGE 5 → Send Emails via Gmail (ready_to_send → sent, appending user signature)
     sent, failed = [], []
     ready_list = (
         supabase.table("emails")
@@ -493,11 +493,33 @@ def trigger_process():
     )
     for row in ready_list:
         em_id = row["id"]
-        uid = row["user_id"]
-        to = row["sender_email"]
-        body = row["processed_content"] or ""
+        uid   = row["user_id"]
+        to    = row["sender_email"]
+        ai_text = row["processed_content"] or ""
 
-        # Fetch Gmail OAuth token for this user
+        # ── Fetch this user's display_name & signature from profiles ──
+        profile_row = (
+            supabase.table("profiles")
+            .select("display_name, signature")
+            .eq("id", uid)
+            .single()
+            .execute()
+            .data
+        )
+        if profile_row:
+            display_name = profile_row.get("display_name", "").strip()
+            signature    = profile_row.get("signature", "").strip()
+        else:
+            display_name = ""
+            signature    = ""
+
+        # Build the final email body: AI text + two newlines + signature (if any)
+        if signature:
+            body = f"{ai_text}\n\n{signature}"
+        else:
+            body = ai_text
+
+        # ── Fetch Gmail OAuth token for this user ──
         tok_rows = (
             supabase.table("gmail_tokens")
             .select("credentials")
@@ -531,8 +553,8 @@ def trigger_process():
         try:
             service = build("gmail", "v1", credentials=creds, cache_discovery=False)
             msg = MIMEText(body, "plain")
-            msg["to"] = to
-            msg["from"] = "me"
+            msg["to"]      = to
+            msg["from"]    = "me"
             msg["subject"] = "Re: your email"
             raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
@@ -562,6 +584,7 @@ def trigger_process():
         "failed":    failed,
         "summary":   f"{len(sent)} sent, {len(failed)} failed, {len(all_processed)} processed"
     }), 200
+
 
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
