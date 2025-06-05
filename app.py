@@ -266,7 +266,7 @@ def oauth2callback():
         return f"<h1>Authentication Failed</h1><p>{str(e)}</p>", 500
 
 
-@app.route("/complete-profile", methods=["GET", "POST"])
+@app.route("/complete_profile", methods=["GET", "POST"])
 def complete_profile():
     user_id = request.args.get("user_id")
     if not user_id:
