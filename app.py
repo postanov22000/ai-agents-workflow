@@ -259,7 +259,7 @@ def oauth2callback():
         supabase.table("gmail_tokens").upsert(creds_payload).execute()
 
         # Redirect to the "complete profile" page so the user can enter their display name & signature
-        return redirect(f"/complete-profile?user_id={user_id}")
+        return redirect(f"/complete_profile?user_id={user_id}")
 
     except Exception as e:
         app.logger.error(f"OAuth2 Callback Error: {str(e)}", exc_info=True)
