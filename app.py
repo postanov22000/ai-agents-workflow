@@ -361,7 +361,7 @@ def trigger_process():
       2) Generate Response (awaiting_response → processing → ready_to_send)
       3) Personalize Template (ready_to_personalize → processing → awaiting_proposal)
       4) Generate Proposal (awaiting_proposal → processing → ready_to_send)
-      5) Send via Gmail (ready_to_send → sent, appending user signature)
+      5) Send via Gmail (ready_to_send → sent, appending user signature without duplication)
     """
     # 1) Token‐based auth
     token = request.args.get("token")
@@ -374,20 +374,17 @@ def trigger_process():
     #### STAGE 1 → Detect Jargon (preprocessing → processing → awaiting_response)
     jargon_rows = (
         supabase.table("emails")
-        .select("id, original_content")
-        .eq("status", "preprocessing")
-        .execute()
-        .data
+               .select("id, original_content")
+               .eq("status", "preprocessing")
+               .execute()
+               .data
         or []
     )
     if jargon_rows:
         jargon_ids = [r["id"] for r in jargon_rows]
-        # Mark them as "processing" so they won't be re‐picked
         supabase.table("emails").update({"status": "processing"}).in_("id", jargon_ids).execute()
-
         for row in jargon_rows:
-            payload = {"text": row["original_content"]}
-            success = call_edge("/detect-jargon", payload)
+            success = call_edge("/detect-jargon", {"text": row["original_content"]})
             if success:
                 supabase.table("emails").update({"status": "awaiting_response"}).eq("id", row["id"]).execute()
                 all_processed.append(row["id"])
@@ -400,18 +397,16 @@ def trigger_process():
     #### STAGE 2 → Generate Response (awaiting_response → processing → ready_to_send)
     resp_pending = (
         supabase.table("emails")
-        .select("id")
-        .eq("status", "awaiting_response")
-        .execute()
-        .data
+               .select("id")
+               .eq("status", "awaiting_response")
+               .execute()
+               .data
         or []
     )
     if resp_pending:
         resp_ids = [r["id"] for r in resp_pending]
         supabase.table("emails").update({"status": "processing"}).in_("id", resp_ids).execute()
-
-        payload = {"email_ids": resp_ids}
-        if call_edge("/generate-response", payload):
+        if call_edge("/generate-response", {"email_ids": resp_ids}):
             for eid in resp_ids:
                 supabase.table("emails").update({"status": "ready_to_send"}).eq("id", eid).execute()
                 all_processed.append(eid)
@@ -424,24 +419,22 @@ def trigger_process():
     #### STAGE 3 → Personalize Template (ready_to_personalize → processing → awaiting_proposal)
     per_pending = (
         supabase.table("emails")
-        .select("id, template_text, past_emails, deal_data")
-        .eq("status", "ready_to_personalize")
-        .execute()
-        .data
+               .select("id, template_text, past_emails, deal_data")
+               .eq("status", "ready_to_personalize")
+               .execute()
+               .data
         or []
     )
     if per_pending:
         per_ids = [r["id"] for r in per_pending]
         supabase.table("emails").update({"status": "processing"}).in_("id", per_ids).execute()
-
         for row in per_pending:
             payload = {
-                "template_text": row.get("template_text") or "",
-                "past_emails":   row.get("past_emails") or [],
-                "deal_data":     row.get("deal_data") or {}
+                "template_text": row.get("template_text", ""),
+                "past_emails":   row.get("past_emails", []),
+                "deal_data":     row.get("deal_data", {})
             }
-            success = call_edge("/personalize-template", payload)
-            if success:
+            if call_edge("/personalize-template", payload):
                 supabase.table("emails").update({"status": "awaiting_proposal"}).eq("id", row["id"]).execute()
                 all_processed.append(row["id"])
             else:
@@ -453,16 +446,15 @@ def trigger_process():
     #### STAGE 4 → Generate Proposal (awaiting_proposal → processing → ready_to_send)
     prop_pending = (
         supabase.table("emails")
-        .select("id, market, deal_type, cap_rate, tenant_type, style")
-        .eq("status", "awaiting_proposal")
-        .execute()
-        .data
+               .select("id, market, deal_type, cap_rate, tenant_type, style")
+               .eq("status", "awaiting_proposal")
+               .execute()
+               .data
         or []
     )
     if prop_pending:
         prop_ids = [r["id"] for r in prop_pending]
         supabase.table("emails").update({"status": "processing"}).in_("id", prop_ids).execute()
-
         for row in prop_pending:
             payload = {
                 "market":      row.get("market"),
@@ -471,8 +463,7 @@ def trigger_process():
                 "tenant_type": row.get("tenant_type"),
                 "style":       row.get("style")
             }
-            success = call_edge("/generate-proposal", payload)
-            if success:
+            if call_edge("/generate-proposal", payload):
                 supabase.table("emails").update({"status": "ready_to_send"}).eq("id", row["id"]).execute()
                 all_processed.append(row["id"])
             else:
@@ -481,60 +472,43 @@ def trigger_process():
                     "error_message": "generate-proposal failed"
                 }).eq("id", row["id"]).execute()
 
-    #### STAGE 5 → Send Emails via Gmail (ready_to_send → sent, appending user signature)
+    #### STAGE 5 → Send Emails via Gmail (ready_to_send → sent, with signature)
     sent, failed = [], []
     ready_list = (
         supabase.table("emails")
-        .select("id, user_id, sender_email, processed_content")
-        .eq("status", "ready_to_send")
-        .execute()
-        .data
+               .select("id, user_id, sender_email, processed_content")
+               .eq("status", "ready_to_send")
+               .execute()
+               .data
         or []
     )
     for row in ready_list:
-        em_id = row["id"]
-        uid   = row["user_id"]
-        to    = row["sender_email"]
-        ai_text = row["processed_content"] or ""
+        em_id   = row["id"]
+        uid     = row["user_id"]
+        to_addr = row["sender_email"]
+        ai_text = (row["processed_content"] or "").rstrip()
 
-        # ── Fetch this user's display_name & signature from profiles ──
-        profile_row = (
-            supabase.table("profiles")
-            .select("display_name, signature")
-            .eq("id", uid)
-            .single()
-            .execute()
-            .data
-        )
-        if profile_row:
-            display_name = profile_row.get("display_name", "").strip()
-            signature    = profile_row.get("signature", "").strip()
-        else:
-            display_name = ""
-            signature    = ""
+        # Fetch user's signature
+        prof = supabase.table("profiles").select("signature").eq("id", uid).single().execute().data or {}
+        signature = prof.get("signature", "").strip()
 
-                # ── Build the final email body, but avoid duplicate signatures ──
+        # Build final body, avoiding duplicate signature
         if signature:
-            # strip trailing whitespace/newlines
-            clean_ai = ai_text.rstrip()
-
-            # only append if the AI text doesn't already end with it
-            if clean_ai.endswith(signature):
-                body = clean_ai
+            if ai_text.endswith(signature):
+                body = ai_text
             else:
-                body = f"{clean_ai}\n\n{signature}"
+                body = f"{ai_text}\n\n{signature}"
         else:
             body = ai_text
 
-
-        # ── Fetch Gmail OAuth token for this user ──
+        # Fetch Gmail OAuth token for this user
         tok_rows = (
             supabase.table("gmail_tokens")
-            .select("credentials")
-            .eq("user_id", uid)
-            .limit(1)
-            .execute()
-            .data
+                   .select("credentials")
+                   .eq("user_id", uid)
+                   .limit(1)
+                   .execute()
+                   .data
             or []
         )
         if not tok_rows:
@@ -546,31 +520,27 @@ def trigger_process():
             }).eq("id", em_id).execute()
             continue
 
-        creds_data = tok_rows[0]["credentials"]
+        c = tok_rows[0]["credentials"]
         creds = Credentials(
-            token=creds_data["token"],
-            refresh_token=creds_data["refresh_token"],
-            token_uri=creds_data["token_uri"],
-            client_id=creds_data["client_id"],
-            client_secret=creds_data["client_secret"],
-            scopes=creds_data["scopes"]
+            token=c["token"],
+            refresh_token=c["refresh_token"],
+            token_uri=c["token_uri"],
+            client_id=c["client_id"],
+            client_secret=c["client_secret"],
+            scopes=c["scopes"]
         )
         if creds.expired and creds.refresh_token:
             creds.refresh(GoogleRequest())
 
         try:
-            service = build("gmail", "v1", credentials=creds, cache_discovery=False)
+            svc = build("gmail", "v1", credentials=creds, cache_discovery=False)
             msg = MIMEText(body, "plain")
-            msg["to"]      = to
+            msg["to"]      = to_addr
             msg["from"]    = "me"
             msg["subject"] = "Re: your email"
             raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+            send_res = svc.users().messages().send(userId="me", body={"raw": raw}).execute()
 
-            send_res = service.users().messages().send(
-                userId="me", body={"raw": raw}
-            ).execute()
-
-            # Update status → "sent"
             supabase.table("emails").update({
                 "status": "sent",
                 "sent_at": datetime.utcnow().isoformat()
