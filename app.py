@@ -513,11 +513,19 @@ def trigger_process():
             display_name = ""
             signature    = ""
 
-        # Build the final email body: AI text + two newlines + signature (if any)
+                # ── Build the final email body, but avoid duplicate signatures ──
         if signature:
-            body = f"{ai_text}\n\n{signature}"
+            # strip trailing whitespace/newlines
+            clean_ai = ai_text.rstrip()
+
+            # only append if the AI text doesn't already end with it
+            if clean_ai.endswith(signature):
+                body = clean_ai
+            else:
+                body = f"{clean_ai}\n\n{signature}"
         else:
             body = ai_text
+
 
         # ── Fetch Gmail OAuth token for this user ──
         tok_rows = (
