@@ -118,6 +118,7 @@
             padding: 30px;
             grid-column: 2;
             animation: fadeIn 0.5s ease;
+            margin-left: 280px; /* Account for fixed sidebar */
         }
 
         h1 {
@@ -343,6 +344,10 @@
                 position: relative;
                 width: 100%;
             }
+            .main-content {
+                margin-left: 0;
+                padding: 20px;
+            }
             .metrics-grid {
                 grid-template-columns: 1fr;
             }
@@ -370,7 +375,6 @@
 </head>
 <body>
     <div id="particleCanvas"></div>
-    <div class="main-content flex-1 p-4 overflow-y-auto">
     
     <div class="container">
         <!-- Enhanced Sidebar -->
@@ -379,36 +383,35 @@
                 <i class="fas fa-robot"></i>
                 <span>ReplyzeCRE</span>
             </div>
-            <div class="nav-item active"><i class="fas fa-home"></i> Dashboard</div>
+            <div class="nav-item active">
+                <i class="fas fa-home"></i> Dashboard
+            </div>
             <div class="nav-item" 
-     hx-get="/dashboard/analytics" 
-     hx-target=".main-content" 
-     hx-swap="innerHTML">
-    <i class="fas fa-chart-bar"></i> Analytics
-</div>
-            
-<div class="nav-item" 
-     hx-get="/dashboard/users" 
-     hx-target=".main-content" 
-     hx-swap="innerHTML">
-    <i class="fas fa-users"></i> Users
-</div>
-
-<div class="nav-item" 
-     hx-get="/dashboard/billing" 
-     hx-target=".main-content" 
-     hx-swap="innerHTML">
-    <i class="fas fa-credit-card"></i> Billing
-</div>
-
-<div class="nav-item" 
-     hx-get="/dashboard/settings" 
-     hx-target=".main-content" 
-     hx-swap="innerHTML">
-    <i class="fas fa-cog"></i> Settings
-</div>
+                 hx-get="/dashboard/analytics" 
+                 hx-target=".main-content" 
+                 hx-swap="innerHTML">
+                <i class="fas fa-chart-bar"></i> Analytics
+            </div>
+            <div class="nav-item" 
+                 hx-get="/dashboard/users" 
+                 hx-target=".main-content" 
+                 hx-swap="innerHTML">
+                <i class="fas fa-users"></i> Users
+            </div>
+            <div class="nav-item" 
+                 hx-get="/dashboard/billing" 
+                 hx-target=".main-content" 
+                 hx-swap="innerHTML">
+                <i class="fas fa-credit-card"></i> Billing
+            </div>
+            <div class="nav-item" 
+                 hx-get="/dashboard/settings" 
+                 hx-target=".main-content" 
+                 hx-swap="innerHTML">
+                <i class="fas fa-cog"></i> Settings
+            </div>
         </div>
-    </div>
+
         <!-- Main Content -->
         <div class="main-content">
             <h1>Welcome back, <span>{{ name }}</span> 👋</h1>
@@ -469,6 +472,7 @@
                     </div>
                 </div>
             </div>
+
             <!-- Action Section -->
             <div class="action-grid">
                 <div class="action-card">
@@ -498,16 +502,15 @@
         </div>
     </div>
 
-
-    
-<script>
-    document.body.addEventListener('htmx:configRequest', function(evt) {
-        document.querySelector('.main-content').style.opacity = 0.4;
-    });
-    document.body.addEventListener('htmx:afterSwap', function(evt) {
-        document.querySelector('.main-content').style.opacity = 1;
-    });
-</script>
+    <script>
+        document.body.addEventListener('htmx:configRequest', function(evt) {
+            document.querySelector('.main-content').style.opacity = 0.4;
+        });
+        
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            document.querySelector('.main-content').style.opacity = 1;
+        });
+    </script>
 
     <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js"></script>
     <script>
