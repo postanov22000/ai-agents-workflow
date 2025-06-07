@@ -3,6 +3,7 @@ import time
 import base64
 import requests
 
+from flask import abort
 from datetime import date, datetime
 from email.mime.text import MIMEText
 
@@ -141,6 +142,57 @@ def dashboard():
         ai_enabled=profile.get("ai_enabled", True),
         show_reconnect=show_reconnect
     )
+    # right after your existing @app.route("/dashboard")…
+
+
+def _require_user():
+    user_id = request.args.get("user_id")
+    if not user_id:
+        abort(401, "Missing user_id")
+    return user_id
+
+@app.route("/dashboard/analytics")
+def dashboard_analytics():
+    user_id = _require_user()
+    # load whatever data you need for analytics:
+    # e.g. charts, tables, etc.
+    # For now we’ll just show a placeholder.
+    return render_template(
+        "partials/analytics.html",
+        user_id=user_id,
+        # pass any metrics or data here...
+    )
+
+@app.route("/dashboard/users")
+def dashboard_users():
+    user_id = _require_user()
+    # fetch your users list from Supabase:
+    users = supabase.table("profiles").select("id, full_name, email").execute().data or []
+    return render_template(
+        "partials/users.html",
+        users=users
+    )
+
+@app.route("/dashboard/billing")
+def dashboard_billing():
+    user_id = _require_user()
+    # load any billing info you need:
+    # e.g. invoices, plan status…
+    return render_template(
+        "partials/billing.html",
+        user_id=user_id
+    )
+
+@app.route("/dashboard/settings")
+def dashboard_settings():
+    user_id = _require_user()
+    profile = supabase.table("profiles").select("display_name, signature, ai_enabled").eq("id", user_id).single().execute().data
+    return render_template(
+        "partials/settings.html",
+        profile=profile,
+        user_id=user_id
+    )
+
 
 @app.route("/connect_gmail")
 def connect_gmail():
