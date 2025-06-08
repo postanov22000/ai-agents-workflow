@@ -90,42 +90,51 @@ def dashboard():
     if not user_id:
         return "Missing user_id", 401
 
-    # Fetch the user’s profile including our new generate_leases flag
-    profile_resp = supabase.table("profiles") \
-        .select("full_name, ai_enabled, email, generate_leases") \
-        .eq("id", user_id) \
-        .single() \
-        .execute()
+    # 1) Fetch the user’s profile including our new generate_leases flag
+    profile_resp = (
+        supabase.table("profiles")
+                .select("full_name, ai_enabled, email, generate_leases")
+                .eq("id", user_id)
+                .single()
+                .execute()
+    )
 
-    if profile_resp.error:
-        return f"Profile query error: {profile_resp.error.message}", 500
+    # If there's no data back, treat it as an error
+    if profile_resp.data is None:
+        app.logger.error(f"Failed to load profile for {user_id}: {profile_resp}")
+        return "Profile query error", 500
 
-    profile = profile_resp.data or {}
-    full_name = profile.get("full_name", "")
-    ai_enabled = profile.get("ai_enabled", True)
+    profile = profile_resp.data
+    full_name      = profile.get("full_name", "")
+    ai_enabled     = profile.get("ai_enabled", True)
     generate_leases = profile.get("generate_leases", False)
 
-    # Calculate emails sent today and time saved
-    today = date.today().isoformat()
-    sent_resp = supabase.table("emails") \
-        .select("sent_at") \
-        .eq("user_id", user_id) \
-        .eq("status", "sent") \
-        .execute()
+    # 2) Calculate emails sent today and time saved
+    today       = date.today().isoformat()
+    sent_rows   = (
+        supabase.table("emails")
+                .select("sent_at")
+                .eq("user_id", user_id)
+                .eq("status", "sent")
+                .execute()
+                .data
+        or []
+    )
+    emails_sent_today = sum(1 for e in sent_rows if e.get("sent_at", "").startswith(today))
+    time_saved        = emails_sent_today * 5.5
 
-    sent = sent_resp.data or []
-    emails_sent_today = len([e for e in sent if e["sent_at"] and e["sent_at"].startswith(today)])
-    time_saved = emails_sent_today * 5.5
-
-    # Check Gmail token status to decide whether to show "Reconnect" button
-    token_resp = supabase.table("gmail_tokens") \
-        .select("credentials") \
-        .eq("user_id", user_id) \
-        .execute()
-
+    # 3) Check Gmail token status
+    token_rows = (
+        supabase.table("gmail_tokens")
+                .select("credentials")
+                .eq("user_id", user_id)
+                .execute()
+                .data
+        or []
+    )
     show_reconnect = True
-    if token_resp.data:
-        creds_data = token_resp.data[0]["credentials"]
+    if token_rows:
+        creds_data = token_rows[0]["credentials"]
         try:
             creds = Credentials(
                 token=creds_data["token"],
@@ -138,7 +147,7 @@ def dashboard():
             if not creds.expired:
                 show_reconnect = False
         except Exception:
-            # any parsing/refresh error just falls back to showing reconnect
+            # if constructing or refreshing fails, leave the reconnect button visible
             pass
 
     return render_template(
@@ -149,7 +158,7 @@ def dashboard():
         time_saved=time_saved,
         ai_enabled=ai_enabled,
         show_reconnect=show_reconnect,
-        generate_leases=generate_leases,   # ← now correctly passed in
+        generate_leases=generate_leases,
     )
 
 
