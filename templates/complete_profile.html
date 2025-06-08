@@ -479,77 +479,83 @@ Email: john@example.com"
   </footer>
 
   <script>
-    // Particle System
-    function createParticles() {
-      const container = document.getElementById('particleCanvas');
-      for (let i = 0; i < 80; i++) {
-        const particle = document.createElement('div');
-        particle.className = 'particle';
-        particle.style.cssText = `
-          width: ${Math.random() * 6 + 2}px;
-          height: ${Math.random() * 6 + 2}px;
-          left: ${Math.random() * 100}%;
-          top: ${Math.random() * 100}%;
-          animation-duration: ${Math.random() * 20 + 10}s;
-          background: hsla(170, 100%, 70%, ${Math.random() * 0.2});
-          position: fixed;
-          border-radius: 50%;
-          pointer-events: none;
-          z-index: 0;
-          animation: floatElement 20s infinite linear;
-        `;
-        container.appendChild(particle);
-      }
-    }
-    createParticles();
+  // Particle System
+function createParticles() {
+  const container = document.getElementById('particleCanvas');
+  for (let i = 0; i < 80; i++) {
+    const particle = document.createElement('div');
+    particle.className = 'particle';
+    particle.style.cssText = `
+      width: ${Math.random() * 6 + 2}px;
+      height: ${Math.random() * 6 + 2}px;
+      left: ${Math.random() * 100}%;
+      top: ${Math.random() * 100}%;
+      animation-duration: ${Math.random() * 20 + 10}s;
+      background: hsla(170, 100%, 70%, ${Math.random() * 0.2});
+      position: fixed;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 0;
+      animation: floatElement 20s infinite linear;
+    `;
+    container.appendChild(particle);
+  }
+}
 
-    // Scroll Progress
-    window.addEventListener('scroll', () => {
-      const scrollPercent = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;
-      document.getElementById('progressBar').style.width = `${scrollPercent}%`;
+// Wait for DOM to be fully loaded
+document.addEventListener('DOMContentLoaded', function() {
+  createParticles();
+  
+  // Scroll Progress
+  window.addEventListener('scroll', () => {
+    const scrollPercent = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;
+    document.getElementById('progressBar').style.width = `${scrollPercent}%`;
+  });
+
+  // Scroll Reveal
+  const scrollElements = document.querySelectorAll('[data-scroll]');
+  const elementInView = el => {
+    const rect = el.getBoundingClientRect();
+    return rect.top <= window.innerHeight * 0.9;
+  };
+  const displayScrollElement = el => el.setAttribute('data-scroll', 'in');
+  const handleScrollAnimation = () => {
+    scrollElements.forEach(el => {
+      if (elementInView(el)) displayScrollElement(el);
     });
+  };
+  window.addEventListener('scroll', handleScrollAnimation);
+  handleScrollAnimation(); // initial check
 
-    // Scroll Reveal
-    const scrollElements = document.querySelectorAll('[data-scroll]');
-    const elementInView = el => {
-      const rect = el.getBoundingClientRect();
-      return rect.top <= window.innerHeight * 0.9;
-    };
-    const displayScrollElement = el => el.setAttribute('data-scroll', 'in');
-    const handleScrollAnimation = () => {
-      scrollElements.forEach(el => {
-        if (elementInView(el)) displayScrollElement(el);
-      });
-    };
-    window.addEventListener('scroll', handleScrollAnimation);
-    handleScrollAnimation(); // initial check
-
-    // Signature Preview
-    const signatureInput = document.getElementById('signature');
-    const signaturePreview = document.getElementById('signaturePreview');
+  // Signature Preview
+  const signatureInput = document.getElementById('signature');
+  const signaturePreview = document.getElementById('signaturePreview');
+  if (signatureInput && signaturePreview) {
     signatureInput.addEventListener('input', () => {
       const formatted = signatureInput.value.replace(/\n/g, '<br>');
       signaturePreview.innerHTML = formatted;
     });
-// Add this to your existing script section
-document.addEventListener('DOMContentLoaded', function() {
+  }
+
+  // Form Submission Handling
   const form = document.getElementById('profileForm');
-  const submitButton = form.querySelector('button[type="submit"]');
-  
-  // Backup submission handler
-  submitButton.addEventListener('click', function(e) {
-    if (!form.checkValidity()) {
-      e.preventDefault();
-      form.reportValidity();
-    }
-  });
-  
-  // Ensure form can submit normally
-  form.addEventListener('submit', function(e) {
-    console.log('Form submitting...'); // Debug line
-  });
+  if (form) {
+    const submitButton = form.querySelector('button[type="submit"]');
+    
+    // Backup submission handler
+    submitButton.addEventListener('click', function(e) {
+      if (!form.checkValidity()) {
+        e.preventDefault();
+        form.reportValidity();
+      }
+    });
+    
+    // Debugging
+    form.addEventListener('submit', function(e) {
+      console.log('Form submitting...');
+    });
+  }
 });
-    // Let the form submit normally; Flask saves to Supabase and redirects.
   </script>
 </body>
 </html>
