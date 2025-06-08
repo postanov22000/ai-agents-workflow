@@ -501,10 +501,6 @@ function createParticles() {
     container.appendChild(particle);
   }
 }
-
-// Wait for DOM to be fully loaded
-document.addEventListener('DOMContentLoaded', function() {
-  createParticles();
   
   // Scroll Progress
   window.addEventListener('scroll', () => {
@@ -537,25 +533,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Form Submission Handling
-  const form = document.getElementById('profileForm');
-  if (form) {
-    const submitButton = form.querySelector('button[type="submit"]');
-    
-    // Backup submission handler
-    submitButton.addEventListener('click', function(e) {
-      if (!form.checkValidity()) {
-        e.preventDefault();
-        form.reportValidity();
-      }
-    });
-    
-    // Debugging
-    form.addEventListener('submit', function(e) {
-      console.log('Form submitting...');
-    });
-  }
-});
   </script>
 </body>
 </html>
