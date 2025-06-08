@@ -83,21 +83,27 @@ def home():
 @app.route("/dashboard")
 def dashboard():
     """
-    Renders the dashboard for a given user_id.
+    Renders the dashboard for a given user_id, including the
+    'generate_leases' toggle pulled from the profiles table.
     """
     user_id = request.args.get("user_id")
     if not user_id:
         return "Missing user_id", 401
 
-    try:
-        profile_resp = supabase.table("profiles") \
-            .select("full_name, ai_enabled, email") \
-            .eq("id", user_id) \
-            .single() \
-            .execute()
-        profile = profile_resp.data
-    except Exception as e:
-        return f"Profile query error: {str(e)}", 500
+    # Fetch the user’s profile including our new generate_leases flag
+    profile_resp = supabase.table("profiles") \
+        .select("full_name, ai_enabled, email, generate_leases") \
+        .eq("id", user_id) \
+        .single() \
+        .execute()
+
+    if profile_resp.error:
+        return f"Profile query error: {profile_resp.error.message}", 500
+
+    profile = profile_resp.data or {}
+    full_name = profile.get("full_name", "")
+    ai_enabled = profile.get("ai_enabled", True)
+    generate_leases = profile.get("generate_leases", False)
 
     # Calculate emails sent today and time saved
     today = date.today().isoformat()
@@ -106,6 +112,7 @@ def dashboard():
         .eq("user_id", user_id) \
         .eq("status", "sent") \
         .execute()
+
     sent = sent_resp.data or []
     emails_sent_today = len([e for e in sent if e["sent_at"] and e["sent_at"].startswith(today)])
     time_saved = emails_sent_today * 5.5
@@ -115,42 +122,36 @@ def dashboard():
         .select("credentials") \
         .eq("user_id", user_id) \
         .execute()
-    token_data = token_resp.data or []
+
     show_reconnect = True
-    if token_data:
+    if token_resp.data:
+        creds_data = token_resp.data[0]["credentials"]
         try:
-            creds_data = token_data[0]["credentials"]
             creds = Credentials(
                 token=creds_data["token"],
                 refresh_token=creds_data["refresh_token"],
                 token_uri=creds_data["token_uri"],
                 client_id=creds_data["client_id"],
                 client_secret=creds_data["client_secret"],
-                scopes=creds_data["scopes"]
+                scopes=creds_data["scopes"],
             )
             if not creds.expired:
                 show_reconnect = False
-        except Exception as e:
-            print("Token check failed:", e)
+        except Exception:
+            # any parsing/refresh error just falls back to showing reconnect
+            pass
 
     return render_template(
         "dashboard.html",
-        name=profile["full_name"],
+        name=full_name,
         user_id=user_id,
         emails_sent=emails_sent_today,
         time_saved=time_saved,
-        ai_enabled=profile.get("ai_enabled", True),
+        ai_enabled=ai_enabled,
         show_reconnect=show_reconnect,
-        generate_leases=generate_leases
+        generate_leases=generate_leases,   # ← now correctly passed in
     )
-    # right after your existing @app.route("/dashboard")…
 
-
-def _require_user():
-    user_id = request.args.get("user_id")
-    if not user_id:
-        abort(401, "Missing user_id")
-    return user_id
 
 @app.route("/dashboard/analytics")
 def dashboard_analytics():
