@@ -351,6 +351,44 @@ def disconnect_gmail():
     supabase.table("gmail_tokens").delete().eq("user_id", user_id).execute()
     return redirect(f"/dashboard?user_id={user_id}")
 
+
+@app.route("/toggle_leases", methods=["POST"])
+def toggle_leases():
+    """
+    HTMX endpoint to flip a user's `generate_leases` flag on/off.
+    Expects form data: user_id.
+    """
+    user_id = request.form.get("user_id")
+    if not user_id:
+        return "Missing user_id", 400
+
+    # 1) Fetch current setting
+    profile_resp = supabase.table("profiles") \
+        .select("generate_leases") \
+        .eq("id", user_id) \
+        .single() \
+        .execute()
+
+    if profile_resp.error:
+        app.logger.error(f"Error reading generate_leases for {user_id}: {profile_resp.error.message}")
+        return "Database error", 500
+
+    current = profile_resp.data.get("generate_leases", False)
+
+    # 2) Toggle it
+    new_val = not current
+    upd_resp = supabase.table("profiles") \
+        .update({"generate_leases": new_val}) \
+        .eq("id", user_id) \
+        .execute()
+
+    if upd_resp.error:
+        app.logger.error(f"Error updating generate_leases for {user_id}: {upd_resp.error.message}")
+        return "Database error", 500
+
+    # 3) Return no content (HTMX will happily leave the toggle in its new state)
+    return ("", 204)
+
 @app.route("/admin")
 def admin():
     """
