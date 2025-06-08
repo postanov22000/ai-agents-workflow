@@ -372,11 +372,7 @@ button.cta-button {
     }
   </style>
 </head>
-  <script>
-  document.getElementById('profileForm').addEventListener('submit', function() {
-    this.querySelector('button[type="submit"]').disabled = true;
-  });
-</script>
+ 
 <body>
   <div class="progress-bar" id="progressBar"></div>
   <div id="particleCanvas"></div>
@@ -480,7 +476,11 @@ Email: john@example.com"
       &copy; 2025 ReplyzeAI CRE. All rights reserved.
     </div>
   </footer>
-
+ <script>
+  document.getElementById('profileForm').addEventListener('submit', function() {
+    this.querySelector('button[type="submit"]').disabled = true;
+  });
+</script>
   <script>
   // Particle System
 function createParticles() {
