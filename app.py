@@ -140,7 +140,8 @@ def dashboard():
         emails_sent=emails_sent_today,
         time_saved=time_saved,
         ai_enabled=profile.get("ai_enabled", True),
-        show_reconnect=show_reconnect
+        show_reconnect=show_reconnect,
+        generate_leases=generate_leases
     )
     # right after your existing @app.route("/dashboard")…
 
