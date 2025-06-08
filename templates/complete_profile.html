@@ -372,6 +372,11 @@ button.cta-button {
     }
   </style>
 </head>
+  <script>
+  document.getElementById('profileForm').addEventListener('submit', function() {
+    this.querySelector('button[type="submit"]').disabled = true;
+  });
+</script>
 <body>
   <div class="progress-bar" id="progressBar"></div>
   <div id="particleCanvas"></div>
@@ -414,7 +419,7 @@ button.cta-button {
 
     <div class="connection-form" data-scroll>
       <!-- Now POSTs to /complete-profile with user_id -->
-      <form id="profileForm" method="post" action="/complete_profile?user_id={{ user_id }}">
+     <form id="profileForm" method="POST" action="/complete_profile?user_id={{ user_id }}" enctype="application/x-www-form-urlencoded">
         <div class="form-group">
           <label for="display_name">Your Full Name</label>
           <input type="text"
@@ -443,10 +448,8 @@ Email: john@example.com"
         </div>
 
         <button type="submit" 
-        name="submit" 
         class="cta-button" 
-        style="width:100%; text-align:center; margin-top:1rem;"
-        onclick="this.form.submit()">
+        style="width:100%; text-align:center; margin-top:1rem; pointer-events: auto;">
   Save Profile
 </button>
       </form>
