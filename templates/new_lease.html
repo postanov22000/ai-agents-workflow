@@ -330,6 +330,7 @@
           method="POST"
           action="/new_lease?user_id={{ user_id }}"
         >
+         <input type="hidden" name="user_id" value="{{ user_id }}">
           <!-- Property Information -->
           <h2><i class="fas fa-building"></i> Property Information</h2>
           <div class="form-grid">
