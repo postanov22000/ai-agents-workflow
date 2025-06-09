@@ -509,19 +509,14 @@ input:checked + .slider:before { transform: translateX(26px); }
                 </div>
                 <div class="action-card">
   <h3>Lease Agreement Generator</h3>
-  <label class="switch">
-    <input 
-      type="checkbox"
-      id="leaseToggle"
-      {% if generate_leases %}checked{% endif %}
-      hx-post="/toggle_leases"
-      hx-vals='{"user_id":"{{ user_id }}"}'
-      hx-swap="none"
-    />
-    <span class="slider"></span>
-  </label>
-  <small style="color:#ccc;">When ON, new leases will be drafted in your Gmail.</small>
+  <a href="/leases/new?user_id={{ user_id }}" class="btn btn-primary">
+    <i class="fas fa-file-contract"></i> New Lease
+  </a>
+  <small style="color:#ccc; display:block; margin-top:8px;">
+    Click to draft a new lease in your Gmail.
+  </small>
 </div>
+
             </div>
         </div>
     </div>
