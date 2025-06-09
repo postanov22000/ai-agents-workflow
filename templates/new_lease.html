@@ -602,56 +602,40 @@
     </div>
 
     <script>
-        // Create particles for background
-        function createParticles() {
-            const container = document.getElementById('particleCanvas');
-            for(let i = 0; i < 50; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'particle';
-                particle.style.cssText = `
-                    width: ${Math.random() * 6 + 2}px;
-                    height: ${Math.random() * 6 + 2}px;
-                    left: ${Math.random() * 100}%;
-                    top: ${Math.random() * 100}%;
-                    animation-duration: ${Math.random() * 20 + 10}s;
-                    background: hsla(170, 100%, 70%, ${Math.random() * 0.2});
-                `;
-                container.appendChild(particle);
-            }
-        }
-        createParticles();
+    function createParticles() {
+      const container = document.getElementById('particleCanvas');
+      for (let i = 0; i < 50; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'particle';
+        particle.style.cssText = `
+          width: ${Math.random() * 6 + 2}px;
+          height: ${Math.random() * 6 + 2}px;
+          left: ${Math.random() * 100}% ;
+          top: ${Math.random() * 100}% ;
+          animation-duration: ${Math.random() * 20 + 10}s;
+          background: hsla(170,100%,70%,${Math.random() * 0.2});
+        `;
+        container.appendChild(particle);
+      }
+    }
+    createParticles();
 
-        // Form submission handler
-        document.getElementById('leaseForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            // Here you would typically send the form data to your backend
-            alert('Lease agreement generated successfully!');
-            // You could redirect to a preview page or download the lease PDF
-        });
-
-        // Calculate end date based on lease term
-        document.getElementById('leaseTerm').addEventListener('change', function() {
-            const startDate = document.getElementById('startDate').value;
-            const leaseTerm = parseInt(this.value);
-            
-            if (startDate && leaseTerm) {
-                const start = new Date(startDate);
-                const end = new Date(start);
-                end.setMonth(start.getMonth() + leaseTerm);
-                
-                // Format as YYYY-MM-DD
-                const endDateStr = end.toISOString().split('T')[0];
-                document.getElementById('endDate').value = endDateStr;
-            }
-        });
-
-        // Auto-calculate end date when start date changes
-        document.getElementById('startDate').addEventListener('change', function() {
-            const leaseTerm = document.getElementById('leaseTerm').value;
-            if (leaseTerm) {
-                document.getElementById('leaseTerm').dispatchEvent(new Event('change'));
-            }
-        });
-    </script>
+    // Calculate end date automatically
+    document.getElementById('leaseTerm').addEventListener('change', function() {
+      const startDate = document.getElementById('startDate').value;
+      const leaseTerm = parseInt(this.value);
+      if (startDate && leaseTerm) {
+        const start = new Date(startDate), end = new Date(start);
+        end.setMonth(start.getMonth() + leaseTerm);
+        document.getElementById('endDate').value = end.toISOString().split('T')[0];
+      }
+    });
+    document.getElementById('startDate').addEventListener('change', function() {
+      const leaseTerm = document.getElementById('leaseTerm').value;
+      if (leaseTerm) {
+        document.getElementById('leaseTerm').dispatchEvent(new Event('change'));
+      }
+    });
+  </script>
 </body>
 </html>
