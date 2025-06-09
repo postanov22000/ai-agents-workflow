@@ -374,31 +374,38 @@ def toggle_leases():
         return "Missing user_id", 400
 
     # 1) Fetch current setting
-    profile_resp = supabase.table("profiles") \
-        .select("generate_leases") \
-        .eq("id", user_id) \
-        .single() \
-        .execute()
+    profile_resp = (
+        supabase.table("profiles")
+                .select("generate_leases")
+                .eq("id", user_id)
+                .single()
+                .execute()
+    )
 
-    if profile_resp.error:
-        app.logger.error(f"Error reading generate_leases for {user_id}: {profile_resp.error.message}")
+    # If the row doesn't exist or we got a non-200 back
+    if profile_resp.status_code != 200 or profile_resp.data is None:
+        app.logger.error(f"[toggle_leases] Could not read generate_leases for {user_id}: "
+                         f"status={profile_resp.status_code}, data={profile_resp.data}")
         return "Database error", 500
 
-    current = profile_resp.data.get("generate_leases", False)
+    current = bool(profile_resp.data.get("generate_leases", False))
 
     # 2) Toggle it
-    new_val = not current
-    upd_resp = supabase.table("profiles") \
-        .update({"generate_leases": new_val}) \
-        .eq("id", user_id) \
-        .execute()
+    upd_resp = (
+        supabase.table("profiles")
+                .update({"generate_leases": not current})
+                .eq("id", user_id)
+                .execute()
+    )
 
-    if upd_resp.error:
-        app.logger.error(f"Error updating generate_leases for {user_id}: {upd_resp.error.message}")
+    if upd_resp.status_code != 200:
+        app.logger.error(f"[toggle_leases] Could not update generate_leases for {user_id}: "
+                         f"status={upd_resp.status_code}, data={upd_resp.data}")
         return "Database error", 500
 
-    # 3) Return no content (HTMX will happily leave the toggle in its new state)
+    # 3) Return no content (HTMX will happily leave the checkbox in its new state)
     return ("", 204)
+
 
 @app.route("/admin")
 def admin():
