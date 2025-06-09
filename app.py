@@ -363,48 +363,125 @@ def disconnect_gmail():
     return redirect(f"/dashboard?user_id={user_id}")
 
 
-@app.route("/toggle_leases", methods=["POST"])
-def toggle_leases():
-    """
-    HTMX endpoint to flip a user's `generate_leases` flag on/off.
-    Expects form data: user_id.
-    """
-    user_id = request.form.get("user_id")
+# … your existing imports, supabase setup, etc. …
+
+def _require_user():
+    user_id = request.args.get("user_id") or request.form.get("user_id")
     if not user_id:
-        return "Missing user_id", 400
+        abort(401, "Missing user_id")
+    return user_id
 
-    # 1) Fetch current setting
-    profile_resp = (
-        supabase.table("profiles")
-                .select("generate_leases")
-                .eq("id", user_id)
-                .single()
+@app.route("/new_lease", methods=["GET"])
+def new_lease_form():
+    """
+    Show the “Create New Lease” form.
+    """
+    user_id = _require_user()
+    return render_template("new_lease.html", user_id=user_id)
+
+
+@app.route("/new_lease", methods=["POST"])
+def new_lease_submit():
+    """
+    Receive lease form, draft it into the user’s Gmail as a draft message.
+    """
+    user_id = _require_user()
+
+    # ── 1) Collect form fields ─────────────────────────────────────────────
+    data = {
+        "property_name":       request.form["propertyName"],
+        "property_type":       request.form["propertyType"],
+        "address":             request.form["address"],
+        "suite":               request.form.get("suite", ""),
+        "square_feet":         request.form["squareFeet"],
+        "tenant_name":         request.form["tenantName"],
+        "tenant_type":         request.form["tenantType"],
+        "lease_type":          request.form["leaseType"],
+        "lease_term":          request.form["leaseTerm"],
+        "start_date":          request.form["startDate"],
+        "end_date":            request.form["endDate"],
+        "base_rent":           request.form["baseRent"],
+        "annual_increase":     request.form.get("annualIncrease", ""),
+        "security_deposit":    request.form.get("securityDeposit", ""),
+        "parking_spaces":      request.form.get("parkingSpaces", ""),
+        "parking_fee":         request.form.get("parkingFee", ""),
+        "additional_terms":    request.form.get("additionalTerms", ""),
+        "tenant_improvements": "Yes" if request.form.get("tenantImprovements") else "No",
+        "renewal_option":      "Yes" if request.form.get("renewalOption") else "No",
+        "exclusive_use":       "Yes" if request.form.get("exclusiveUse") else "No",
+    }
+
+    # ── 2) Render a simple HTML body ────────────────────────────────────────
+    body = f"""
+    <html><body>
+    <h2>Lease Agreement</h2>
+    <p><strong>Property:</strong> {data['property_name']} ({data['property_type'].title()})<br>
+       <strong>Address:</strong> {data['address']} Suite {data['suite']}<br>
+       <strong>Size:</strong> {data['square_feet']} sqft</p>
+
+    <h3>Tenant</h3>
+    <p>{data['tenant_name']} ({data['tenant_type'].title()})</p>
+
+    <h3>Terms</h3>
+    <p><strong>Type:</strong> {data['lease_type'].replace('-', ' ').title()}<br>
+       <strong>Term:</strong> {data['lease_term']} months<br>
+       <strong>Dates:</strong> {data['start_date']} → {data['end_date']}</p>
+
+    <h3>Financials</h3>
+    <p><strong>Base Rent:</strong> ${data['base_rent']} per sqft/yr<br>
+       <strong>Annual Increase:</strong> {data['annual_increase']}%<br>
+       <strong>Security Deposit:</strong> ${data['security_deposit']}<br>
+       <strong>Parking:</strong> {data['parking_spaces']} spaces @ ${data['parking_fee']}/mo</p>
+
+    <h3>Additional Terms</h3>
+    <p>{data['additional_terms']}</p>
+    <ul>
+      <li>Tenant Improvements: {data['tenant_improvements']}</li>
+      <li>Renewal Option: {data['renewal_option']}</li>
+      <li>Exclusive Use Clause: {data['exclusive_use']}</li>
+    </ul>
+    </body></html>
+    """
+
+    # ── 3) Load the user’s Gmail credentials from Supabase ────────────────
+    tok_rows = (
+        supabase.table("gmail_tokens")
+                .select("credentials")
+                .eq("user_id", user_id)
+                .limit(1)
                 .execute()
+                .data or []
     )
+    if not tok_rows:
+        abort(400, "No Gmail token found; please reconnect Gmail first.")
 
-    # If the row doesn't exist or we got a non-200 back
-    if profile_resp.status_code != 200 or profile_resp.data is None:
-        app.logger.error(f"[toggle_leases] Could not read generate_leases for {user_id}: "
-                         f"status={profile_resp.status_code}, data={profile_resp.data}")
-        return "Database error", 500
-
-    current = bool(profile_resp.data.get("generate_leases", False))
-
-    # 2) Toggle it
-    upd_resp = (
-        supabase.table("profiles")
-                .update({"generate_leases": not current})
-                .eq("id", user_id)
-                .execute()
+    creds_data = tok_rows[0]["credentials"]
+    creds = Credentials(
+        token=creds_data["token"],
+        refresh_token=creds_data["refresh_token"],
+        token_uri=creds_data["token_uri"],
+        client_id=creds_data["client_id"],
+        client_secret=creds_data["client_secret"],
+        scopes=creds_data["scopes"],
     )
+    if creds.expired and creds.refresh_token:
+        creds.refresh(GoogleRequest())
 
-    if upd_resp.status_code != 200:
-        app.logger.error(f"[toggle_leases] Could not update generate_leases for {user_id}: "
-                         f"status={upd_resp.status_code}, data={upd_resp.data}")
-        return "Database error", 500
+    service = build("gmail", "v1", credentials=creds, cache_discovery=False)
 
-    # 3) Return no content (HTMX will happily leave the checkbox in its new state)
-    return ("", 204)
+    # ── 4) Build the MIME message and create a Draft ──────────────────────
+    mime = MIMEText(body, "html")
+    mime["To"]      = ""  # Draft, so you can leave blank or fill later
+    mime["Subject"] = f"Draft Lease: {data['property_name']} → {data['tenant_name']}"
+
+    raw = base64.urlsafe_b64encode(mime.as_bytes()).decode()
+    draft = {"message": {"raw": raw}}
+    created = service.users().drafts().create(userId="me", body=draft).execute()
+
+    app.logger.info(f"Created Gmail Draft ID {created['id']} for user {user_id}")
+
+    # ── 5) Redirect back to the dashboard ──────────────────────────────────
+    return redirect(f"/dashboard?user_id={user_id}")
 
 
 @app.route("/admin")
