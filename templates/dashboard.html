@@ -396,7 +396,6 @@ input:checked + .slider:before { transform: translateX(26px); }
   <div
     class="nav-item active"
     hx-get="/dashboard?user_id={{ user_id }}"
-    hx-trigger="click"
     hx-target=".main-content"
     hx-swap="innerHTML">
     <i class="fas fa-home"></i> Dashboard
@@ -405,7 +404,6 @@ input:checked + .slider:before { transform: translateX(26px); }
   <div
     class="nav-item"
     hx-get="/dashboard/analytics?user_id={{ user_id }}"
-    hx-trigger="click"
     hx-target=".main-content"
     hx-swap="innerHTML">
     <i class="fas fa-chart-bar"></i> Analytics
@@ -414,7 +412,6 @@ input:checked + .slider:before { transform: translateX(26px); }
   <div
     class="nav-item"
     hx-get="/dashboard/users?user_id={{ user_id }}"
-    hx-trigger="click"
     hx-target=".main-content"
     hx-swap="innerHTML">
     <i class="fas fa-users"></i> Users
@@ -423,7 +420,6 @@ input:checked + .slider:before { transform: translateX(26px); }
   <div
     class="nav-item"
     hx-get="/dashboard/billing?user_id={{ user_id }}"
-    hx-trigger="click"
     hx-target=".main-content"
     hx-swap="innerHTML">
     <i class="fas fa-credit-card"></i> Billing
@@ -432,7 +428,6 @@ input:checked + .slider:before { transform: translateX(26px); }
   <div
     class="nav-item"
     hx-get="/dashboard/settings?user_id={{ user_id }}"
-    hx-trigger="click"
     hx-target=".main-content"
     hx-swap="innerHTML">
     <i class="fas fa-cog"></i> Settings
