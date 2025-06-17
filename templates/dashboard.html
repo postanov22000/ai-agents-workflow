@@ -379,7 +379,133 @@ input:checked + .slider:before { transform: translateX(26px); }
             width: 100%;
             height: 100%;
             z-index: -1;
-        }
+        } 
+
+      .analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+.chart-container {
+  background: rgba(16, 36, 64, 0.6);
+  padding: 25px;
+  border-radius: 12px;
+  border: 1px solid rgba(100, 255, 218, 0.2);
+  margin-bottom: 30px;
+  transition: box-shadow 0.3s ease;
+}
+.chart-container:hover {
+  box-shadow: 0 15px 30px rgba(10, 25, 47, 0.4);
+}
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.chart-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #64ffda;
+}
+.chart-actions {
+  display: flex;
+  gap: 10px;
+}
+.time-filter {
+  background: rgba(100, 255, 218, 0.1);
+  border: 1px solid rgba(100, 255, 218, 0.3);
+  color: #64ffda;
+  padding: 5px 15px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+.time-filter.active {
+  background: rgba(100, 255, 218, 0.3);
+  color: white;
+}
+.time-filter:hover {
+  background: rgba(100, 255, 218, 0.2);
+}
+
+.property-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  margin-top: 20px;
+}
+.property-type {
+  background: rgba(16, 36, 64, 0.6);
+  padding: 15px;
+  border-radius: 8px;
+  border-left: 4px solid #64ffda;
+}
+.property-type h4 {
+  color: #64ffda;
+  margin-bottom: 10px;
+  font-size: 1rem;
+}
+.property-stats {
+  display: flex;
+  justify-content: space-between;
+}
+.property-value {
+  font-weight: 700;
+}
+.property-change {
+  font-size: 0.9rem;
+}
+.change-up {
+  color: #64ffda;
+}
+.change-down {
+  color: #f72585;
+}
+
+.transaction-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+.transaction-table th {
+  text-align: left;
+  padding: 12px 15px;
+  background: rgba(100, 255, 218, 0.1);
+  color: #64ffda;
+  font-weight: 600;
+}
+.transaction-table td {
+  padding: 12px 15px;
+  border-bottom: 1px solid rgba(100, 255, 218, 0.1);
+}
+.transaction-table tr:hover td {
+  background: rgba(100, 255, 218, 0.05);
+}
+.deal-size {
+  font-weight: 700;
+}
+.deal-status {
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.status-pending {
+  background: rgba(248, 150, 30, 0.2);
+  color: #f8961e;
+}
+.status-closed {
+  background: rgba(100, 255, 218, 0.2);
+  color: #64ffda;
+}
+.status-lost {
+  background: rgba(247, 37, 133, 0.2);
+  color: #f72585;
+}
+
     </style>
 </head>
 <body>
