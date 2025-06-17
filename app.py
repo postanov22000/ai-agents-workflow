@@ -82,15 +82,11 @@ def home():
 
 @app.route("/dashboard")
 def dashboard():
-    """
-    Renders the dashboard for a given user_id, including the
-    'generate_leases' toggle pulled from the profiles table.
-    """
     user_id = request.args.get("user_id")
     if not user_id:
         return "Missing user_id", 401
 
-    # 1) Fetch the user’s profile including our new generate_leases flag
+    # 1) Profile
     profile_resp = (
         supabase.table("profiles")
                 .select("full_name, ai_enabled, email, generate_leases")
@@ -98,18 +94,16 @@ def dashboard():
                 .single()
                 .execute()
     )
-
-    # If there's no data back, treat it as an error
     if profile_resp.data is None:
         app.logger.error(f"Failed to load profile for {user_id}: {profile_resp}")
         return "Profile query error", 500
 
-    profile = profile_resp.data
+    profile        = profile_resp.data
     full_name      = profile.get("full_name", "")
     ai_enabled     = profile.get("ai_enabled", True)
     generate_leases = profile.get("generate_leases", False)
 
-    # 2) Calculate emails sent today and time saved
+    # 2) Emails sent today & time saved
     today       = date.today().isoformat()
     sent_rows   = (
         supabase.table("emails")
@@ -123,7 +117,7 @@ def dashboard():
     emails_sent_today = sum(1 for e in sent_rows if e.get("sent_at", "").startswith(today))
     time_saved        = emails_sent_today * 5.5
 
-    # 3) Check Gmail token status
+    # 3) Gmail token status
     token_rows = (
         supabase.table("gmail_tokens")
                 .select("credentials")
@@ -144,10 +138,8 @@ def dashboard():
                 client_secret=creds_data["client_secret"],
                 scopes=creds_data["scopes"],
             )
-            if not creds.expired:
-                show_reconnect = False
+            show_reconnect = creds.expired
         except Exception:
-            # if constructing or refreshing fails, leave the reconnect button visible
             pass
 
     return render_template(
@@ -160,6 +152,7 @@ def dashboard():
         show_reconnect=show_reconnect,
         generate_leases=generate_leases,
     )
+
 
 
 @app.route("/dashboard/analytics")
@@ -206,29 +199,69 @@ def dashboard_settings():
 
 @app.route("/dashboard/home")
 def dashboard_home():
+    """HTMX endpoint: only renders the inner `.main-content`."""
     user_id = request.args.get("user_id")
     if not user_id:
         return "Missing user_id", 401
 
-    resp = (
+    # (Exact same logic as /dashboard, so all vars are defined)
+    profile_resp = (
         supabase.table("profiles")
                 .select("full_name, ai_enabled, email, generate_leases")
                 .eq("id", user_id)
                 .single()
                 .execute()
     )
-    if resp.data is None:
+    if profile_resp.data is None:
         return "Profile query error", 500
 
-    profile     = resp.data
-    name        = profile.get("full_name", "")     # <-- define `name`
-    ai_enabled  = profile.get("ai_enabled", True)
-    # …
+    profile        = profile_resp.data
+    full_name      = profile.get("full_name", "")
+    ai_enabled     = profile.get("ai_enabled", True)
+    generate_leases = profile.get("generate_leases", False)
+
+    today       = date.today().isoformat()
+    sent_rows   = (
+        supabase.table("emails")
+                .select("sent_at")
+                .eq("user_id", user_id)
+                .eq("status", "sent")
+                .execute()
+                .data
+        or []
+    )
+    emails_sent_today = sum(1 for e in sent_rows if e.get("sent_at", "").startswith(today))
+    time_saved        = emails_sent_today * 5.5
+
+    token_rows    = (
+        supabase.table("gmail_tokens")
+                .select("credentials")
+                .eq("user_id", user_id)
+                .execute()
+                .data
+        or []
+    )
+    show_reconnect = True
+    if token_rows:
+        creds_data = token_rows[0]["credentials"]
+        try:
+            creds = Credentials(
+                token=creds_data["token"],
+                refresh_token=creds_data["refresh_token"],
+                token_uri=creds_data["token_uri"],
+                client_id=creds_data["client_id"],
+                client_secret=creds_data["client_secret"],
+                scopes=creds_data["scopes"],
+            )
+            show_reconnect = creds.expired
+        except Exception:
+            pass
+
     return render_template(
         "partials/home.html",
-        name=name,                # now matches your template
+        name=full_name,
         user_id=user_id,
-        emails_sent=emails_sent,
+        emails_sent=emails_sent_today,
         time_saved=time_saved,
         ai_enabled=ai_enabled,
         show_reconnect=show_reconnect,
