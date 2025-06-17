@@ -1,0 +1,97 @@
+<div class="main-content">
+  <h1>Welcome back, <span>{{ name }}</span> 👋</h1>
+
+  <!-- Metrics Grid -->
+  <div class="metrics-grid">
+    <div class="metric-card">
+      <i class="fas fa-paper-plane metric-icon"></i>
+      <h3>Emails Sent</h3>
+      <div class="metric-value" id="emails-sent">{{ emails_sent }}</div>
+      <div class="progress-container">
+        <div class="progress-bar">
+          <div class="progress-fill" id="email-progress"></div>
+        </div>
+        <div class="trend up">
+          <i class="fas fa-arrow-up"></i>
+          <span>{{ 20 - emails_sent }} remaining</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="metric-card">
+      <i class="fas fa-clock metric-icon"></i>
+      <h3>Time Saved</h3>
+      <div class="metric-value" id="time-saved">{{ time_saved }} min</div>
+      <div class="trend up">
+        <i class="fas fa-arrow-up"></i>
+        <span>{{ (time_saved//60)|default(0) }} hours saved</span>
+      </div>
+    </div>
+
+    <div class="metric-card">
+      <i class="fas fa-brain metric-icon"></i>
+      <h3>AI Responder</h3>
+      <div class="metric-value">
+        {% if ai_enabled %}
+          <span class="status active"><i class="fas fa-check-circle"></i> Active</span>
+        {% else %}
+          <span class="status inactive"><i class="fas fa-exclamation-circle"></i> Inactive</span>
+        {% endif %}
+      </div>
+      <div class="trend {% if ai_enabled %}up{% else %}down{% endif %}">
+        {% if ai_enabled %}
+          <i class="fas fa-check-circle"></i> All systems operational
+        {% else %}
+          <i class="fas fa-exclamation-circle"></i> Service paused
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="metric-card">
+      <i class="fas fa-dollar-sign metric-icon"></i>
+      <h3>Monthly Revenue</h3>
+      <div class="metric-value" id="revenue">${{ "{:,.0f}".format(revenue|default(45230)) }}</div>
+      <div class="trend up">
+        <i class="fas fa-arrow-up"></i>
+        <span>{{ revenue_change|default(12) }}% from last month</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action Section -->
+  <div class="action-grid">
+    <div class="action-card">
+      <h3>Account Actions</h3>
+      <div class="action-buttons">
+        <form method="POST" action="/disconnect_gmail">
+          <input type="hidden" name="user_id" value="{{ user_id }}" />
+          <button type="submit" class="btn btn-danger">
+            <i class="fas fa-unlink"></i> Disconnect Gmail
+          </button>
+        </form>
+
+        {% if show_reconnect %}
+        <form action="/connect_gmail" method="GET">
+          <button class="btn btn-primary">
+            <i class="fas fa-link"></i> Reconnect Gmail
+          </button>
+        </form>
+        {% endif %}
+
+        <a href="#" class="btn btn-warning">
+          <i class="fas fa-rocket"></i> Upgrade Plan
+        </a>
+      </div>
+    </div>
+
+    <div class="action-card">
+      <h3>Lease Agreement Generator</h3>
+      <a href="/new_lease?user_id={{ user_id }}" class="btn btn-primary">
+        <i class="fas fa-file-contract"></i> New Lease
+      </a>
+      <small style="color:#ccc; display:block; margin-top:8px;">
+        Click to draft a new lease in your Gmail.
+      </small>
+    </div>
+  </div>
+</div>
