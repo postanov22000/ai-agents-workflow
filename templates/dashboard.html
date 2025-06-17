@@ -967,7 +967,10 @@ input:checked + .slider:before {
 
 
         <!-- Main Content -->
-        <div class="main-content">
+        <div class="main-content"
+         hx-get="/dashboard/home?user_id={{ user_id }}"
+         hx-trigger="load"
+         hx-swap="innerHTML">
             <h1>Welcome back, <span>{{ name }}</span> 👋</h1>
             
             <!-- Metrics Grid -->
