@@ -209,16 +209,31 @@ def dashboard_home():
     user_id = request.args.get("user_id")
     if not user_id:
         return "Missing user_id", 401
-    # Fetch profile, calculate emails_sent_today, time_saved, show_reconnect…
-    # … exactly as in your supplied route …
-    return render_template("partials/home.html",
-                           name=full_name,
-                           user_id=user_id,
-                           emails_sent=emails_sent_today,
-                           time_saved=time_saved,
-                           ai_enabled=ai_enabled,
-                           show_reconnect=show_reconnect,
-                           generate_leases=generate_leases)
+
+    resp = (
+        supabase.table("profiles")
+                .select("full_name, ai_enabled, email, generate_leases")
+                .eq("id", user_id)
+                .single()
+                .execute()
+    )
+    if resp.data is None:
+        return "Profile query error", 500
+
+    profile     = resp.data
+    name        = profile.get("full_name", "")     # <-- define `name`
+    ai_enabled  = profile.get("ai_enabled", True)
+    # …
+    return render_template(
+        "partials/home.html",
+        name=name,                # now matches your template
+        user_id=user_id,
+        emails_sent=emails_sent,
+        time_saved=time_saved,
+        ai_enabled=ai_enabled,
+        show_reconnect=show_reconnect,
+        generate_leases=generate_leases,
+    )
 
 
 
