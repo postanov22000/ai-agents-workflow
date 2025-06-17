@@ -962,6 +962,15 @@ input:checked + .slider:before {
     hx-swap="innerHTML">
     <i class="fas fa-cog"></i> Settings
   </div>
+
+ <div
+  class="nav-item active"
+  hx-get="/dashboard/home?user_id={{ user_id }}"
+  hx-target=".main-content"
+  hx-swap="innerHTML">
+  <i class="fas fa-home"></i> Dashboard
+</div>
+
 </div>
 
 
