@@ -56,7 +56,7 @@ def trigger_autopilot():
     for file_path in kit_zip:
         key_name = os.path.basename(file_path)
         with open(file_path, "rb") as f:
-            res = supabase.storage.from_("closing_kits").upload(key_name, f)
+            res = supabase.storage.from_("closing-kits").upload(key_name, f)
             uploaded.append(res.get("Key"))
 
     return jsonify({"status": "success", "files": uploaded})
