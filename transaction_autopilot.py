@@ -6,7 +6,6 @@ from supabase import create_client
 from docxtpl import DocxTemplate
 import pytesseract
 from pdf2image import convert_from_path
-import spacy
 
 # Initialize logging
 logger = logging.getLogger(__name__)
@@ -20,13 +19,10 @@ def get_supabase_client():
 
 supabase = get_supabase_client()
 
-# Load NLP model
-nlp = spacy.load("en_core_web_sm")
-
 # Blueprint for Transaction Autopilot
 bp = Blueprint("transaction_autopilot", __name__)
 
-@bp.route("/autopilot/trigger", methods=["POST"])
+@bp.route("/trigger", methods=["POST"])
 def trigger_autopilot():
     payload = request.json or {}
     transaction_type = payload.get("transaction_type", "generic")
@@ -35,15 +31,13 @@ def trigger_autopilot():
     # 1. Generate LOI/PSA
     docs = []
     try:
-        loi_path = generate_document("loi_template.docx", data, "LOI")
-        docs.append(loi_path)
-        psa_path = generate_document("psa_template.docx", data, "PSA")
-        docs.append(psa_path)
+        docs.append(generate_document("loi_template.docx", data, "LOI"))
+        docs.append(generate_document("psa_template.docx", data, "PSA"))
     except Exception as e:
         logger.error(f"Document assembly failed: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-    # 2. Run error-hunting AI
+    # 2. Run error-hunting via keyword scanning
     errors = error_hunting(docs)
     if errors:
         logger.warning(f"Errors detected: {errors}")
@@ -81,18 +75,16 @@ def generate_document(template_name: str, context: dict, prefix: str) -> str:
 
 def error_hunting(doc_paths: list) -> dict:
     """
-    Uses OCR + NLP to scan docs for missing clauses or errors.
+    Uses OCR to scan docs for missing required keywords.
     Returns a dict mapping file paths to lists of missing keywords.
     """
     results = {}
     for path in doc_paths:
-        # Convert to images
         pages = convert_from_path(path)
-        text = "".join(pytesseract.image_to_string(page) for page in pages)
-        # Simple keyword checks
+        text = "".join(pytesseract.image_to_string(page) for page in pages).lower()
         missing = []
         for keyword in ["signature", "date", "buyer", "seller"]:
-            if keyword not in text.lower():
+            if keyword not in text:
                 missing.append(keyword)
         if missing:
             results[path] = missing
@@ -106,13 +98,11 @@ def bundle_closing_kit(transaction_type: str, docs: list) -> list:
     kit_dir = os.path.join("/tmp", f"kit_{transaction_type}")
     os.makedirs(kit_dir, exist_ok=True)
     for doc in docs:
-        target = os.path.join(kit_dir, os.path.basename(doc))
-        os.replace(doc, target)
+        os.replace(doc, os.path.join(kit_dir, os.path.basename(doc)))
 
     zip_path = os.path.join("/tmp", f"{transaction_type}_closing_kit.zip")
     with zipfile.ZipFile(zip_path, "w") as zf:
         for fname in os.listdir(kit_dir):
-            fpath = os.path.join(kit_dir, fname)
-            zf.write(fpath, arcname=fname)
+            zf.write(os.path.join(kit_dir, fname), arcname=fname)
     logger.info(f"Closing kit created at {zip_path}")
     return [zip_path]
