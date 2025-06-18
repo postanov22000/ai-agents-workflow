@@ -839,6 +839,40 @@ def trigger_process():
 
 
 
+@app.route("/autopilot/batch", methods=["POST"])
+def batch_autopilot():
+    # 1) Fetch all transactions ready for kit
+    txns = supabase.table("transactions") \
+                   .select("*") \
+                   .eq("ready_for_kit", True) \
+                   .eq("kit_generated", False) \
+                   .execute().data or []
+
+    results = []
+    for t in txns:
+        payload = {
+          "transaction_type": t["transaction_type"],
+          "data": {
+            "id": t["id"],
+            "buyer": t["buyer"],
+            "seller": t["seller"],
+            "date": t["date"],
+            "purchase_price": t["purchase_price"],
+            "closing_date": t.get("closing_date"),
+            "closing_location": t.get("closing_location")
+          }
+        }
+        resp = requests.post(f"{os.environ.get('BASE_URL')}/autopilot/trigger", json=payload)
+        results.append({"id": t["id"], "status": resp.status_code})
+        if resp.ok:
+            supabase.table("transactions") \
+                    .update({"kit_generated": True}) \
+                    .eq("id", t["id"]) \
+                    .execute()
+
+    return jsonify(results), 200
+
+
 
 # ---------------------------------------------------------------------------
 
