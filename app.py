@@ -839,6 +839,16 @@ def trigger_process():
 
 
 
+@app.route("/transaction/<txn_id>/ready", methods=["POST"])
+def mark_ready(txn_id):
+    supabase.table("transactions")\
+            .update({"ready_for_kit": True})\
+            .eq("id", txn_id)\
+            .execute()
+    return "", 204
+
+
+
 @app.route("/autopilot/batch", methods=["POST"])
 def batch_autopilot():
     # 1) Fetch all transactions ready for kit
