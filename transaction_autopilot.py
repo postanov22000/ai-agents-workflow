@@ -14,7 +14,9 @@ logging.basicConfig(level=logging.INFO)
 # Supabase client setup
 def get_supabase_client():
     url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_KEY")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+    if not url or not key:
+        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
     return create_client(url, key)
 
 supabase = get_supabase_client()
@@ -52,9 +54,9 @@ def trigger_autopilot():
     # 4. Upload to Supabase Storage
     uploaded = []
     for file_path in kit_zip:
-        key = os.path.basename(file_path)
+        key_name = os.path.basename(file_path)
         with open(file_path, "rb") as f:
-            res = supabase.storage.from_("closing_kits").upload(key, f)
+            res = supabase.storage.from_("closing_kits").upload(key_name, f)
             uploaded.append(res.get("Key"))
 
     return jsonify({"status": "success", "files": uploaded})
