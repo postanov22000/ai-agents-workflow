@@ -1,8 +1,9 @@
-name: Email Processing Scheduler
+name: Email & Autopilot Scheduler
 
 on:
   schedule:
-    - cron: '*/5 * * * *'  # Every 5 minutes
+    - cron: '*/5 * * * *'    # Gmail polling + processing every 5m
+    - cron: '0 2 * * *'      # Autopilot batch once daily at 2:00 AM
   workflow_dispatch:
 
 permissions:
@@ -36,7 +37,6 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
           python poll_gmail.py
-          # always succeed this step, and publish a dummy output
           echo "status=success" >> $GITHUB_OUTPUT
 
   trigger-processing:
@@ -45,10 +45,25 @@ jobs:
     steps:
       - name: Trigger Main Processing Endpoint
         run: |
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "https://replyzeai.onrender.com/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://replyzeai.onrender.com/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
           echo "HTTP status: $RESPONSE"
-          # accept both 200 (processed) and 204 (nothing to do) as success
           if [[ "$RESPONSE" != "200" && "$RESPONSE" != "204" ]]; then
             echo "::error::Processing failed with status: $RESPONSE"
+            exit 1
+          fi
+
+  run-autopilot-batch:
+    # Depends on trigger-processing; skips if processing fails
+    needs: trigger-processing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Autopilot Batch
+        run: |
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "https://replyzeai.onrender.com/autopilot/batch")
+          echo "Autopilot Batch HTTP status: $HTTP_STATUS"
+          if [[ "$HTTP_STATUS" != "200" ]]; then
+            echo "::error::Autopilot batch failed with status: $HTTP_STATUS"
             exit 1
           fi
