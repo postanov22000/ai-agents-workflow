@@ -18,6 +18,8 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 import google.auth.transport.requests as grequests
 
+from transaction_autopilot import bp as autopilot_bp
+
 app = Flask(__name__, template_folder="templates")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
 
@@ -839,5 +841,8 @@ def trigger_process():
 
 
 # ---------------------------------------------------------------------------
+
+app.register_blueprint(autopilot_bp, url_prefix="/autopilot")
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
