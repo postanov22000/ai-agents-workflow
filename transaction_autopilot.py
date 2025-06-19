@@ -54,9 +54,23 @@ def trigger_autopilot():
         name = os.path.basename(path)
         with open(path, "rb") as f:
             res = supabase.storage.from_("closing-kits").upload(name, f)
-            uploaded.append(res.get("Key"))
+            # extract Key from response
+            key = None
+            try:
+                # supabase-py may return a dict
+                if isinstance(res, dict):
+                    key = res.get("Key") or res.get("key")
+                else:
+                    data = res.json()
+                    key = data.get("Key") or data.get("key")
+            except Exception as e:
+                logger.error(f"Failed to parse upload response for {name}: {e}")
+            if not key:
+                # fallback: use storage URL path
+                key = name
+            uploaded.append(key)
 
-    return jsonify({"status": "success", "files": uploaded}), 200
+    return jsonify({"status": "success", "files": uploaded}), 200({"status": "success", "files": uploaded}), 200
 
 
 def generate_document(template_name: str, context: dict, prefix: str) -> str:
