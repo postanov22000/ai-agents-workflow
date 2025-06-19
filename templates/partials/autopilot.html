@@ -39,10 +39,10 @@
       id="generate-autopilot"
       class="btn btn-primary"
       hx-post="/autopilot/trigger"
-      hx-params="{
-        'transaction_type': '{{ current_transaction.transaction_type }}',
-        'data': {{ current_transaction | tojson }}
-      }"
+      hx-vals='{
+        "transaction_type": "{{ current_transaction.transaction_type }}",
+        "data": {{ current_transaction | tojson }}
+      }'
       hx-target="#autopilot-result"
       hx-swap="innerHTML"
     >
