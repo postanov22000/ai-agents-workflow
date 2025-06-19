@@ -885,9 +885,30 @@ def batch_autopilot():
 
 @app.route("/dashboard/autopilot")
 def dashboard_autopilot():
-    # Pull in whatever context you need (e.g. the current transaction)
-    transaction = supabase.table("transactions").select("*").eq("id", request.args.get("txn_id")).single().execute().data
-    return render_template("partials/autopilot.html", current_transaction=transaction)
+    user_id = request.args.get("user_id") or abort(401)
+    txn_id  = request.args.get("txn_id")
+    # Fetch all the user’s transactions so the dropdown can populate
+    transactions = (
+        supabase.table("transactions")
+                .select("*")
+                .eq("user_id", user_id)
+                .execute()
+                .data
+        or []
+    )
+    current_txn = None
+    if txn_id:
+        # safe .single() only if exists
+        resp = supabase.table("transactions").select("*").eq("id", txn_id).execute()
+        current_txn = resp.data[0] if resp.data else None
+
+    return render_template(
+        "partials/autopilot.html",
+        user_id=user_id,
+        transactions=transactions,
+        current_transaction=current_txn
+    )
+
 
 # ---------------------------------------------------------------------------
 
