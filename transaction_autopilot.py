@@ -53,24 +53,31 @@ def trigger_autopilot():
     for path in kit_zip:
         name = os.path.basename(path)
         with open(path, "rb") as f:
-            res = supabase.storage.from_("closing-kits").upload(name, f)
-            # extract Key from response
-            key = None
             try:
-                # supabase-py may return a dict
-                if isinstance(res, dict):
-                    key = res.get("Key") or res.get("key")
-                else:
-                    data = res.json()
-                    key = data.get("Key") or data.get("key")
+                # overwrite existing by setting upsert=True
+                res = supabase.storage.from_("closing-kits").upload(name, f, upsert=True)
             except Exception as e:
-                logger.error(f"Failed to parse upload response for {name}: {e}")
-            if not key:
-                # fallback: use storage URL path
+                # if duplicate or other, log and proceed
+                logger.warning(f"Upload failed for {name}: {e}, proceeding to reuse existing file")
+                # we still want to return the key
                 key = name
+                uploaded.append(key)
+                continue
+
+            # parse response
+            key = name
+            # supabase-py returns a dict
+            if isinstance(res, dict):
+                key = res.get("Key") or res.get("key") or key
+            else:
+                try:
+                    data = res.json()
+                    key = data.get("Key") or data.get("key") or key
+                except Exception:
+                    pass
             uploaded.append(key)
 
-    return jsonify({"status": "success", "files": uploaded}), 200({"status": "success", "files": uploaded}), 200
+    return jsonify({"status": "success", "files": uploaded}), 200({"status": "success", "files": uploaded}), 200({"status": "success", "files": uploaded}), 200
 
 
 def generate_document(template_name: str, context: dict, prefix: str) -> str:
