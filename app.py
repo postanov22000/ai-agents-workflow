@@ -883,6 +883,11 @@ def batch_autopilot():
     return jsonify(results), 200
 
 
+@app.route("/dashboard/autopilot")
+def dashboard_autopilot():
+    # Pull in whatever context you need (e.g. the current transaction)
+    transaction = supabase.table("transactions").select("*").eq("id", request.args.get("txn_id")).single().execute().data
+    return render_template("partials/autopilot.html", current_transaction=transaction)
 
 # ---------------------------------------------------------------------------
 
