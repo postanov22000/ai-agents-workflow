@@ -108,3 +108,4 @@ def bundle_closing_kit(transaction_type: str, docs: list) -> list:
             zf.write(os.path.join(kit_dir, fname), arcname=fname)
     logger.info(f"Closing kit created at {zip_path}")
     return [zip_path]
+ 
