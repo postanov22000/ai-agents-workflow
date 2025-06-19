@@ -155,6 +155,10 @@ def dashboard():
         generate_leases=generate_leases,
     )
 
+@app.route("/dashboard/new_transaction")
+def dashboard_new_transaction():
+    user_id = request.args.get("user_id") or abort(401)
+    return render_template("partials/new_transaction.html", user_id=user_id)
 
 
 @app.route("/dashboard/analytics")
