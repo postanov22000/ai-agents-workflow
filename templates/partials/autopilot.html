@@ -28,7 +28,7 @@
 
   {% else %}
     <!-- Step 2: Show details & generate kit -->
-    <div class="transaction-details" style="margin-bottom:16px;">
+    <div class="transaction-details mb-3">
       <strong>ID:</strong> {{ current_transaction.id }}<br>
       <strong>Type:</strong> {{ current_transaction.transaction_type }}<br>
       <strong>Property:</strong> {{ current_transaction.property_address }}<br>
@@ -38,19 +38,29 @@
     <button
       id="generate-autopilot"
       class="btn btn-primary"
-      hx-post="/autopilot/trigger?user_id={{ user_id }}"
-      hx-vals='{
-        "transaction_type": "{{ current_transaction.transaction_type }}",
-        "data": {{ current_transaction | tojson }}
-      }'
+      hx-post="/autopilot/trigger"
+      hx-params="{
+        'transaction_type': '{{ current_transaction.transaction_type }}',
+        'data': {{ current_transaction | tojson }}
+      }"
       hx-target="#autopilot-result"
       hx-swap="innerHTML"
     >
-      <i class="fas fa-sync-alt"></i>
-      Generate Closing Kit
+      <i class="fas fa-sync-alt"></i> Generate Closing Kit
     </button>
 
-    <!-- Step 3: where we inject the download link -->
-    <div id="autopilot-result" style="margin-top:16px;"></div>
+    <!-- Step 3: placeholder for the download link -->
+    <div id="autopilot-result" class="mt-3"></div>
+
+    <!-- If we already have a URL on the transaction, show it immediately -->
+    {% if current_transaction.kit_url %}
+      <div class="mt-3">
+        <a href="{{ current_transaction.kit_url }}"
+           class="btn btn-success"
+           target="_blank">
+          <i class="fas fa-download"></i> Download Closing Kit
+        </a>
+      </div>
+    {% endif %}
   {% endif %}
 </div>
