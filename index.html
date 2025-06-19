@@ -6,6 +6,7 @@
     <title>ReplyzeCRE: AI-Powered Email Automation for Commercial Real Estate Brokers</title>
     <meta name="description" content="NAR-certified AI email solution for CRE professionals. Automate lease negotiations, RFPs, and tenant communications. 2,500 free emails/month. Limited broker access.">
     <link rel="canonical" href="https://replyzeai.netlify.app/cre">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <meta property="og:title" content="🏢 AI Lease Negotiator: Close 3x More Deals (Free for CRE Brokers)">
     <meta property="og:description" content="Next 247 commercial agents get AI that automates tenant comms & LOI drafting - free forever. Join CBRE & JLL teams.">
     <meta property="og:image" content="https://replyzeai.netlify.app/og-replyzecre.jpg">
@@ -28,6 +29,7 @@
       }
     }
     </script>
+  
     <style>
         /* Core Animations */
         @keyframes gradientBG {
@@ -57,7 +59,7 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Arial', sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
         body {
@@ -93,6 +95,7 @@
             transition: all 0.4s;
             transform: translateY(-100%);
             animation: slideDown 0.8s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+            border-bottom: 1px solid rgba(100, 255, 218, 0.1);
         }
 
         @keyframes slideDown {
@@ -107,167 +110,112 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             text-shadow: 0 0 25px rgba(100, 255, 218, 0.3);
+            letter-spacing: -0.5px;
         }
 
-    /* Add this to your existing CSS */
-    .cta-button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 1rem 2.5rem;
-        border-radius: 50px;
-        font-weight: 700;
-        text-decoration: none;
-        transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
-        position: relative;
-        overflow: hidden;
-        border: 2px solid #64ffda;
-        background: linear-gradient(135deg, #64ffda 0%, #52d1b8 100%);
-        color: #0a192f;
-        box-shadow: 0 4px 25px rgba(100, 255, 218, 0.3);
-        transform: translateY(0);
-    }
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+        }
 
-    .cta-button:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 8px 35px rgba(100, 255, 218, 0.5);
-        background: linear-gradient(135deg, #73ffe1 0%, #61e8cf 100%);
-    }
+        .nav-links a {
+            color: #8892b0;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            position: relative;
+        }
 
-    .cta-button:active {
-        transform: translateY(1px);
-        box-shadow: 0 2px 15px rgba(100, 255, 218, 0.2);
-    }
+        .nav-links a:hover {
+            color: #64ffda;
+        }
 
-    .cta-button::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 200%;
-        height: 100%;
-        background: linear-gradient(
-            90deg,
-            transparent,
-            rgba(255,255,255,0.2),
-            transparent
-        );
-        transition: 0.4s;
-    }
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: #64ffda;
+            transition: width 0.3s ease;
+        }
 
-    .cta-button:hover::before {
-        left: 100%;
-    }
-
-    /* Main CTA specific styles */
-    .hero .cta-button {
-        font-size: 1.2rem;
-        padding: 1.25rem 3rem;
-        animation: pulseCRE 2s infinite;
-    }
-
-    /* Navigation button specific styles */
-        
-    .nav .cta-button {
-        background: transparent;
-        border: 2px solid #64ffda;
-        color: #64ffda;
-        padding: 0.8rem 1.5rem;
-        margin-left: 1rem;
-        box-shadow: none;
-    }
-
-    .nav .cta-button:hover {
-        background: rgba(100, 255, 218, 0.1);
-        box-shadow: 0 0 25px rgba(100, 255, 218, 0.2);
-    }
-
-    @keyframes pulseCRE {
-        0% { transform: translateY(0) scale(1); }
-        50% { transform: translateY(0) scale(1.05); }
-        100% { transform: translateY(0) scale(1); }
-    }
-
-    @media (max-width: 768px) {
-        .nav .cta-button {
-            margin: 0.5rem 0;
+        .nav-links a:hover::after {
             width: 100%;
-            text-align: center;
         }
-        
-        .hero .cta-button {
-            width: 100%;
-            max-width: 300px;
+
+        .cta-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.9rem 2rem;
+            border-radius: 50px;
+            font-weight: 700;
+            text-decoration: none;
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+            position: relative;
+            overflow: hidden;
+            border: 2px solid #64ffda;
+            background: linear-gradient(135deg, #64ffda 0%, #52d1b8 100%);
+            color: #0a192f;
+            box-shadow: 0 4px 25px rgba(100, 255, 218, 0.3);
+            transform: translateY(0);
+            font-size: 1rem;
         }
-    }
-        .highlights-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 2rem;
-        padding: 4rem 8%;
-        position: relative;
-        z-index: 1;
-    }
 
-    .highlight-card {
-        background: rgba(16, 36, 64, 0.6);
-        border-radius: 15px;
-        padding: 2rem;
-        border: 1px solid rgba(100, 255, 218, 0.2);
-        transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
-        transform-style: preserve-3d;
-    }
-
-    .highlight-card:hover {
-        transform: translateZ(20px) rotateX(-3deg) rotateY(3deg);
-        box-shadow: 0 15px 30px rgba(10, 25, 47, 0.4);
-        background: rgba(16, 36, 64, 0.8);
-    }
-
-    .highlight-icon {
-        font-size: 2.5rem;
-        margin-bottom: 1.5rem;
-        text-shadow: 0 0 25px rgba(100, 255, 218, 0.3);
-        transform: translateZ(30px);
-    }
-
-    .highlight-card h3 {
-        color: #64ffda;
-        margin-bottom: 1rem;
-        font-size: 1.4rem;
-    }
-
-    .highlight-card p {
-        color: #8892b0;
-        line-height: 1.6;
-        font-size: 1rem;
-    }
-
-    @media (max-width: 768px) {
-        .highlights-grid {
-            grid-template-columns: 1fr;
-            padding: 2rem 5%;
+        .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 35px rgba(100, 255, 218, 0.5);
+            background: linear-gradient(135deg, #73ffe1 0%, #61e8cf 100%);
         }
-        
-        .highlight-card {
-            margin-bottom: 1.5rem;
+
+        .cta-button:active {
+            transform: translateY(1px);
+            box-shadow: 0 2px 15px rgba(100, 255, 218, 0.2);
         }
-    }
+
+        .cta-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 200%;
+            height: 100%;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(255,255,255,0.2),
+                transparent
+            );
+            transition: 0.4s;
+        }
+
+        .cta-button:hover::before {
+            left: 100%;
+        }
+
         /* Hero Section */
         .hero {
             padding: 15rem 8% 8rem;
             text-align: center;
             position: relative;
             overflow: hidden;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         }
 
         .hero h1 {
-            font-size: 4rem;
-            margin-bottom: 2rem;
+            font-size: 3.5rem;
+            margin-bottom: 1.5rem;
             line-height: 1.1;
             transform: translateY(50px);
             opacity: 0;
             animation: slideUp 1s cubic-bezier(0.23, 1, 0.32, 1) 0.3s forwards;
+            max-width: 900px;
         }
 
         @keyframes slideUp {
@@ -281,6 +229,15 @@
             transform: translateY(30px);
             opacity: 0;
             animation: slideUp 0.8s ease 0.5s forwards;
+            max-width: 700px;
+            line-height: 1.6;
+        }
+
+        .hero .cta-button {
+            font-size: 1.1rem;
+            padding: 1.2rem 3rem;
+            animation: pulseCRE 2s infinite;
+            margin-bottom: 4rem;
         }
 
         /* 3D Interactive Demo */
@@ -288,6 +245,7 @@
             max-width: 1000px;
             margin: 4rem auto;
             perspective: 2000px;
+            width: 100%;
         }
 
         .demo-box {
@@ -298,6 +256,8 @@
             transition: all 0.8s cubic-bezier(0.23, 1, 0.32, 1);
             position: relative;
             overflow: hidden;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(100, 255, 218, 0.15);
         }
 
         .demo-box::before {
@@ -333,6 +293,10 @@
             padding: 2rem;
             position: relative;
             transform: translateZ(30px);
+            min-height: 180px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .typing-effect {
@@ -342,247 +306,360 @@
             white-space: nowrap;
             overflow: hidden;
             animation: typing 8s steps(40) infinite;
+            font-size: 1.2rem;
+            padding-right: 5px;
         }
 
-        /* the before and after images */
-
+        /* Image Gallery */
         .image-gallery {
-        padding: 6rem 8%;
-        position: relative;
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .gallery-container {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 3rem;
-        max-width: 1200px;
-        margin: 0 auto;
-    }
-
-    .gallery-item {
-        position: relative;
-        border-radius: 15px;
-        overflow: hidden;
-        transform-style: preserve-3d;
-        transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
-        opacity: 0;
-        transform: translateY(30px);
-        border: 1px solid #64ffda33;
-        box-shadow: 0 25px 50px rgba(10, 25, 47, 0.5);
-        perspective: 1000px;
-    }
-
-    /* Scroll-triggered fade-in */
-    .gallery-item[data-scroll="in"] {
-        opacity: 1;
-        transform: translateY(0);
-    }
-
-    /* First image - Portrait (545×807) */
-    .gallery-item:first-child {
-        width: 545px;
-        height: 807px;
-    }
-
-    /* Second image - Square (1:1) */
-    .gallery-item:last-child {
-        width: 545px;
-        height: 545px;
-        align-self: center;
-    }
-
-    .gallery-item img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        border-radius: 13px;
-        transition: transform 0.8s cubic-bezier(0.23, 1, 0.32, 1);
-    }
-
-    /* 3D Hover Effects */
-    .gallery-item:hover {
-        box-shadow: 0 35px 60px rgba(100, 255, 218, 0.15);
-    }
-
-    .gallery-item:hover img {
-        transform: scale(1.03);
-    }
-
-    .gallery-item::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(45deg, transparent, #64ffda11, transparent);
-        opacity: 0;
-        transition: opacity 0.6s ease;
-        z-index: 2;
-    }
-
-    .gallery-item:hover::before {
-        opacity: 1;
-    }
-
-    .image-overlay {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        padding: 2rem;
-        background: linear-gradient(transparent, #0a192fee);
-        transform: translateY(20px);
-        opacity: 0;
-        transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
-    }
-
-    .gallery-item:hover .image-overlay {
-        transform: translateY(0);
-        opacity: 1;
-    }
-
-    .image-caption {
-        color: #64ffda;
-        font-size: 1.3rem;
-        font-weight: 600;
-        text-shadow: 0 2px 10px rgba(10, 25, 47, 0.8);
-        transform: translateY(10px);
-        transition: transform 0.6s 0.1s cubic-bezier(0.23, 1, 0.32, 1);
-    }
-
-    .gallery-item:hover .image-caption {
-        transform: translateY(0);
-    }
-
-    /* Responsive adjustments */
-    @media (max-width: 1200px) {
-        .gallery-container {
-            grid-template-columns: 1fr;
-            gap: 2rem;
+            padding: 6rem 8%;
+            position: relative;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(10, 25, 47, 0.6);
         }
-        
-        .gallery-item:first-child,
-        .gallery-item:last-child {
-            width: 100%;
-            max-width: 545px;
+
+        .gallery-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 3rem;
+            max-width: 1200px;
             margin: 0 auto;
         }
-        
-        .gallery-item:first-child {
-            aspect-ratio: 545/807;
-            height: auto;
-        }
-        
-        .gallery-item:last-child {
-            aspect-ratio: 1/1;
-            height: auto;
-        }
-    }
 
-        /* where it was featured the right ward animations */
+        .gallery-item {
+            position: relative;
+            border-radius: 15px;
+            overflow: hidden;
+            transform-style: preserve-3d;
+            transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+            opacity: 0;
+            transform: translateY(30px);
+            border: 1px solid #64ffda33;
+            box-shadow: 0 25px 50px rgba(10, 25, 47, 0.5);
+            perspective: 1000px;
+            height: 500px;
+        }
 
-.brand-logo {
-    filter: brightness(0) saturate(100%) invert(89%) sepia(21%) saturate(1153%) hue-rotate(102deg) brightness(105%) contrast(101%);
-    transition: all 0.3s ease;
-    height: 35px; /* Uniform height */
-}
-        
+        .gallery-item[data-scroll="in"] {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .gallery-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 13px;
+            transition: transform 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+
+        .gallery-item:hover {
+            box-shadow: 0 35px 60px rgba(100, 255, 218, 0.15);
+        }
+
+        .gallery-item:hover img {
+            transform: scale(1.03);
+        }
+
+        .gallery-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, transparent, #64ffda11, transparent);
+            opacity: 0;
+            transition: opacity 0.6s ease;
+            z-index: 2;
+        }
+
+        .gallery-item:hover::before {
+            opacity: 1;
+        }
+
+        .image-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 2rem;
+            background: linear-gradient(transparent, #0a192fee);
+            transform: translateY(20px);
+            opacity: 0;
+            transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+            z-index: 3;
+        }
+
+        .gallery-item:hover .image-overlay {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .image-caption {
+            color: #64ffda;
+            font-size: 1.8rem;
+            font-weight: 700;
+            text-shadow: 0 2px 10px rgba(10, 25, 47, 0.8);
+            transform: translateY(10px);
+            transition: transform 0.6s 0.1s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+
+        .gallery-item:hover .image-caption {
+            transform: translateY(0);
+        }
+
+        /* Trusted By Section */
         .featured-on {
-        padding: 4rem 0;
-        background: rgba(10, 25, 47, 0.8);
-        position: relative;
-        overflow: hidden;
-        border-top: 1px solid rgba(100, 255, 218, 0.1);
-        border-bottom: 1px solid rgba(100, 255, 218, 0.1);
-    }
-
-    .section-title {
-        text-align: center;
-        color: #64ffda;
-        font-size: 1.2rem;
-        letter-spacing: 3px;
-        text-transform: uppercase;
-        margin-bottom: 2rem;
-        opacity: 0;
-        transform: translateY(30px);
-        transition: all 0.8s cubic-bezier(0.23, 1, 0.32, 1);
-    }
-
-    .logos-scroll {
-        position: relative;
-        width: 100%;
-        overflow: hidden;
-    }
-
-    .logos-track {
-        display: flex;
-        width: 200%;
-        animation: scrollRight 40s linear infinite;
-    }
-
-    .logo-item {
-        padding: 0 4rem;
-        display: flex;
-        align-items: center;
-        font-weight: 700;
-        font-size: 1.5rem;
-        filter: drop-shadow(0 0 15px rgba(100, 255, 218, 0.2));
-        transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
-    }
-
-    .logo-item:hover {
-        transform: translateY(-5px) scale(1.1);
-        filter: drop-shadow(0 0 25px rgba(100, 255, 218, 0.4));
-    }
-
-    @keyframes scrollRight {
-        0% { transform: translateX(0); }
-        100% { transform: translateX(-50%); }
-    }
-
-    /* Custom Logo Styling */
-    .ph-logo {
-        width: 180px;
-        height: 40px;
-    }
-
-    .tc-logo {
-        height: 30px;
-        filter: brightness(0) saturate(100%) invert(89%) sepia(21%) saturate(1153%) hue-rotate(102deg) brightness(105%) contrast(101%);
-    }
-
-    @media (max-width: 768px) {
-        .logos-track {
-            animation-duration: 25s;
+            padding: 5rem 0;
+            position: relative;
+            overflow: hidden;
+            border-top: 1px solid rgba(100, 255, 218, 0.1);
+            border-bottom: 1px solid rgba(100, 255, 218, 0.1);
         }
-        
-        .logo-item {
-            padding: 0 2rem;
+
+        .section-title {
+            text-align: center;
+            color: #64ffda;
             font-size: 1.2rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 3rem;
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.8s cubic-bezier(0.23, 1, 0.32, 1);
         }
-    }
 
-        /* 3D Feature Cards */
-        .features-grid {
+        .logos-scroll {
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .logos-track {
+            display: flex;
+            width: 200%;
+            animation: scrollRight 40s linear infinite;
+        }
+
+        .logo-item {
+            padding: 0 4rem;
+            display: flex;
+            align-items: center;
+            font-weight: 700;
+            font-size: 1.8rem;
+            filter: drop-shadow(0 0 15px rgba(100, 255, 218, 0.2));
+            transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+            color: #64ffda;
+        }
+
+        .logo-item:hover {
+            transform: translateY(-5px) scale(1.1);
+            filter: drop-shadow(0 0 25px rgba(100, 255, 218, 0.4));
+        }
+
+        @keyframes scrollRight {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+
+        /* Testimonials */
+        .testimonials {
+            padding: 8rem 8%;
+            background: linear-gradient(45deg, #0a192fdd, #112240dd);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .testimonials h2 {
+            text-align: center;
+            color: #64ffda;
+            font-size: 2.5rem;
+            margin-bottom: 5rem;
+            font-weight: 700;
+        }
+
+        .testimonials-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 3rem;
+            position: relative;
+            z-index: 2;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .testimonial-card {
+            background: rgba(16, 36, 64, 0.6);
+            border-radius: 15px;
+            padding: 2.5rem;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+            border: 1px solid #64ffda33;
+            backdrop-filter: blur(10px);
+        }
+
+        .testimonial-card:hover {
+            transform: translateZ(20px) rotateX(-5deg) rotateY(5deg);
+            box-shadow: 0 25px 50px #64ffda0d;
+        }
+
+        .testimonial-quote {
+            position: absolute;
+            top: -20px;
+            right: 20px;
+            opacity: 0.3;
+        }
+
+        .testimonial-text {
+            color: #8892b0;
+            line-height: 1.7;
+            margin-bottom: 1.5rem;
+            font-size: 1.1rem;
+            font-style: italic;
+        }
+
+        .testimonial-author {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            border-top: 1px solid #64ffda1a;
+            padding-top: 1.5rem;
+        }
+
+        .client-photo {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            border: 2px solid #64ffda;
+            object-fit: cover;
+            background: #0a192f;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            color: #64ffda;
+        }
+
+        .client-name {
+            color: #ffffff;
+            margin-bottom: 0.3rem;
+            font-size: 1.3rem;
+        }
+
+        .client-role {
+            color: #8892b0;
+            font-size: 1rem;
+            line-height: 1.4;
+        }
+
+        .testimonial-badge {
+            position: absolute;
+            bottom: -15px;
+            right: 20px;
+            background: #64ffda;
+            color: #0a192f;
+            padding: 0.5rem 1.5rem;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 1rem;
+            box-shadow: 0 5px 15px #64ffda33;
+        }
+
+        /* Highlights */
+        .highlights {
+            padding: 8rem 8%;
+            background: rgba(10, 25, 47, 0.6);
+        }
+
+        .highlights h2 {
+            text-align: center;
+            color: #64ffda;
+            font-size: 2.5rem;
+            margin-bottom: 5rem;
+            font-weight: 700;
+        }
+
+        .highlights-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 3rem;
-            padding: 4rem 8%;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .highlight-card {
+            background: rgba(16, 36, 64, 0.6);
+            border-radius: 15px;
+            padding: 2.5rem;
+            border: 1px solid rgba(100, 255, 218, 0.2);
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+            transform-style: preserve-3d;
+            text-align: center;
+        }
+
+        .highlight-card:hover {
+            transform: translateZ(20px) rotateX(-3deg) rotateY(3deg);
+            box-shadow: 0 15px 30px rgba(10, 25, 47, 0.4);
+            background: rgba(16, 36, 64, 0.8);
+        }
+
+        .highlight-icon {
+            font-size: 3.5rem;
+            margin-bottom: 1.5rem;
+            text-shadow: 0 0 25px rgba(100, 255, 218, 0.3);
+            transform: translateZ(30px);
+            color: #64ffda;
+        }
+
+        .highlight-card h3 {
+            color: #64ffda;
+            margin-bottom: 1.5rem;
+            font-size: 1.6rem;
+        }
+
+        .highlight-card p {
+            color: #8892b0;
+            line-height: 1.6;
+            font-size: 1.1rem;
+        }
+
+        /* Features */
+        .features {
+            padding: 8rem 8%;
+            background: linear-gradient(45deg, #0a192fdd, #112240dd);
+        }
+
+        .features h2 {
+            text-align: center;
+            color: #64ffda;
+            font-size: 2.5rem;
+            margin-bottom: 5rem;
+            font-weight: 700;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 3rem;
+            max-width: 1400px;
+            margin: 0 auto;
         }
 
         .feature-card {
-            background: rgba(16, 36, 64, 0.4);
+            background: rgba(16, 36, 64, 0.6);
             border-radius: 20px;
             padding: 2.5rem;
             transform-style: preserve-3d;
             transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
             position: relative;
             cursor: pointer;
+            text-align: center;
+            border: 1px solid rgba(100, 255, 218, 0.2);
         }
 
         .feature-card:hover {
@@ -591,28 +668,205 @@
         }
 
         .feature-icon {
-            width: 80px;
-            height: 80px;
+            width: 100px;
+            height: 100px;
             background: rgba(100, 255, 218, 0.1);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 2rem;
-            margin: 0 auto 1.5rem;
+            font-size: 2.5rem;
+            margin: 0 auto 2rem;
             transform: translateZ(40px);
+            color: #64ffda;
         }
 
-    
+        .feature-card h3 {
+            color: #64ffda;
+            margin-bottom: 1.5rem;
+            font-size: 1.6rem;
+        }
 
-        /* Interactive Particles */
-        .particle {
-            position: fixed;
-            background: rgba(100, 255, 218, 0.1);
+        .feature-card p {
+            color: #8892b0;
+            line-height: 1.6;
+            font-size: 1.1rem;
+        }
+
+        /* Footer */
+        .enterprise-footer {
+            background: rgba(10, 25, 47, 0.95);
+            border-top: 1px solid rgba(100, 255, 218, 0.15);
+            padding: 5rem 8% 2rem;
+            position: relative;
+            overflow: hidden;
+            z-index: 10;
+            backdrop-filter: blur(10px);
+        }
+        
+        .footer-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 3rem;
+            max-width: 1400px;
+            margin: 0 auto 3rem;
+        }
+        
+        .footer-column {
+            position: relative;
+            z-index: 2;
+        }
+        
+        .footer-title {
+            color: #64ffda;
+            font-size: 1.3rem;
+            margin-bottom: 1.5rem;
+            position: relative;
+            padding-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        
+        .footer-title::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 50px;
+            height: 2px;
+            background: #64ffda;
+        }
+        
+        .footer-links {
+            list-style: none;
+        }
+        
+        .footer-links li {
+            margin-bottom: 0.8rem;
+        }
+        
+        .footer-links a {
+            color: #8892b0;
+            text-decoration: none;
+            transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+            position: relative;
+            display: inline-block;
+            font-size: 1.1rem;
+        }
+        
+        .footer-links a:hover {
+            color: #64ffda;
+            transform: translateX(5px);
+        }
+        
+        .footer-links a::before {
+            content: '→';
+            position: absolute;
+            left: -20px;
+            opacity: 0;
+            transition: all 0.3s ease;
+            color: #64ffda;
+        }
+        
+        .footer-links a:hover::before {
+            opacity: 1;
+            left: -15px;
+        }
+        
+        .footer-legal {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(100, 255, 218, 0.1);
+            max-width: 1400px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .footer-copyright {
+            color: #8892b0;
+            font-size: 1rem;
+            margin-right: 2rem;
+            line-height: 1.6;
+        }
+        
+        .footer-badges {
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+        
+        .badge {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #8892b0;
+            font-size: 0.9rem;
+            padding: 0.6rem 1.2rem;
+            background: rgba(16, 36, 64, 0.6);
+            border-radius: 50px;
+            border: 1px solid rgba(100, 255, 218, 0.1);
+        }
+        
+        .badge-icon {
+            color: #64ffda;
+            font-size: 1.2rem;
+        }
+        
+        .footer-contact {
+            margin-top: 1.5rem;
+        }
+        
+        .contact-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            color: #8892b0;
+            font-size: 1rem;
+        }
+        
+        .contact-icon {
+            color: #64ffda;
+            min-width: 25px;
+            font-size: 1.2rem;
+        }
+        
+        .footer-social {
+            display: flex;
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+        
+        .social-link {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 45px;
+            height: 45px;
             border-radius: 50%;
+            background: rgba(100, 255, 218, 0.1);
+            color: #64ffda;
+            transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+            font-size: 1.2rem;
+        }
+        
+        .social-link:hover {
+            background: rgba(100, 255, 218, 0.2);
+            transform: translateY(-3px);
+        }
+        
+        .footer-particles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             pointer-events: none;
-            z-index: 0;
-            animation: floatElement 20s infinite linear;
+            z-index: 1;
+            opacity: 0.3;
         }
 
         /* Scroll Animations */
@@ -626,128 +880,77 @@
             opacity: 1;
             transform: translateY(0);
         }
-/*testimonials*/
-          .testimonials {
-        padding: 6rem 8%;
-        background: linear-gradient(45deg, #0a192fdd, #112240dd);
-        position: relative;
-        overflow: hidden;
-    }
 
-    .testimonials-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 3rem;
-        position: relative;
-        z-index: 2;
-    }
-
-    .testimonial-card {
-        background: rgba(16, 36, 64, 0.6);
-        border-radius: 15px;
-        padding: 2.5rem;
-        position: relative;
-        transform-style: preserve-3d;
-        transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
-        border: 1px solid #64ffda33;
-        backdrop-filter: blur(10px);
-    }
-
-    .testimonial-card:hover {
-        transform: translateZ(20px) rotateX(-5deg) rotateY(5deg);
-        box-shadow: 0 25px 50px #64ffda0d;
-    }
-
-    .testimonial-quote {
-        position: absolute;
-        top: -20px;
-        right: 20px;
-        opacity: 0.3;
-    }
-
-    .testimonial-text {
-        color: #8892b0;
-        line-height: 1.7;
-        margin-bottom: 1.5rem;
-        font-size: 1.05rem;
-    }
-
-    .testimonial-author {
-        display: flex;
-        align-items: center;
-        gap: 1.5rem;
-        border-top: 1px solid #64ffda1a;
-        padding-top: 1.5rem;
-    }
-
-    .client-photo {
-        width: 60px;
-        height: 60px;
-        border-radius: 50%;
-        border: 2px solid #64ffda;
-        object-fit: cover;
-    }
-
-    .client-name {
-        color: #ffffff;
-        margin-bottom: 0.3rem;
-    }
-
-    .client-role {
-        color: #8892b0;
-        font-size: 0.9rem;
-        line-height: 1.4;
-    }
-
-    .testimonial-badge {
-        position: absolute;
-        bottom: -15px;
-        right: 20px;
-        background: #64ffda;
-        color: #0a192f;
-        padding: 0.5rem 1.2rem;
-        border-radius: 20px;
-        font-weight: 700;
-        font-size: 0.9rem;
-        box-shadow: 0 5px 15px #64ffda33;
-    }
-
-    @media (max-width: 768px) {
-        .testimonials {
-            padding: 4rem 5%;
+        /* Responsive */
+        @media (max-width: 992px) {
+            .hero h1 {
+                font-size: 2.8rem;
+            }
+            
+            .gallery-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .testimonials-grid,
+            .highlights-grid,
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
         }
-        
-        .testimonial-card {
-            margin-bottom: 2rem;
-        }
-    }
-        /* Mobile Responsive */
+
         @media (max-width: 768px) {
-            .hero h1 { font-size: 2.5rem; }
-            .features-grid, .pricing-cards { grid-template-columns: 1fr; }
-            .nav { padding: 1rem 5%; }
+            .nav {
+                padding: 1rem 5%;
+                flex-wrap: wrap;
+            }
+            
+            .nav-links {
+                display: none;
+            }
+            
+            .hero {
+                padding: 12rem 5% 5rem;
+            }
+            
+            .hero h1 {
+                font-size: 2.3rem;
+            }
+            
+            .hero p {
+                font-size: 1.1rem;
+            }
+            
+            .footer-legal {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1.5rem;
+            }
+            
+            .footer-badges {
+                flex-wrap: wrap;
+            }
         }
     </style>
 </head>
 <body>
-    <!-- Progress Bar & Particles (unchanged) -->
     <div class="progress-bar" id="progressBar"></div>
     <div id="particleCanvas"></div>
 
     <nav class="nav">
         <div class="logo">ReplyzeAI<span style="color:#64ffda"> CRE</span></div>
-        <div>
-            <a href="features.html" class="cta-button">Solutions</a>
-            <a href="temporary.html" class="cta-button">Pricing</a>
-            <a href="temporary.html" class="cta-button">Contact</a>
+        <div class="nav-links">
+            <a href="#features">Solutions</a>
+            <a href="#highlights">Benefits</a>
+            <a href="#reviews">Testimonials</a>
+            <a href="#features">How It Works</a>
         </div>
+        <a href="#contact" class="cta-button">Schedule Demo</a>
     </nav>
 
-    <!-- HERO SECTION -->
     <section class="hero">
         <h1 data-scroll>Institutional-Grade Email Automation:<br><span style="color:#64ffda">Preserve Your Legacy, Not Your Inbox</span></h1>
         <p data-scroll><strong>For elite CRE brokers:</strong> Delegate transactional communications while you orchestrate nine-figure deals.</p>
-        <a href="temporary2.html" class="cta-button" data-scroll style="animation-delay: 0.7s">Request Workflow Analysis →</a>
+        <a href="#" class="cta-button" data-scroll style="animation-delay: 0.7s">Request Workflow Analysis →</a>
 
         <div class="demo-container" data-scroll>
             <div class="demo-box">
@@ -768,17 +971,28 @@
         </div>
     </section>
 
-    <!-- IMAGE GALLERY -->
     <section class="image-gallery" id="gallery">
         <div class="gallery-container">
             <div class="gallery-item active" data-scroll>
-                <img src="after.png" alt="CRE Negotiation Workflow with AI">
+                <div style="width:100%;height:100%;background:linear-gradient(135deg, #0a192f, #112240);display:flex;align-items:center;justify-content:center;">
+                    <div style="text-align:center;padding:2rem;color:#64ffda;">
+                        <i class="fas fa-chart-line" style="font-size:5rem;margin-bottom:2rem;"></i>
+                        <h3 style="font-size:2rem;margin-bottom:1rem;">AI-Optimized CRE Workflow</h3>
+                        <p style="color:#8892b0;font-size:1.2rem;">Streamlined communication with intelligent automation</p>
+                    </div>
+                </div>
                 <div class="image-overlay">
                     <p class="image-caption">With ReplyzeAI CRE</p>
                 </div>
             </div>
             <div class="gallery-item next" data-scroll>
-                <img src="before.png" alt="Manual CRE Workflow">
+                <div style="width:100%;height:100%;background:linear-gradient(135deg, #1a2f4b, #233554);display:flex;align-items:center;justify-content:center;">
+                    <div style="text-align:center;padding:2rem;color:#64ffda;">
+                        <i class="fas fa-file-contract" style="font-size:5rem;margin-bottom:2rem;"></i>
+                        <h3 style="font-size:2rem;margin-bottom:1rem;">Manual CRE Process</h3>
+                        <p style="color:#8892b0;font-size:1.2rem;">Time-consuming negotiations and document drafting</p>
+                    </div>
+                </div>
                 <div class="image-overlay">
                     <p class="image-caption">Traditional Process</p>
                 </div>
@@ -786,18 +1000,33 @@
         </div>
     </section>
     
-    <!-- TRUSTED BY -->
     <section class="featured-on" id="featured">
         <h3 class="section-title" data-scroll>Trusted by Industry Leaders</h3>
         <div class="logos-scroll" data-scroll>
-            <!-- Logos unchanged -->
+            <div class="logos-track">
+                <div class="logo-item">CBRE</div>
+                <div class="logo-item">JLL</div>
+                <div class="logo-item">Cushman & Wakefield</div>
+                <div class="logo-item">Colliers International</div>
+                <div class="logo-item">Marcus & Millichap</div>
+                <div class="logo-item">Newmark</div>
+                <div class="logo-item">Savills</div>
+                <div class="logo-item">Eastman Commercial</div>
+                <div class="logo-item">CBRE</div>
+                <div class="logo-item">JLL</div>
+                <div class="logo-item">Cushman & Wakefield</div>
+                <div class="logo-item">Colliers International</div>
+                <div class="logo-item">Marcus & Millichap</div>
+                <div class="logo-item">Newmark</div>
+                <div class="logo-item">Savills</div>
+                <div class="logo-item">Eastman Commercial</div>
+            </div>
         </div>
     </section>
 
-    <!-- TESTIMONIALS -->
     <section class="testimonials" id="reviews">
+        <h2 data-scroll>What Industry Leaders Say</h2>
         <div class="testimonials-grid">
-            <!-- Testimonial 1 -->
             <div class="testimonial-card" data-scroll>
                 <div class="testimonial-quote">
                     <svg viewBox="0 0 24 24" width="40" height="40" style="fill:#64ffda; opacity:0.7;">
@@ -806,7 +1035,7 @@
                 </div>
                 <p class="testimonial-text">"After 31 years brokering REIT portfolios, I demand institutional rigor. ReplyzeAI handles 83% of my email volume with zero tone dilution. My 2023 closings rose 22% while reclaiming morning tee times."</p>
                 <div class="testimonial-author">
-                    <img src="client1.jpg" alt="Arthur Vance" class="client-photo">
+                    <div class="client-photo">AV</div>
                     <div>
                         <h4 class="client-name">Arthur Vance</h4>
                         <p class="client-role">Senior VP Portfolio Strategy<br><span style="color:#64ffda">Eastman Commercial</span></p>
@@ -815,16 +1044,15 @@
                 <div class="testimonial-badge">$217M Quarterly Volume</div>
             </div>
 
-            <!-- Testimonial 2 -->
             <div class="testimonial-card" data-scroll>
                 <div class="testimonial-quote">
                     <svg viewBox="0 0 24 24" width="40" height="40" style="fill:#64ffda; opacity:0.7;">
                         <path d="M10 7L8 11H11V17H5V11L7 7H10M18 7L16 11H19V17H13V11L15 7H18Z"/>
                     </svg>
                 </div>
-                <p class="testimonial-text">"The encrypted audit trails and pre-send approvals give me enterprise-grade control. What surprised me? How perfectly it handles CAM reconciliation language."</p>
+                <p class="testimonial-text">"The encrypted audit trails and pre-send approvals give me enterprise-grade control. What surprised me? How perfectly it handles CAM reconciliation language. This isn't tech for kids—it's my silent partner."</p>
                 <div class="testimonial-author">
-                    <img src="client2.jpg" alt="Eleanor Reed" class="client-photo">
+                    <div class="client-photo">ER</div>
                     <div>
                         <h4 class="client-name">Eleanor Reed</h4>
                         <p class="client-role">Managing Director<br><span style="color:#64ffda">Blackridge Capital</span></p>
@@ -835,56 +1063,188 @@
         </div>
     </section>
     
-    <!-- VALUE PROPOSITION -->
     <section class="highlights" id="highlights">
+        <h2 data-scroll>Key Benefits for CRE Professionals</h2>
         <div class="highlights-grid">
             <div class="highlight-card" data-scroll>
                 <div class="highlight-icon">⚖️</div>
                 <h3>Preserve Your Signature Style</h3>
-                <p>AI mimics your negotiation voice while automating routine communications</p>
+                <p>AI mimics your negotiation voice while automating routine communications, ensuring your personal brand remains intact.</p>
             </div>
             <div class="highlight-card" data-scroll>
                 <div class="highlight-icon">🛡️</div>
                 <h3>Institutional-Grade Security</h3>
-                <p>Military-grade OAuth2 encryption with automatic email purging post-reply</p>
+                <p>Military-grade OAuth2 encryption with automatic email purging post-reply to meet strict compliance standards.</p>
             </div>
             <div class="highlight-card" data-scroll>
                 <div class="highlight-icon">📊</div>
                 <h3>Executive Dashboard</h3>
-                <p>Real-time deal pipeline analytics with high-intent lead identification</p>
+                <p>Real-time deal pipeline analytics with high-intent lead identification and performance metrics at a glance.</p>
             </div>
         </div>
     </section>
     
-    <!-- SOLUTIONS -->
     <section class="features" id="features">
-        <h3 class="section-title" data-scroll>Precision Tools for High-Stakes Transactions</h3>
+        <h2 data-scroll>Precision Tools for High-Stakes Transactions</h2>
         <div class="features-grid">
             <div class="feature-card" data-scroll>
                 <div class="feature-icon">📜</div>
                 <h3>LOI Accelerator</h3>
-                <p>Context-aware drafting with embedded market comps and clause libraries</p>
+                <p>Context-aware drafting with embedded market comps and clause libraries for rapid, compliant negotiations.</p>
             </div>
             <div class="feature-card" data-scroll>
                 <div class="feature-icon">🔍</div>
                 <h3>Tenant Intelligence System</h3>
-                <p>Automated renewal analysis with concession forecasting</p>
+                <p>Automated renewal analysis with concession forecasting and tenant improvement allowance calculations.</p>
             </div>
             <div class="feature-card" data-scroll>
                 <div class="feature-icon">🤝</div>
                 <h3>Deal Flow Orchestrator</h3>
-                <p>Priority queuing for Tier-1 prospects with relationship-timed followups</p>
+                <p>Priority queuing for Tier-1 prospects with relationship-timed followups and automated RFP responses.</p>
             </div>
         </div>
     </section>
     
-    <!-- ENTERPRISE FOOTER -->
-    <footer class="enterprise-footer">
-        <p>ReplyzeAI CRE Edition | Engineered for portfolios $50M+ | SOC 2 Compliant Infrastructure</p>
-        <p>Gmail Enterprise API Certified | Render Cloud | Netlify Edge Network</p>
+    <footer class="enterprise-footer" id="contact">
+        <div class="footer-particles" id="footerParticles"></div>
+        
+        <div class="footer-grid">
+            <div class="footer-column">
+                <div class="logo">ReplyzeAI<span style="color:#64ffda"> CRE</span></div>
+                <p style="color: #8892b0; margin: 1.5rem 0; line-height: 1.6;">
+                    Institutional-grade email automation for elite CRE brokers. 
+                    Delegate transactional communications while you orchestrate 
+                    nine-figure deals.
+                </p>
+                <div class="footer-social">
+                    <a href="#" class="social-link"><i class="fab fa-twitter"></i></a>
+                    <a href="#" class="social-link"><i class="fab fa-linkedin-in"></i></a>
+                    <a href="#" class="social-link"><i class="fab fa-facebook-f"></i></a>
+                    <a href="#" class="social-link"><i class="fab fa-instagram"></i></a>
+                </div>
+            </div>
+            
+            <div class="footer-column">
+                <h4 class="footer-title">Solutions</h4>
+                <ul class="footer-links">
+                    <li><a href="#">LOI Accelerator</a></li>
+                    <li><a href="#">Tenant Intelligence</a></li>
+                    <li><a href="#">Deal Flow Orchestration</a></li>
+                    <li><a href="#">Compliance Suite</a></li>
+                    <li><a href="#">Portfolio Analytics</a></li>
+                </ul>
+            </div>
+            
+            <div class="footer-column">
+                <h4 class="footer-title">Resources</h4>
+                <ul class="footer-links">
+                    <li><a href="#">CRE Automation Playbook</a></li>
+                    <li><a href="#">Case Studies</a></li>
+                    <li><a href="#">Compliance Guidelines</a></li>
+                    <li><a href="#">API Documentation</a></li>
+                    <li><a href="#">Market Reports</a></li>
+                </ul>
+            </div>
+            
+            <div class="footer-column">
+                <h4 class="footer-title">Enterprise</h4>
+                <div class="footer-contact">
+                    <div class="contact-item">
+                        <div class="contact-icon"><i class="fas fa-envelope"></i></div>
+                        <div>executive@replyzecre.com</div>
+                    </div>
+                    <div class="contact-item">
+                        <div class="contact-icon"><i class="fas fa-phone"></i></div>
+                        <div>+1 (888) 867-5309</div>
+                    </div>
+                    <div class="contact-item">
+                        <div class="contact-icon"><i class="fas fa-building"></i></div>
+                        <div>550 Madison Ave, New York, NY 10022</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer-legal">
+            <div class="footer-copyright">
+                © 2023 ReplyzeAI CRE. Engineered for portfolios $50M+.<br>
+                All rights reserved. NAR-compliant solutions.
+            </div>
+            
+            <div class="footer-badges">
+                <div class="badge">
+                    <div class="badge-icon"><i class="fas fa-shield-alt"></i></div>
+                    <div>SOC 2 Compliant</div>
+                </div>
+                <div class="badge">
+                    <div class="badge-icon"><i class="fas fa-mail-bulk"></i></div>
+                    <div>Gmail Enterprise API</div>
+                </div>
+                <div class="badge">
+                    <div class="badge-icon"><i class="fas fa-cloud"></i></div>
+                    <div>Render Cloud</div>
+                </div>
+            </div>
+        </div>
     </footer>
 
-   
+    <script>
+        // Progress bar on scroll
+        window.addEventListener('scroll', function() {
+            const scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
+            const scrollHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+            const scrolled = (scrollTop / scrollHeight) * 100;
+            document.getElementById('progressBar').style.width = scrolled + '%';
+        });
+
+        // Scroll reveal animations
+        const scrollElements = document.querySelectorAll('[data-scroll]');
+        const elementInView = (el) => {
+            const elementTop = el.getBoundingClientRect().top;
+            return (
+                elementTop <= (window.innerHeight || document.documentElement.clientHeight) * 0.75
+            );
+        };
+        
+        const displayScrollElement = (element) => {
+            element.setAttribute('data-scroll', 'in');
+        };
+        
+        const handleScrollAnimation = () => {
+            scrollElements.forEach((el) => {
+                if (elementInView(el)) {
+                    displayScrollElement(el);
+                }
+            });
+        };
+        
+        window.addEventListener('scroll', () => {
+            handleScrollAnimation();
+        });
+        
+        // Initialize on load
+        handleScrollAnimation();
+
+        // Footer particles
+        document.addEventListener('DOMContentLoaded', function() {
+            const footerParticles = document.getElementById('footerParticles');
+            const particleCount = 20;
+            
+            for (let i = 0; i < particleCount; i++) {
+                const particle = document.createElement('div');
+                particle.style.position = 'absolute';
+                particle.style.width = `${Math.random() * 4 + 1}px`;
+                particle.style.height = particle.style.width;
+                particle.style.background = 'rgba(100, 255, 218, 0.2)';
+                particle.style.borderRadius = '50%';
+                particle.style.left = `${Math.random() * 100}%`;
+                particle.style.top = `${Math.random() * 100}%`;
+                particle.style.animation = `floatElement ${Math.random() * 20 + 10}s infinite ease-in-out`;
+                particle.style.animationDelay = `${Math.random() * 5}s`;
+                footerParticles.appendChild(particle);
+            }
+        });
+    </script>   
 
     <script>
 
