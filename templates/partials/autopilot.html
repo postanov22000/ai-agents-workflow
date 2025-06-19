@@ -3,20 +3,54 @@
   <h2>Transaction Autopilot</h2>
   <p>Generate LOI/PSA closing kits in one click.</p>
 
-  <button
-    id="generate-autopilot"
-    class="btn btn-primary"
-    hx-post="/autopilot/trigger?user_id={{ user_id }}"
-    hx-vals='{
-      "transaction_type": "{{ current_transaction.transaction_type }}",
-      "data": {{ current_transaction | tojson }}
-    }'
-    hx-swap="outerHTML"
-  >
-    <i class="fas fa-sync-alt"></i>
-    Generate Closing Kit
-  </button>
+  {% if not current_transaction %}
+    <!-- Step 1: Pick a transaction -->
+    <form 
+      id="txn-select-form"
+      hx-get="/dashboard/autopilot?user_id={{ user_id }}"
+      hx-target=".main-content"
+      hx-include="#txn-select"
+      hx-swap="innerHTML"
+    >
+      <label for="txn-select">Select a transaction:</label>
+      <select id="txn-select" name="txn_id" class="form-control" required>
+        <option value="" disabled selected>-- choose one --</option>
+        {% for t in transactions %}
+          <option value="{{ t.id }}">
+            {{ t.property_address or ('Txn ' ~ t.id) }} ({{ t.transaction_type }})
+          </option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-primary" style="margin-top:12px;">
+        <i class="fas fa-arrow-right"></i> Load Transaction
+      </button>
+    </form>
 
-  <!-- Out‑of‑band swap target for download link -->
-  <div id="autopilot-result" hx-swap-oob="true"></div>
+  {% else %}
+    <!-- Step 2: Show details & generate kit -->
+    <div class="transaction-details" style="margin-bottom:16px;">
+      <strong>ID:</strong> {{ current_transaction.id }}<br>
+      <strong>Type:</strong> {{ current_transaction.transaction_type }}<br>
+      <strong>Property:</strong> {{ current_transaction.property_address }}<br>
+      <strong>Buyer / Seller:</strong> {{ current_transaction.buyer }} → {{ current_transaction.seller }}
+    </div>
+
+    <button
+      id="generate-autopilot"
+      class="btn btn-primary"
+      hx-post="/autopilot/trigger?user_id={{ user_id }}"
+      hx-vals='{
+        "transaction_type": "{{ current_transaction.transaction_type }}",
+        "data": {{ current_transaction | tojson }}
+      }'
+      hx-target="#autopilot-result"
+      hx-swap="innerHTML"
+    >
+      <i class="fas fa-sync-alt"></i>
+      Generate Closing Kit
+    </button>
+
+    <!-- Step 3: where we inject the download link -->
+    <div id="autopilot-result" style="margin-top:16px;"></div>
+  {% endif %}
 </div>
