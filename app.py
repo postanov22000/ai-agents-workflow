@@ -915,6 +915,9 @@ def dashboard_autopilot():
 
 from flask import request, redirect, render_template, abort
 
+import uuid
+from flask import request, abort, jsonify
+
 @app.route("/transactions/new", methods=["POST"])
 def create_transaction():
     # 1) require user
@@ -922,8 +925,10 @@ def create_transaction():
     if not user_id:
         abort(401, "Missing user_id")
 
-    # 2) collect form data
+    # 2) generate id & collect form data
+    new_id = str(uuid.uuid4())
     payload = {
+        "id":                new_id,
         "transaction_type":  request.form["transaction_type"],
         "property_address":  request.form["property_address"],
         "buyer":             request.form["buyer"],
@@ -936,16 +941,17 @@ def create_transaction():
     }
 
     # 3) insert into Supabase
-    resp = supabase.table("transactions").insert(payload).execute()
-    if resp.error:
-        return jsonify({"status":"error","message":resp.error.message}), 500
+    try:
+        resp = supabase.table("transactions").insert(payload).execute()
+        inserted = resp.data[0]  # your new row
+    except Exception as e:
+        # PostgREST will raise on constraint errors, etc.
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-    # 4) on success, give feedback and reload Autopilot partial
+    # 4) return success feedback and auto‑reload the Autopilot partial
     feedback = (
-      '<div class="alert alert-success">'
-      f'Transaction <strong>{resp.data[0]["id"]}</strong> created.'
-      "</div>"
-      # then HTMX swap Autopilot tab so new txn shows up in dropdown
+      f'<div class="alert alert-success">Transaction <strong>{inserted["id"]}</strong> created.</div>'
+      # trigger a reload of the Autopilot tab so the new txn shows up
       + '<script>htmx.trigger(document.querySelector(\'[hx-get*="/dashboard/autopilot"]\'), "click")</script>'
     )
     return feedback, 200
