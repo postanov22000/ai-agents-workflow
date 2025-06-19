@@ -1,17 +1,22 @@
+<!-- templates/partials/autopilot.html -->
 <div class="p-4">
   <h2>Transaction Autopilot</h2>
   <p>Generate LOI/PSA closing kits in one click.</p>
-  <button 
-    id="generate-autopilot" 
+
+  <button
+    id="generate-autopilot"
     class="btn btn-primary"
-    hx-post="/autopilot/trigger"
+    hx-post="/autopilot/trigger?user_id={{ user_id }}"
     hx-vals='{
-      "transaction_type": "{{ current_transaction.type }}",
-      "data": {{ current_transaction|tojson }}
+      "transaction_type": "{{ current_transaction.transaction_type }}",
+      "data": {{ current_transaction | tojson }}
     }'
     hx-swap="outerHTML"
   >
+    <i class="fas fa-sync-alt"></i>
     Generate Closing Kit
   </button>
+
+  <!-- Out‑of‑band swap target for download link -->
   <div id="autopilot-result" hx-swap-oob="true"></div>
 </div>
