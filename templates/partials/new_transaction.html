@@ -1,0 +1,69 @@
+<div class="p-4">
+  <h2>Create New Transaction</h2>
+  <form
+    id="new-txn-form"
+    hx-post="/transactions/new?user_id={{ user_id }}"
+    hx-swap="none"
+    class="space-y-4"
+  >
+    <!-- Transaction type -->
+    <div class="form-group">
+      <label for="transaction_type">Type</label>
+      <select name="transaction_type" id="transaction_type" class="form-control" required>
+        <option value="">— select type —</option>
+        <option value="sale">Sale</option>
+        <option value="lease">Lease</option>
+        <option value="purchase">Purchase</option>
+      </select>
+    </div>
+
+    <!-- Address -->
+    <div class="form-group">
+      <label for="property_address">Property Address</label>
+      <input
+        type="text"
+        name="property_address"
+        id="property_address"
+        class="form-control"
+        placeholder="123 Main St, City, State"
+        required
+      />
+    </div>
+
+    <!-- Buyer & Seller -->
+    <div class="form-group">
+      <label for="buyer">Buyer</label>
+      <input type="text" name="buyer" id="buyer" class="form-control" required/>
+    </div>
+    <div class="form-group">
+      <label for="seller">Seller</label>
+      <input type="text" name="seller" id="seller" class="form-control" required/>
+    </div>
+
+    <!-- Dates -->
+    <div class="form-group">
+      <label for="date">Date</label>
+      <input type="date" name="date" id="date" class="form-control" required/>
+    </div>
+    <div class="form-group">
+      <label for="closing_date">Closing Date</label>
+      <input type="date" name="closing_date" id="closing_date" class="form-control"/>
+    </div>
+
+    <!-- Purchase price & location -->
+    <div class="form-group">
+      <label for="purchase_price">Purchase Price</label>
+      <input type="number" step="0.01" name="purchase_price" id="purchase_price" class="form-control"/>
+    </div>
+    <div class="form-group">
+      <label for="closing_location">Closing Location</label>
+      <input type="text" name="closing_location" id="closing_location" class="form-control"/>
+    </div>
+
+    <button type="submit" class="btn btn-primary">
+      <i class="fas fa-plus-circle"></i> Create
+    </button>
+  </form>
+
+  <div id="new-txn-feedback" style="margin-top:12px;"></div>
+</div>
