@@ -939,16 +939,14 @@ input:checked + .slider:before {
     <i class="fas fa-chart-bar"></i> Analytics
   </div>
 
-<li class="nav-item"
-   
-    class="nav-link" 
-    hx-get="/dashboard/autopilot" 
-    hx-trigger="click" 
-    hx-target=".main-content" 
-    hx-push-url="true"
-  >
-    <i class="fas fa-chart-bar"></i>Transaction Autopilot
-</div>
+<div
+        class="nav-item"
+        hx-get="/dashboard/autopilot?user_id={{ user_id }}"
+        hx-target=".main-content"
+        hx-swap="innerHTML"
+      >
+        <i class="fas fa-sync-alt"></i> Transaction Autopilot
+      </div>
 
             
   <div
