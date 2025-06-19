@@ -32,10 +32,10 @@ def trigger_autopilot():
     data = payload.get("data", {})
 
     # 1) Generate LOI and PSA
-    docs = []
     try:
-        docs.append(generate_document("loi_template.docx", data, "LOI"))
-        docs.append(generate_document("psa_template.docx", data, "PSA"))
+        loi_path = generate_document("loi_template.docx", data, "LOI")
+        psa_path = generate_document("psa_template.docx", data, "PSA")
+        docs = [loi_path, psa_path]
     except Exception as e:
         logger.error(f"Document assembly failed: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -47,29 +47,28 @@ def trigger_autopilot():
 
     # 3) Bundle into ZIP
     try:
-        kit_zip = bundle_closing_kit(ttype, docs)
+        kit_zip_list = bundle_closing_kit(ttype, docs)
     except Exception as e:
         logger.error(f"Bundling failed: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
     # 4) Upload to Supabase Storage
-    uploaded = []
-    for path in kit_zip:
-        name = os.path.basename(path)
-        with open(path, "rb") as f:
+    uploaded_keys = []
+    for zip_path in kit_zip_list:
+        filename = os.path.basename(zip_path)
+        with open(zip_path, "rb") as f:
             try:
-                res = supabase.storage.from_("closing-kits").upload(name, f)
-                # Parse response dict
+                res = supabase.storage.from_("closing-kits").upload(filename, f)
                 if isinstance(res, dict):
-                    key = res.get("Key") or res.get("key") or name
+                    key = res.get("Key") or res.get("key") or filename
                 else:
-                    key = name
+                    key = filename
             except Exception as e:
-                logger.warning(f"Upload failed for {name}: {e}, reusing existing file")
-                key = name
-            uploaded.append(key)
+                logger.warning(f"Upload failed for {filename}: {e}, reusing existing file")
+                key = filename
+            uploaded_keys.append(key)
 
-    return jsonify({"status": "success", "files": uploaded}), 200
+    return jsonify({"status": "success", "files": uploaded_keys}), 200
 
 
 def generate_document(template_name: str, context: dict, prefix: str) -> str:
@@ -84,39 +83,42 @@ def generate_document(template_name: str, context: dict, prefix: str) -> str:
 
 def error_hunting(paths: list) -> dict:
     results = {}
-    for p in paths:
-        if p.lower().endswith(".docx"):
-            text = docx2txt.process(p)
-        elif p.lower().endswith(".pdf"):
+    for path in paths:
+        # Extract text based on file extension
+        text = ""
+        if path.lower().endswith(".docx"):
+            text = docx2txt.process(path)
+        elif path.lower().endswith(".pdf"):
             try:
-                pages = convert_from_path(p)
+                pages = convert_from_path(path)
                 text = "".join(pytesseract.image_to_string(pg) for pg in pages)
             except Exception as e:
-                logger.error(f"PDF OCR failed for {p}: {e}")
+                logger.error(f"PDF OCR failed for {path}: {e}")
                 continue
         else:
-            logger.warning(f"Skipping unknown format for error hunting: {p}")
+            logger.warning(f"Skipping unknown format: {path}")
             continue
 
         missing = []
-        low = text.lower()
-        for kw in ["signature", "date", "buyer", "seller"]:
-            if kw not in low:
-                missing.append(kw)
+        lower_text = text.lower()
+        for keyword in ["signature", "date", "buyer", "seller"]:
+            if keyword not in lower_text:
+                missing.append(keyword)
         if missing:
-            results[p] = missing
+            results[path] = missing
     return results
 
 
 def bundle_closing_kit(ttype: str, docs: list) -> list:
     kit_dir = os.path.join("/tmp", f"kit_{ttype}")
     os.makedirs(kit_dir, exist_ok=True)
-    for doc in docs:
-        os.replace(doc, os.path.join(kit_dir, os.path.basename(doc)))
+    for doc_path in docs:
+        os.replace(doc_path, os.path.join(kit_dir, os.path.basename(doc_path)))
 
     zip_path = os.path.join("/tmp", f"{ttype}_closing_kit.zip")
     with zipfile.ZipFile(zip_path, "w") as zf:
-        for fname in os.listdir(kit_dir):
-            zf.write(os.path.join(kit_dir, fname), arcname=fname)
+        for file_name in os.listdir(kit_dir):
+            full_path = os.path.join(kit_dir, file_name)
+            zf.write(full_path, arcname=file_name)
     logger.info(f"Closing kit created at {zip_path}")
     return [zip_path]
