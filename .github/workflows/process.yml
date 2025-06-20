@@ -1,69 +1,64 @@
+# .github/workflows/process.yml
 name: Email & Autopilot Scheduler
 
 on:
   schedule:
-    - cron: '*/5 * * * *'    # Gmail polling + processing every 5m
-    - cron: '0 2 * * *'      # Autopilot batch once daily at 2:00 AM
+    - cron: '*/5 * * * *'   # every 5m
+    - cron: '0 2 * * *'     # daily at 02:00 UTC
   workflow_dispatch:
-
-permissions:
-  contents: read
+  repository_dispatch:
+    types: [autopilot-trigger]
 
 jobs:
   poll-gmail:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    outputs:
-      status: ${{ steps.poll-result.outputs.status }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with: python-version: "3.11"
+      - run: |
           pip install -r requirements.txt
-
-      - name: Run Gmail Poller
-        id: poll-result
+          python poll_gmail.py
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-        run: |
-          python poll_gmail.py
-          echo "status=success" >> $GITHUB_OUTPUT
 
   trigger-processing:
     needs: poll-gmail
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Main Processing Endpoint
-        run: |
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+      - run: |
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
             "https://replyzeai.onrender.com/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
-          echo "HTTP status: $RESPONSE"
-          if [[ "$RESPONSE" != "200" && "$RESPONSE" != "204" ]]; then
-            echo "::error::Processing failed with status: $RESPONSE"
-            exit 1
-          fi
+          echo "Status: $HTTP"
+          test "$HTTP" = "200" || test "$HTTP" = "204"
 
   run-autopilot-batch:
-    # Depends on trigger-processing; skips if processing fails
     needs: trigger-processing
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Autopilot Batch
-        run: |
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+      - run: |
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
             -X POST "https://replyzeai.onrender.com/autopilot/batch")
-          echo "Autopilot Batch HTTP status: $HTTP_STATUS"
-          if [[ "$HTTP_STATUS" != "200" ]]; then
-            echo "::error::Autopilot batch failed with status: $HTTP_STATUS"
-            exit 1
-          fi
+          echo "Batch status: $HTTP"
+          test "$HTTP" = "200"
+
+  run-dispatched-autopilot:
+    if: github.event_name == 'repository_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with: python-version: "3.11"
+      - run: |
+          pip install -r requirements.txt
+          echo '${{ toJson(github.event.client_payload) }}' > payload.json
+          python transaction_autopilot_task.py payload.json
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
