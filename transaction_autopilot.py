@@ -1,13 +1,12 @@
+# transaction_autopilot.py
 import os
 import logging
-import zipfile
-from rq.job import Job
-from flask import Blueprint, request
+from flask import Blueprint, request, jsonify
 from supabase import create_client
-from docxtpl import DocxTemplate
-import docx2txt
-import pytesseract
-from pdf2image import convert_from_path
+from redis import Redis
+from rq import Queue
+from rq.job import Job
+from transaction_autopilot_task import trigger_autopilot_task
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logger = logging.getLogger(__name__)
@@ -23,151 +22,42 @@ def get_supabase_client():
 
 supabase = get_supabase_client()
 
-bp = Blueprint("transaction_autopilot", __name__)
+# ── RQ / Redis Setup ─────────────────────────────────────────────────────────
+redis_conn = Redis.from_url(os.environ["REDIS_URL"])
+rq_queue   = Queue("autopilot", connection=redis_conn)
 
-# ── Trigger Endpoint ─────────────────────────────────────────────────────────
+# ── Blueprint ───────────────────────────────────────────────────────────────
+bp = Blueprint("transaction_autopilot", __name__, url_prefix="/autopilot")
+
 @bp.route("/trigger", methods=["POST"])
 def trigger_autopilot():
     payload = request.json or {}
 
-    # 0) Get the transaction ID
+    # 0) must have transaction ID
     tx_id = payload.get("data", {}).get("id")
     if not tx_id:
-        return {"status": "error", "message": "Missing transaction ID"}, 400
+        return jsonify({"status": "error", "message": "Missing transaction ID"}), 400
 
-    ttype = payload.get("transaction_type", "generic")
-    data  = payload.get("data", {})
-
-    # 1) Generate LOI & PSA .docx
-    try:
-        loi_path = generate_document("loi_template.docx", data, "LOI")
-        psa_path = generate_document("psa_template.docx", data, "PSA")
-        docs = [loi_path, psa_path]
-    except Exception as e:
-        logger.error(f"Document assembly failed: {e}")
-        return {"status": "error", "message": str(e)}, 500
-
-    # 2) (Optional) Check for missing keywords
-    errors = error_hunting(docs)
-    if errors:
-        logger.warning(f"Keywords missing in some docs: {errors}")
-
-    # 3) Bundle into a single ZIP
-    try:
-        kit_zip_list = bundle_closing_kit(ttype, docs)
-    except Exception as e:
-        logger.error(f"Bundling failed: {e}")
-        return {"status": "error", "message": str(e)}, 500
-
-    # 4) Upload ZIP → Supabase + persist kit_url
-    public_url = None
-    for zip_path in kit_zip_list:
-        filename = os.path.basename(zip_path)
-        # bucket path: closing-kits/{filename}
-        with open(zip_path, "rb") as f:
-            try:
-                supabase.storage.from_("closing-kits").upload(filename, f)
-            except Exception as exc:
-                logger.warning(f"Upload error for {filename}: {exc}; assuming it already exists")
-
-        # Build public link
-        public_url = (
-            f"{os.environ['SUPABASE_URL']}"
-            f"/storage/v1/object/public/closing-kits/{filename}"
-        )
-
-        # Persist kit_url back to the transaction row
-        try:
-            supabase.table("transactions") \
-                     .update({"kit_url": public_url}) \
-                     .eq("id", tx_id) \
-                     .execute()
-        except Exception as exc:
-            logger.error(f"Failed updating txn {tx_id} with kit_url: {exc}")
-
-    # 5) Return a tiny HTML fragment for HTMX to inject a Download button
-    download_link = f'''
-      <a href="{public_url}" class="btn btn-success" target="_blank">
-        <i class="fas fa-download"></i> Download Closing Kit
-      </a>
-    '''
-    return download_link, 200, {"Content-Type": "text/html"}
-
-
-# ── Helpers ────────────────────────────────────────────────────────────────────
-def generate_document(template_name: str, context: dict, prefix: str) -> str:
-    tpl_path = os.path.join("templates/transaction_autopilot", template_name)
-    tpl = DocxTemplate(tpl_path)
-    tpl.render(context)
-    out_path = os.path.join("/tmp", f"{prefix}_{context.get('id','0')}.docx")
-    tpl.save(out_path)
-    logger.info(f"Generated document at {out_path}")
-    return out_path
-
-def error_hunting(paths: list) -> dict:
-    results = {}
-    for path in paths:
-        text = ""
-        if path.lower().endswith(".docx"):
-            text = docx2txt.process(path)
-        elif path.lower().endswith(".pdf"):
-            try:
-                pages = convert_from_path(path)
-                text = "".join(pytesseract.image_to_string(pg) for pg in pages)
-            except Exception as e:
-                logger.error(f"OCR failed for {path}: {e}")
-                continue
-        else:
-            logger.warning(f"Unsupported file for error hunting: {path}")
-            continue
-
-        missing = [kw for kw in ("signature","date","buyer","seller") if kw not in text.lower()]
-        if missing:
-            results[path] = missing
-    return results
-
-def bundle_closing_kit(ttype: str, docs: list) -> list:
-    kit_dir = os.path.join("/tmp", f"kit_{ttype}")
-    os.makedirs(kit_dir, exist_ok=True)
-    for doc in docs:
-        os.replace(doc, os.path.join(kit_dir, os.path.basename(doc)))
-
-    zip_path = os.path.join("/tmp", f"{ttype}_closing_kit.zip")
-    with zipfile.ZipFile(zip_path, "w") as zf:
-        for fname in os.listdir(kit_dir):
-            zf.write(os.path.join(kit_dir, fname), arcname=fname)
-    logger.info(f"Created ZIP at {zip_path}")
-    return [zip_path]
-
-
-@bp.route("/trigger", methods=["POST"])
-def trigger_autopilot():
-    payload = request.json or {}
-    tx_id = payload.get("data",{}).get("id")
-    if not tx_id:
-        return {"status":"error","message":"Missing transaction ID"}, 400
-
-    # enqueue the job
+    # 1) enqueue the heavy work
     job = rq_queue.enqueue(
-      trigger_autopilot_task,
-      payload["transaction_type"],
-      payload["data"],
-      job_timeout="5m"     # allow up to 5 minutes
+        trigger_autopilot_task,
+        payload["transaction_type"],
+        payload["data"],
+        job_timeout="10m"
     )
 
-    # return immediately with job id
-    return jsonify({
-      "status": "queued",
-      "job_id": job.get_id(),
-    }), 202
+    return jsonify({"status": "queued", "job_id": job.get_id()}), 202
 
-
-
-@bp.route("/trigger/status/<job_id>")
+@bp.route("/trigger/status/<job_id>", methods=["GET"])
 def trigger_status(job_id):
-    job = Job.fetch(job_id, connection=redis_conn)
+    try:
+        job = Job.fetch(job_id, connection=redis_conn)
+    except Exception:
+        return jsonify({"status": "unknown job"}), 404
+
     if job.is_finished:
-        return jsonify({"status":"finished","url": job.result}), 200
-    if job.is_failed:
-        return jsonify({"status":"failed","error": str(job.exc_info)}), 500
-    return jsonify({"status":"pending"}), 202
+        return jsonify({"status": "finished", "url": job.result}), 200
+    elif job.is_failed:
+        return jsonify({"status": "failed", "error": str(job.exc_info)}), 500
+    else:
+        return jsonify({"status": "pending"}), 202
