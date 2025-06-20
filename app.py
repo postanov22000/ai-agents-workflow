@@ -20,6 +20,13 @@ import google.auth.transport.requests as grequests
 
 from transaction_autopilot import bp as autopilot_bp
 
+from redis import Redis
+from rq import Queue
+from transaction_autopilot_task import trigger_autopilot_task
+
+redis_conn = Redis.from_url(os.environ["REDIS_URL"])
+rq_queue   = Queue("autopilot", connection=redis_conn)
+
 app = Flask(__name__, template_folder="templates")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
 
