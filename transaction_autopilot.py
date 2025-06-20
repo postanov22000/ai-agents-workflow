@@ -1,6 +1,7 @@
 import os
 import logging
 import zipfile
+from rq.job import Job
 from flask import Blueprint, request
 from supabase import create_client
 from docxtpl import DocxTemplate
@@ -137,3 +138,36 @@ def bundle_closing_kit(ttype: str, docs: list) -> list:
             zf.write(os.path.join(kit_dir, fname), arcname=fname)
     logger.info(f"Created ZIP at {zip_path}")
     return [zip_path]
+
+
+@bp.route("/trigger", methods=["POST"])
+def trigger_autopilot():
+    payload = request.json or {}
+    tx_id = payload.get("data",{}).get("id")
+    if not tx_id:
+        return {"status":"error","message":"Missing transaction ID"}, 400
+
+    # enqueue the job
+    job = rq_queue.enqueue(
+      trigger_autopilot_task,
+      payload["transaction_type"],
+      payload["data"],
+      job_timeout="5m"     # allow up to 5 minutes
+    )
+
+    # return immediately with job id
+    return jsonify({
+      "status": "queued",
+      "job_id": job.get_id(),
+    }), 202
+
+
+
+@bp.route("/trigger/status/<job_id>")
+def trigger_status(job_id):
+    job = Job.fetch(job_id, connection=redis_conn)
+    if job.is_finished:
+        return jsonify({"status":"finished","url": job.result}), 200
+    if job.is_failed:
+        return jsonify({"status":"failed","error": str(job.exc_info)}), 500
+    return jsonify({"status":"pending"}), 202
