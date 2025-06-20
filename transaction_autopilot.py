@@ -1,12 +1,17 @@
-# transaction_autopilot.py
 import os
 import logging
+import zipfile
+
 from flask import Blueprint, request, jsonify
 from supabase import create_client
+from docxtpl import DocxTemplate
+import docx2txt
+import pytesseract
+from pdf2image import convert_from_path
+
 from redis import Redis
 from rq import Queue
 from rq.job import Job
-from transaction_autopilot_task import trigger_autopilot_task
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logger = logging.getLogger(__name__)
@@ -22,42 +27,52 @@ def get_supabase_client():
 
 supabase = get_supabase_client()
 
-# ── RQ / Redis Setup ─────────────────────────────────────────────────────────
-redis_conn = Redis.from_url(os.environ["REDIS_URL"])
-rq_queue   = Queue("autopilot", connection=redis_conn)
+# ── Redis + RQ Setup (with TLS for Upstash) ─────────────────────────────────
+redis_conn = Redis.from_url(
+    os.environ["REDIS_URL"],
+    ssl=True,
+    ssl_cert_reqs=None,    # Upstash cert is publicly trusted
+    decode_responses=True
+)
+rq_queue = Queue("autopilot", connection=redis_conn)
 
-# ── Blueprint ───────────────────────────────────────────────────────────────
-bp = Blueprint("transaction_autopilot", __name__, url_prefix="/autopilot")
+# ── Blueprint ────────────────────────────────────────────────────────────────
+bp = Blueprint("transaction_autopilot", __name__)
 
+# ── Enqueue endpoint ─────────────────────────────────────────────────────────
 @bp.route("/trigger", methods=["POST"])
 def trigger_autopilot():
     payload = request.json or {}
-
-    # 0) must have transaction ID
     tx_id = payload.get("data", {}).get("id")
     if not tx_id:
         return jsonify({"status": "error", "message": "Missing transaction ID"}), 400
 
-    # 1) enqueue the heavy work
+    # enqueue the background job (timeout 5m)
     job = rq_queue.enqueue(
-        trigger_autopilot_task,
+        "transaction_autopilot_task.trigger_autopilot_task",
         payload["transaction_type"],
         payload["data"],
-        job_timeout="10m"
+        job_timeout="5m"
     )
 
-    return jsonify({"status": "queued", "job_id": job.get_id()}), 202
+    return jsonify({
+        "status": "queued",
+        "job_id": job.get_id()
+    }), 202
 
-@bp.route("/trigger/status/<job_id>", methods=["GET"])
+# ── Status poll endpoint ─────────────────────────────────────────────────────
+@bp.route("/trigger/status/<job_id>")
 def trigger_status(job_id):
     try:
         job = Job.fetch(job_id, connection=redis_conn)
     except Exception:
-        return jsonify({"status": "unknown job"}), 404
+        return jsonify({"status": "not_found"}), 404
 
     if job.is_finished:
+        # job.result is the public_url returned from the task
         return jsonify({"status": "finished", "url": job.result}), 200
-    elif job.is_failed:
+    if job.is_failed:
         return jsonify({"status": "failed", "error": str(job.exc_info)}), 500
-    else:
-        return jsonify({"status": "pending"}), 202
+    return jsonify({"status": "pending"}), 202
+
+# ── (You must still register this blueprint in your app: `app.register_blueprint(bp, url_prefix="/autopilot")`) ──
