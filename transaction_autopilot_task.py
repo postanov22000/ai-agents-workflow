@@ -1,32 +1,26 @@
-# transaction_autopilot_task.py
 import os
-import logging
 import zipfile
+import logging
+
 from supabase import create_client
 from docxtpl import DocxTemplate
 import docx2txt
 import pytesseract
 from pdf2image import convert_from_path
 
-# ── Logging ──────────────────────────────────────────────────────────────────
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
 def get_supabase():
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
-    if not url or not key:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
     return create_client(url, key)
 
 def generate_document(template_name, context, prefix):
-    tpl_path = os.path.join("templates/transaction_autopilot", template_name)
-    tpl = DocxTemplate(tpl_path)
+    tpl = DocxTemplate(os.path.join("templates/transaction_autopilot", template_name))
     tpl.render(context)
-    out_path = os.path.join("/tmp", f"{prefix}_{context['id']}.docx")
-    tpl.save(out_path)
-    logger.info(f"Generated document at {out_path}")
-    return out_path
+    out = os.path.join("/tmp", f"{prefix}_{context['id']}.docx")
+    tpl.save(out)
+    return out
 
 def error_hunting(paths):
     results = {}
@@ -41,11 +35,7 @@ def error_hunting(paths):
             except Exception as e:
                 logger.error(f"OCR failed for {path}: {e}")
                 continue
-        else:
-            logger.warning(f"Unsupported file for error hunting: {path}")
-            continue
-
-        missing = [kw for kw in ("signature", "date", "buyer", "seller") if kw not in text.lower()]
+        missing = [kw for kw in ("signature","date","buyer","seller") if kw not in text.lower()]
         if missing:
             results[path] = missing
     return results
@@ -60,28 +50,27 @@ def bundle_closing_kit(ttype, docs):
     with zipfile.ZipFile(zip_path, "w") as zf:
         for fname in os.listdir(kit_dir):
             zf.write(os.path.join(kit_dir, fname), arcname=fname)
-    logger.info(f"Created ZIP at {zip_path}")
     return [zip_path]
 
 def trigger_autopilot_task(transaction_type, data):
     supabase = get_supabase()
     tx_id = data["id"]
 
-    # 1) generate
+    # 1) generate docs
     docs = [
         generate_document("loi_template.docx", data, "LOI"),
         generate_document("psa_template.docx", data, "PSA")
     ]
 
-    # 2) scan for missing keywords
+    # 2) optional scan
     errs = error_hunting(docs)
     if errs:
         logger.warning("Missing keywords: %s", errs)
 
-    # 3) bundle
+    # 3) bundle into ZIP
     zip_paths = bundle_closing_kit(transaction_type, docs)
 
-    # 4) upload + persist
+    # 4) upload and persist kit_url
     public_url = None
     for zp in zip_paths:
         fn = os.path.basename(zp)
@@ -89,12 +78,12 @@ def trigger_autopilot_task(transaction_type, data):
             try:
                 supabase.storage.from_("closing-kits").upload(fn, f)
             except Exception:
-                pass  # assume it already exists
+                pass
         public_url = f"{os.environ['SUPABASE_URL']}/storage/v1/object/public/closing-kits/{fn}"
         supabase.table("transactions") \
                  .update({"kit_url": public_url}) \
                  .eq("id", tx_id) \
                  .execute()
 
-    # 5) return the public URL so the status endpoint can relay it
+    # return the URL as the job result
     return public_url
