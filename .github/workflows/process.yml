@@ -1,13 +1,15 @@
-# .github/workflows/process.yml
 name: Email & Autopilot Scheduler
 
 on:
   schedule:
-    - cron: '*/5 * * * *'   # every 5m
-    - cron: '0 2 * * *'     # daily at 02:00 UTC
+    - cron: '*/5 * * * *'     # Every 5 minutes
+    - cron: '0 2 * * *'       # Daily at 2:00 AM UTC
   workflow_dispatch:
   repository_dispatch:
     types: [autopilot-trigger]
+
+permissions:
+  contents: read
 
 jobs:
   poll-gmail:
@@ -15,8 +17,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v4
-        with: python-version: "3.11"
+        with:
+          python-version: "3.11"
+
       - run: |
           pip install -r requirements.txt
           python poll_gmail.py
@@ -34,7 +39,7 @@ jobs:
       - run: |
           HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
             "https://replyzeai.onrender.com/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
-          echo "Status: $HTTP"
+          echo "HTTP Status: $HTTP"
           test "$HTTP" = "200" || test "$HTTP" = "204"
 
   run-autopilot-batch:
@@ -53,8 +58,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v4
-        with: python-version: "3.11"
+        with:
+          python-version: "3.11"
+
       - run: |
           pip install -r requirements.txt
           echo '${{ toJson(github.event.client_payload) }}' > payload.json
