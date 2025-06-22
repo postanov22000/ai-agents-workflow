@@ -18,12 +18,16 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 import google.auth.transport.requests as grequests
 
+# bring in your Blueprint (which has /autopilot/trigger, etc.)
 from transaction_autopilot import bp as autopilot_bp
 
+# bring in your stand-alone task version (if you ever call it directly)
 import transaction_autopilot_task
 
+# ── single Flask app & blueprint registration ──
 app = Flask(__name__, template_folder="templates")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
+app.register_blueprint(autopilot_bp, url_prefix="/autopilot")
 
 # --- Supabase setup ---
 SUPABASE_URL = os.environ["SUPABASE_URL"]
@@ -961,30 +965,8 @@ def create_transaction():
 
 
 
-@app.route("/autopilot/trigger", methods=["POST"])
-def trigger_autopilot():
-    payload = request.json or {}
-    tx_type = payload.get("transaction_type")
-    data    = payload.get("data")
-    if not tx_type or not data or not data.get("id"):
-        return jsonify(status="error", message="Missing transaction ID"), 400
-
-    # synchronous call
-    kit_url = transaction_autopilot_task.trigger_autopilot_task(tx_type, data)
-
-    # return a direct download link
-    return f"""
-      <a href="{kit_url}" class="btn btn-success" target="_blank">
-        <i class="fas fa-download"></i> Download Closing Kit
-      </a>
-    """, 200
-
-
-
-
 # ---------------------------------------------------------------------------
 
-app.register_blueprint(autopilot_bp, url_prefix="/autopilot")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
