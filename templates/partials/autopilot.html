@@ -9,7 +9,6 @@
       id="txn-select-form"
       hx-get="/dashboard/autopilot?user_id={{ user_id }}"
       hx-target=".main-content"
-      hx-include="#txn-select"
       hx-swap="innerHTML"
     >
       <label for="txn-select">Select a transaction:</label>
@@ -25,7 +24,6 @@
         <i class="fas fa-arrow-right"></i> Load Transaction
       </button>
     </form>
-
   {% else %}
     <!-- Step 2: Show details & generate kit -->
     <div class="transaction-details mb-3">
@@ -46,15 +44,14 @@
         "data": {{ current_transaction | tojson }}
       }'
       hx-target="#autopilot-result"
-      hx-swap="outerHTML"
+      hx-swap="innerHTML"
     >
       <i class="fas fa-sync-alt"></i> Generate Closing Kit
     </button>
 
-    <!-- Step 3: placeholder for the HTMX poller and final link -->
+    <!-- placeholder for the download link -->
     <div id="autopilot-result" class="mt-3"></div>
 
-    <!-- If it was already generated previously, show it here too -->
     {% if current_transaction.kit_url %}
       <div class="mt-3">
         <a href="{{ current_transaction.kit_url }}"
