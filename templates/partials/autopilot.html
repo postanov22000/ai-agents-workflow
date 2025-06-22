@@ -46,12 +46,12 @@
         "data": {{ current_transaction | tojson }}
       }'
       hx-target="#autopilot-result"
-      hx-swap="innerHTML"
+      hx-swap="outerHTML"
     >
       <i class="fas fa-sync-alt"></i> Generate Closing Kit
     </button>
 
-    <!-- Step 3: placeholder for the download link -->
+    <!-- Step 3: placeholder for the HTMX poller and final link -->
     <div id="autopilot-result" class="mt-3"></div>
 
     <!-- If it was already generated previously, show it here too -->
