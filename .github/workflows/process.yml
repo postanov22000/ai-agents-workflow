@@ -1,9 +1,10 @@
+# .github/workflows/process.yml
 name: Email & Autopilot Scheduler
 
 on:
   schedule:
-    - cron: '*/5 * * * *'     # Every 5 minutes
-    - cron: '0 2 * * *'       # Daily at 2:00 AM UTC
+    - cron: '*/5 * * * *'     # Every 5m
+    - cron: '0 2 * * *'       # Daily @ 02:00 UTC
   workflow_dispatch:
   repository_dispatch:
     types: [autopilot-trigger]
@@ -36,29 +37,36 @@ jobs:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - run: |
+      - name: Kick off AI email processing
+        run: |
           HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
             "https://replyzeai.onrender.com/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
-          echo "HTTP Status: $HTTP"
+          echo "Process endpoint returned $HTTP"
+          # allow 200 or 204
           test "$HTTP" = "200" || test "$HTTP" = "204"
 
-  run-autopilot-batch:
+  run-autopilot:
     needs: trigger-processing
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - run: |
+      - name: Generate all ready closing kits
+        run: |
           HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X POST "https://replyzeai.onrender.com/autopilot/batch")
-          echo "Batch status: $HTTP"
+            -X POST "https://replyzeai.onrender.com/autopilot/trigger-all")
+          echo "Autopilot-all returned $HTTP"
           test "$HTTP" = "200"
 
   run-dispatched-autopilot:
     if: github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - run: |
+      - name: Dispatch single‐txn Autopilot
+        run: |
+          echo '${{ toJson(github.event.client_payload) }}' > payload.json
           HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X POST "https://replyzeai.onrender.com/autopilot/batch")
-          echo "Dispatched batch status: $HTTP"
+            -X POST "https://replyzeai.onrender.com/autopilot/trigger" \
+            -H "Content-Type: application/json" \
+            --data @payload.json)
+          echo "Dispatched Autopilot returned $HTTP"
           test "$HTTP" = "200"
