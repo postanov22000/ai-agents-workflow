@@ -57,16 +57,8 @@ jobs:
     if: github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.11"
-
       - run: |
-          pip install -r requirements.txt
-          echo '${{ toJson(github.event.client_payload) }}' > payload.json
-          python transaction_autopilot_task.py payload.json
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "https://replyzeai.onrender.com/autopilot/batch")
+          echo "Dispatched batch status: $HTTP"
+          test "$HTTP" = "200"
