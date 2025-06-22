@@ -49,22 +49,22 @@ def _bundle_zip(tx_id: str, file_paths: list[str]) -> str:
 
 def trigger_autopilot_task(transaction_type: str, data: dict) -> str:
     """
-    RQ entrypoint: render LOI+PSA, zip, upload to Supabase storage,
+    Synchronous entrypoint: render LOI + PSA, zip, upload to Supabase storage,
     update the transaction row with kit_url, and return that URL.
     """
     sb = _get_supabase()
     tx_id = data["id"]
 
-    # 1) choose and render both templates
+    # 1) render both templates
     docs = [
         _render_docx("loi_template.docx", data, "LOI"),
         _render_docx("psa_template.docx", data, "PSA")
     ]
 
-    # 2) bundle into a single ZIP
+    # 2) bundle into a zip
     zip_path = _bundle_zip(tx_id, docs)
 
-    # 3) upload to storage under "<tx_id>/" folder
+    # 3) upload to Supabase Storage under "<tx_id>/" folder
     bucket = "closing-kits"
     key = f"{tx_id}/{os.path.basename(zip_path)}"
     with open(zip_path, "rb") as f:
@@ -75,12 +75,11 @@ def trigger_autopilot_task(transaction_type: str, data: dict) -> str:
             logger.warning("Upload may already exist (ignored): %s", e)
 
     # 4) build public URL
-    public_url = sb.storage.from_(bucket).get_public_url(key)
-    # get_public_url returns {"publicUrl": "..."} or similar
-    if isinstance(public_url, dict):
-        url = public_url.get("publicUrl") or public_url.get("PublicURL") or public_url.get("url")
+    pu = sb.storage.from_(bucket).get_public_url(key)
+    if isinstance(pu, dict):
+        url = pu.get("publicUrl") or pu.get("PublicURL") or pu.get("url")
     else:
-        url = public_url
+        url = pu
 
     # 5) persist kit_url back to Supabase
     sb.table("transactions") \
