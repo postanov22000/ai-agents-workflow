@@ -7,7 +7,7 @@ from flask import abort
 from datetime import date, datetime
 from email.mime.text import MIMEText
 
-from flask import Flask, render_template, request, redirect, jsonify
+from flask import Flask, render_template, request, redirect, jsonify, render_template_string
 
 from supabase import create_client, Client
 
@@ -964,6 +964,8 @@ def create_transaction():
     return feedback, 200
 
 
+
+
 @app.route("/autopilot/trigger", methods=["POST"])
 def enqueue_autopilot():
     payload = request.json or {}
@@ -972,24 +974,57 @@ def enqueue_autopilot():
         return jsonify(status="error", message="Missing transaction ID"), 400
 
     job = rq_queue.enqueue(
-        transaction_autopilot_task.trigger_autopilot_task,  # ← the correct module
+        transaction_autopilot_task.trigger_autopilot_task,
         payload["transaction_type"],
         payload["data"],
         job_timeout="5m"
     )
-    return jsonify(status="queued", job_id=job.get_id()), 202
 
+    # return the HTMX poller
+    return render_template_string("""
+      <div
+        id="autopilot-poller"
+        hx-get="/autopilot/status/{{job_id}}"
+        hx-trigger="every 2s"
+        hx-swap="outerHTML"
+      >
+        ⏳ Generating your closing kit… please wait…
+      </div>
+    """, job_id=job.get_id()), 202
 
 
 @app.route("/autopilot/status/<job_id>")
 def autopilot_status(job_id):
     from rq.job import Job
     job = Job.fetch(job_id, connection=redis_conn)
+
     if job.is_finished:
-        return jsonify(status="finished", url=job.result), 200
-    if job.is_failed:
-        return jsonify(status="failed", error=str(job.exc_info)), 500
-    return jsonify(status="pending"), 202
+        url = job.result  # the public_url returned by your RQ task
+        return f"""
+          <a href="{url}" class="btn btn-success" target="_blank">
+            <i class="fas fa-download"></i> Your closing kit is ready!
+          </a>
+        """, 200
+
+    elif job.is_failed:
+        # added f before the string so exc_info is interpolated
+        return f"<div class='alert alert-danger'>Job failed: {job.exc_info}</div>", 500
+
+    else:
+        # still running: poll again in 2s
+        return render_template_string("""
+          <div
+            id="autopilot-poller"
+            hx-get="/autopilot/status/{{job_id}}"
+            hx-trigger="every 2s"
+            hx-swap="outerHTML"
+          >
+            ⏳ Still generating… please wait…
+          </div>
+        """, job_id=job_id), 202
+
+
+
 
 # ---------------------------------------------------------------------------
 
