@@ -22,7 +22,7 @@ from transaction_autopilot import bp as autopilot_bp
 
 from redis import Redis
 from rq import Queue
-from transaction_autopilot_task import trigger_autopilot_task
+import transaction_autopilot_task
 
 redis_conn = Redis.from_url(os.environ["REDIS_URL"])
 rq_queue   = Queue("autopilot", connection=redis_conn)
@@ -962,6 +962,34 @@ def create_transaction():
       + '<script>htmx.trigger(document.querySelector(\'[hx-get*="/dashboard/autopilot"]\'), "click")</script>'
     )
     return feedback, 200
+
+
+@app.route("/autopilot/trigger", methods=["POST"])
+def enqueue_autopilot():
+    payload = request.json or {}
+    tx_id   = payload.get("data", {}).get("id")
+    if not tx_id:
+        return jsonify(status="error", message="Missing transaction ID"), 400
+
+    job = rq_queue.enqueue(
+        transaction_autopilot_task.trigger_autopilot_task,  # ← the correct module
+        payload["transaction_type"],
+        payload["data"],
+        job_timeout="5m"
+    )
+    return jsonify(status="queued", job_id=job.get_id()), 202
+
+
+
+@app.route("/autopilot/status/<job_id>")
+def autopilot_status(job_id):
+    from rq.job import Job
+    job = Job.fetch(job_id, connection=redis_conn)
+    if job.is_finished:
+        return jsonify(status="finished", url=job.result), 200
+    if job.is_failed:
+        return jsonify(status="failed", error=str(job.exc_info)), 500
+    return jsonify(status="pending"), 202
 
 # ---------------------------------------------------------------------------
 
