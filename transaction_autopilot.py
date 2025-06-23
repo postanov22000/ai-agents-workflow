@@ -28,7 +28,7 @@ bp = Blueprint("transaction_autopilot", __name__)
 @bp.route("/trigger-all", methods=["POST"])
 def trigger_all_autopilots():
     try:
-        res = supabase.table("transactions").select("*").is_("kit_url", None).execute()
+        res = supabase.table("transactions").select("*").is_("kit_url", "null").execute()
         transactions = res.data or []
     except Exception as e:
         logger.error(f"Failed to fetch transactions: {e}")
