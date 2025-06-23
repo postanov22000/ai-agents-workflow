@@ -25,56 +25,53 @@ supabase = get_supabase_client()
 # Blueprint for Transaction Autopilot
 bp = Blueprint("transaction_autopilot", __name__)
 
-@bp.route("/trigger", methods=["POST"])
-def trigger_autopilot():
-    payload = request.json or {}
+@bp.route("/autopilot/trigger-all", methods=["POST"])
+def trigger_all_autopilots():
+    try:
+        res = supabase.table("transactions").select("*").is_("kit_url", "null").execute()
+        transactions = res.data or []
+    except Exception as e:
+        logger.error(f"Failed to fetch transactions: {e}")
+        return jsonify({"status": "error", "message": "Failed to fetch transactions"}), 500
 
-    # 0) Ensure we have a transaction ID to update
+    processed = []
+    for txn in transactions:
+        try:
+            response = trigger_autopilot_from_payload({
+                "transaction_type": txn.get("transaction_type", "generic"),
+                "data": txn
+            })
+            if response.get("status") == "success":
+                processed.append(txn["id"])
+        except Exception as e:
+            logger.warning(f"Failed to process transaction {txn['id']}: {e}")
+
+    return jsonify({"status": "ok", "processed": processed}), 200
+
+
+def trigger_autopilot_from_payload(payload: dict) -> dict:
     tx_id = payload.get("data", {}).get("id")
-    if not tx_id:
-        return jsonify({"status": "error", "message": "Missing transaction ID"}), 400
-
     ttype = payload.get("transaction_type", "generic")
-    data  = payload.get("data", {})
+    data = payload.get("data", {})
 
-    # 1) Generate LOI & PSA
-    try:
-        loi_path = generate_document("loi_template.docx", data, "LOI")
-        psa_path = generate_document("psa_template.docx", data, "PSA")
-        docs = [loi_path, psa_path]
-    except Exception as e:
-        logger.error(f"Document assembly failed: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+    loi_path = generate_document("loi_template.docx", data, "LOI")
+    psa_path = generate_document("psa_template.docx", data, "PSA")
+    docs = [loi_path, psa_path]
 
-    # 2) Error‑hunting scan
-    errors = error_hunting(docs)
-    if errors:
-        logger.warning(f"Errors detected: {errors}")
-
-    # 3) Bundle into ZIP
-    try:
-        kit_zip_list = bundle_closing_kit(ttype, docs)
-    except Exception as e:
-        logger.error(f"Bundling failed: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-    # 4) Upload to Supabase Storage, then write kit_url back to transactions table
+    kit_zip_list = bundle_closing_kit(ttype, docs)
     uploaded_files = []
-    for zip_path in kit_zip_list:
-        filename   = os.path.basename(zip_path)
-        public_url = (
-            f"{os.environ['SUPABASE_URL']}"
-            f"/storage/v1/object/closing-kits/{filename}"
-        )
 
-        # attempt upload (may already exist)
+    for zip_path in kit_zip_list:
+        filename = os.path.basename(zip_path)
+        public_url = (
+            f"{os.environ['SUPABASE_URL']}/storage/v1/object/closing-kits/{filename}"
+        )
         with open(zip_path, "rb") as f:
             try:
                 supabase.storage.from_("closing-kits").upload(filename, f)
             except Exception as e:
                 logger.warning(f"Upload failed for {filename}: {e}, reusing existing object")
 
-        # persist the public URL back into the transaction
         try:
             supabase.table("transactions") \
                      .update({"kit_url": public_url}) \
@@ -85,7 +82,8 @@ def trigger_autopilot():
 
         uploaded_files.append(filename)
 
-    return jsonify({"status": "success", "files": uploaded_files}), 200
+    return {"status": "success", "files": uploaded_files}
+
 
 
 def generate_document(template_name: str, context: dict, prefix: str) -> str:
