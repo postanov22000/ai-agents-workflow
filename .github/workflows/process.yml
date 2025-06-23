@@ -1,10 +1,9 @@
-# .github/workflows/process.yml
 name: Email & Autopilot Scheduler
 
 on:
   schedule:
-    - cron: '*/5 * * * *'     # Every 5m
-    - cron: '0 2 * * *'       # Daily @ 02:00 UTC
+    - cron: '*/5 * * * *'     # Every 5 minutes
+    - cron: '0 2 * * *'       # Daily at 02:00 UTC
   workflow_dispatch:
   repository_dispatch:
     types: [autopilot-trigger]
@@ -23,7 +22,8 @@ jobs:
         with:
           python-version: "3.11"
 
-      - run: |
+      - name: Install dependencies and poll Gmail
+        run: |
           pip install -r requirements.txt
           python poll_gmail.py
         env:
@@ -42,7 +42,6 @@ jobs:
           HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
             "https://replyzeai.onrender.com/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
           echo "Process endpoint returned $HTTP"
-          # allow 200 or 204
           test "$HTTP" = "200" || test "$HTTP" = "204"
 
   run-autopilot:
@@ -55,13 +54,13 @@ jobs:
           HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
             -X POST "https://replyzeai.onrender.com/autopilot/trigger-all")
           echo "Autopilot-all returned $HTTP"
-          test "$HTTP" = "200"
+          test "$HTTP" = "200" || test "$HTTP" = "204"
 
   run-dispatched-autopilot:
     if: github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch single‐txn Autopilot
+      - name: Dispatch single-txn Autopilot
         run: |
           echo '${{ toJson(github.event.client_payload) }}' > payload.json
           HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -69,4 +68,4 @@ jobs:
             -H "Content-Type: application/json" \
             --data @payload.json)
           echo "Dispatched Autopilot returned $HTTP"
-          test "$HTTP" = "200"
+          test "$HTTP" = "200" || test "$HTTP" = "204"
