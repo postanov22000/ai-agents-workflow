@@ -25,7 +25,7 @@ supabase = get_supabase_client()
 # Blueprint for Transaction Autopilot
 bp = Blueprint("transaction_autopilot", __name__)
 
-@bp.route("/autopilot/trigger-all", methods=["POST"])
+@bp.route("/trigger-all", methods=["POST"])
 def trigger_all_autopilots():
     try:
         res = supabase.table("transactions").select("*").is_("kit_url", None).execute()
