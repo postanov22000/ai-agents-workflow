@@ -57,7 +57,6 @@ jobs:
 
   run-autopilot:
     needs: trigger-processing
-    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     steps:
       - name: Generate all ready closing kits
