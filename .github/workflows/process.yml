@@ -11,7 +11,7 @@ on:
 permissions:
   contents: read
 
- jobs:
+jobs:
   poll-gmail:
     runs-on: ubuntu-latest
     outputs:
@@ -57,7 +57,7 @@ permissions:
 
   run-autopilot:
     needs: trigger-processing
-    if: github.event_name == 'schedule' 
+    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     steps:
       - name: Generate all ready closing kits
@@ -66,4 +66,3 @@ permissions:
             -X POST "https://replyzeai.onrender.com/autopilot/trigger-all")
           echo "Autopilot-all returned $HTTP"
           test "$HTTP" = "200" || test "$HTTP" = "204"
-
