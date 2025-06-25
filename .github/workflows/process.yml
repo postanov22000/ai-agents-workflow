@@ -11,42 +11,53 @@ on:
 permissions:
   contents: read
 
-jobs:
+ jobs:
   poll-gmail:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.poll-result.outputs.status }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - uses: actions/setup-python@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
-      - name: Install dependencies and poll Gmail
+      - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
-          python poll_gmail.py
+
+      - name: Run Gmail Poller
+        id: poll-result
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        run: |
+          python poll_gmail.py
+          echo "status=success" >> $GITHUB_OUTPUT
 
   trigger-processing:
     needs: poll-gmail
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - name: Kick off AI email processing
+      - name: Trigger Main Processing Endpoint
         run: |
-          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
             "https://replyzeai.onrender.com/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
-          echo "Process endpoint returned $HTTP"
-          test "$HTTP" = "200" || test "$HTTP" = "204"
+          echo "HTTP status: $RESPONSE"
+          if [[ "$RESPONSE" != "200" && "$RESPONSE" != "204" ]]; then
+            echo "::error::Processing failed with status: $RESPONSE"
+            exit 1
+          fi
 
   run-autopilot:
     needs: trigger-processing
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'schedule' 
     runs-on: ubuntu-latest
     steps:
       - name: Generate all ready closing kits
@@ -56,16 +67,3 @@ jobs:
           echo "Autopilot-all returned $HTTP"
           test "$HTTP" = "200" || test "$HTTP" = "204"
 
-  run-dispatched-autopilot:
-    if: github.event_name == 'repository_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Dispatch single-txn Autopilot
-        run: |
-          echo '${{ toJson(github.event.client_payload) }}' > payload.json
-          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X POST "https://replyzeai.onrender.com/autopilot/trigger" \
-            -H "Content-Type: application/json" \
-            --data @payload.json)
-          echo "Dispatched Autopilot returned $HTTP"
-          test "$HTTP" = "200" || test "$HTTP" = "204"
