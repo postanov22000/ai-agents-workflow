@@ -729,147 +729,148 @@ def trigger_process():
                 supabase.table("emails").update({
                     "status": "error",
                     "error_message": "generate-proposal failed"
-                }).eq("id", r["id"]).execute()
-
-
-    #### STAGE 5 → Send or Draft via Gmail
-sent, drafted, failed = [], [], []
-ready_list = (
-    supabase.table("emails")
-            .select("id, user_id, sender_email, processed_content")
-            .eq("status", "ready_to_send")
-            .execute().data
-    or []
-)
-
-for r in ready_list:
-    em_id   = r["id"]
-    uid     = r["user_id"]
-    to_addr = r["sender_email"]
-    ai_text = (r.get("processed_content") or "").rstrip()
-
-    # ── fetch user’s name, signature & lease‐toggle ──
-    prof = supabase.table("profiles") \
-            .select("display_name, signature, generate_leases") \
-            .eq("id", uid).single().execute().data or {}
-    name            = prof.get("display_name", "").strip()
-    sig             = prof.get("signature", "").strip()
-    generate_leases = prof.get("generate_leases", False)
-
-    # ── substitute placeholder ──
-    if name:
-        ai_text = ai_text.replace("[Your Name]", name)
-
-    # ── assemble HTML body ──
-    html_body = (
-        "<html><body>"
-        + "<p>" + ai_text.replace("\n", "<br>") + "</p>"
-        + (sig or "")
-        + "</body></html>"
+                 }).eq("id", r["id"]).execute()
+    
+    
+        #### STAGE 5 → Send or Draft via Gmail
+    sent, drafted, failed = [], [], []
+    ready_list = (
+        supabase.table("emails")
+                .select("id, user_id, sender_email, processed_content")
+                .eq("status", "ready_to_send")
+                .execute().data
+        or []
     )
 
-    # ── get Gmail creds ──
-    tok = supabase.table("gmail_tokens") \
-                 .select("credentials") \
-                 .eq("user_id", uid).limit(1).execute().data or []
-    if not tok:
-        app.logger.warning(f"No Gmail token for user {uid}, skipping {em_id}")
-        failed.append(em_id)
-        supabase.table("emails").update({
-            "status": "error",
-            "error_message": "No Gmail token"
-        }).eq("id", em_id).execute()
-        continue
+    for r in ready_list:
+        em_id   = r["id"]
+        uid     = r["user_id"]
+        to_addr = r["sender_email"]
+        ai_text = (r.get("processed_content") or "").rstrip()
 
-    cd = tok[0]["credentials"]
-    creds = Credentials(
-        token=cd["token"],
-        refresh_token=cd["refresh_token"],
-        token_uri=cd["token_uri"],
-        client_id=cd["client_id"],
-        client_secret=cd["client_secret"],
-        scopes=cd["scopes"]
-    )
+        # ── fetch user’s name, signature & lease‐toggle ──
+        prof = supabase.table("profiles") \
+                .select("display_name, signature, generate_leases") \
+                .eq("id", uid).single().execute().data or {}
+        name            = prof.get("display_name", "").strip()
+        sig             = prof.get("signature", "").strip()
+        generate_leases = prof.get("generate_leases", False)
 
-    # ── REFRESH + PERSIST ──
-    if creds.expired and creds.refresh_token:
-        app.logger.info(f"Token expired for user {uid}; refreshing now.")
-        creds.refresh(GoogleRequest())
+        # ── substitute placeholder ──
+        if name:
+            ai_text = ai_text.replace("[Your Name]", name)
 
-        # Persist via service‐role client
-        resp = SUPABASE_SERVICE.table("gmail_tokens") \
-            .update({
-                "credentials": {
-                    "token": creds.token,
-                    "refresh_token": creds.refresh_token,
-                    "token_uri": creds.token_uri,
-                    "client_id": creds.client_id,
-                    "client_secret": creds.client_secret,
-                    "scopes": creds.scopes
-                }
-            }) \
-            .eq("user_id", uid) \
-            .execute()
-        app.logger.info(f"Persisted refreshed token for {uid}: data={resp.data}, error={resp.error}")
-        if resp.error:
-            app.logger.error(f"Failed to persist refreshed token for {uid}: {resp.error}")
+        # ── assemble HTML body ──
+        html_body = (
+            "<html><body>"
+            + "<p>" + ai_text.replace("\n", "<br>") + "</p>"
+            + (sig or "")
+            + "</body></html>"
+        )
+
+        # ── get Gmail creds ──
+        tok = supabase.table("gmail_tokens") \
+                     .select("credentials") \
+                     .eq("user_id", uid).limit(1).execute().data or []
+        if not tok:
+            app.logger.warning(f"No Gmail token for user {uid}, skipping {em_id}")
             failed.append(em_id)
+            supabase.table("emails").update({
+                "status": "error",
+                "error_message": "No Gmail token"
+            }).eq("id", em_id).execute()
             continue
 
-    svc = build("gmail", "v1", credentials=creds, cache_discovery=False)
+        cd = tok[0]["credentials"]
+        creds = Credentials(
+            token=cd["token"],
+            refresh_token=cd["refresh_token"],
+            token_uri=cd["token_uri"],
+            client_id=cd["client_id"],
+            client_secret=cd["client_secret"],
+            scopes=cd["scopes"]
+        )
 
-    try:
-        if generate_leases:
-            # ── create a Gmail Draft ──
-            msg = MIMEText(html_body, "html")
-            msg["to"]      = to_addr
-            msg["from"]    = "me"
-            msg["subject"] = "Lease Agreement Draft"
-            raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+        # ── REFRESH + PERSIST ──
+        if creds.expired and creds.refresh_token:
+            app.logger.info(f"Token expired for user {uid}; refreshing now.")
+            creds.refresh(GoogleRequest())
 
-            draft_res = svc.users().drafts().create(
-                userId="me",
-                body={"message": {"raw": raw}}
-            ).execute()
+            # Persist via service‐role client
+            resp = SUPABASE_SERVICE.table("gmail_tokens") \
+                .update({
+                    "credentials": {
+                        "token": creds.token,
+                        "refresh_token": creds.refresh_token,
+                        "token_uri": creds.token_uri,
+                        "client_id": creds.client_id,
+                        "client_secret": creds.client_secret,
+                        "scopes": creds.scopes
+                    }
+                }) \
+                .eq("user_id", uid) \
+                .execute()
+            app.logger.info(f"Persisted refreshed token for {uid}: data={resp.data}, error={resp.error}")
+            if resp.error:
+                app.logger.error(f"Failed to persist refreshed token for {uid}: {resp.error}")
+                failed.append(em_id)
+                continue
 
-            drafted.append(em_id)
-            app.logger.info(f"Drafted lease for {em_id} → Draft ID {draft_res['id']}")
+        svc = build("gmail", "v1", credentials=creds, cache_discovery=False)
+
+        try:
+            if generate_leases:
+                # ── create a Gmail Draft ──
+                msg = MIMEText(html_body, "html")
+                msg["to"]      = to_addr
+                msg["from"]    = "me"
+                msg["subject"] = "Lease Agreement Draft"
+                raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+
+                draft_res = svc.users().drafts().create(
+                    userId="me",
+                    body={"message": {"raw": raw}}
+                ).execute()
+
+                drafted.append(em_id)
+                app.logger.info(f"Drafted lease for {em_id} → Draft ID {draft_res['id']}")
+                supabase.table("emails").update({
+                    "status": "drafted",
+                    "sent_at": datetime.utcnow().isoformat()
+                }).eq("id", em_id).execute()
+            else:
+                # ── send immediately ──
+                msg = MIMEText(html_body, "html")
+                msg["to"]      = to_addr
+                msg["from"]    = "me"
+                msg["subject"] = "Re: your email"
+                raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+
+                send_res = svc.users().messages().send(
+                    userId="me", body={"raw": raw}
+                ).execute()
+
+                sent.append(em_id)
+                app.logger.info(f"Sent email {em_id} → Gmail ID {send_res.get('id')}")
+                supabase.table("emails").update({
+                    "status": "sent",
+                    "sent_at": datetime.utcnow().isoformat()
+                }).eq("id", em_id).execute()
+        except Exception as e:
+            failed.append(em_id)
+            app.logger.error(f"Error processing {em_id}: {e}", exc_info=True)
             supabase.table("emails").update({
-                "status": "drafted",
-                "sent_at": datetime.utcnow().isoformat()
+                "status": "error",
+                "error_message": str(e)
             }).eq("id", em_id).execute()
-        else:
-            # ── send immediately ──
-            msg = MIMEText(html_body, "html")
-            msg["to"]      = to_addr
-            msg["from"]    = "me"
-            msg["subject"] = "Re: your email"
-            raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
-            send_res = svc.users().messages().send(
-                userId="me", body={"raw": raw}
-            ).execute()
+    return jsonify({
+        "sent":      sent,
+        "drafted":   drafted,
+        "failed":    failed,
+        "summary":   f"{len(sent)} sent, {len(drafted)} drafted, {len(failed)} failed"
+    }), 200
 
-            sent.append(em_id)
-            app.logger.info(f"Sent email {em_id} → Gmail ID {send_res.get('id')}")
-            supabase.table("emails").update({
-                "status": "sent",
-                "sent_at": datetime.utcnow().isoformat()
-            }).eq("id", em_id).execute()
-    except Exception as e:
-        failed.append(em_id)
-        app.logger.error(f"Error processing {em_id}: {e}", exc_info=True)
-        supabase.table("emails").update({
-            "status": "error",
-            "error_message": str(e)
-        }).eq("id", em_id).execute()
-
-return jsonify({
-    "sent":      sent,
-    "drafted":   drafted,
-    "failed":    failed,
-    "summary":   f"{len(sent)} sent, {len(drafted)} drafted, {len(failed)} failed"
-}), 200
 
 
 
