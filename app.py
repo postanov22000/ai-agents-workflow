@@ -730,7 +730,8 @@ def trigger_process():
                     "error_message": "generate-proposal failed"
                 }).eq("id", r["id"]).execute()
 
-        #### STAGE 5 → Send or Draft via Gmail
+
+    #### STAGE 5 → Send or Draft via Gmail
     sent, drafted, failed = [], [], []
     ready_list = (
         supabase.table("emails")
@@ -791,9 +792,10 @@ def trigger_process():
 
         # ── REFRESH + PERSIST ──
         if creds.expired and creds.refresh_token:
+            app.logger.info(f"Token expired for user {uid}; refreshing now.")
             creds.refresh(GoogleRequest())
-            # Persist the newly refreshed token back into Supabase
-            supabase.table("gmail_tokens") \
+            # Persist the refreshed token back into Supabase
+            resp = supabase.table("gmail_tokens") \
                 .update({
                     "credentials": {
                         "token": creds.token,
@@ -806,6 +808,7 @@ def trigger_process():
                 }) \
                 .eq("user_id", uid) \
                 .execute()
+            app.logger.info(f"Persisted refreshed token for user {uid}: {resp}")
 
         svc = build("gmail", "v1", credentials=creds, cache_discovery=False)
 
@@ -856,7 +859,6 @@ def trigger_process():
             }).eq("id", em_id).execute()
 
     return jsonify({
-        "processed": all_processed,
         "sent":      sent,
         "drafted":   drafted,
         "failed":    failed,
