@@ -1323,19 +1323,12 @@ def debug_env():
 app = Flask(__name__)
 
 def _auth():
+    """
+    Enforce token‐based auth for all /process/stageX endpoints.
+    Call with ?token=<PROCESS_SECRET_TOKEN>
+    """
     if request.args.get("token") != os.environ["PROCESS_SECRET_TOKEN"]:
         abort(401)
-    """
-    Main processing pipeline endpoint. Call this with:
-      GET /process?token=<PROCESS_SECRET_TOKEN>
-    Pipeline steps:
-      1) Detect Jargon
-      2) Generate Response
-      3) Personalize Template
-      4) Generate Proposal
-      5) If generate_leases ON → create Gmail Draft
-         Else → send via Gmail
-    """
 
 @app.route("/process/stage1", methods=["POST"])
 def process_stage1():    
