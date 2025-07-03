@@ -1375,11 +1375,15 @@ def process_stage1():
 def process_stage2():
     """
     STAGE 2 → Generate Response (batched)
+
+    - Auth via ?token=
+    - Batch all awaiting_response emails into one call
+    - Let the edge function update processed_content & status
     """
     _auth()
 
-    # 1) fetch all rows awaiting AI response
-    rows = (
+    # 1) Fetch all emails awaiting AI response
+    resp_pending = (
         supabase.table("emails")
                 .select("id")
                 .eq("status", "awaiting_response")
@@ -1387,28 +1391,25 @@ def process_stage2():
                 .data
         or []
     )
-    if not rows:
-        # nothing to do
+
+    if not resp_pending:
+        # Nothing to do
         return "", 204
 
-    ids = [r["id"] for r in rows]
+    # Collect IDs
+    ids = [r["id"] for r in resp_pending]
 
-    # 2) mark all as "processing" so we don't double‐invoke
+    # 2) Mark them as 'processing' so we don’t double‐process
     supabase.table("emails") \
             .update({"status": "processing"}) \
             .in_("id", ids) \
             .execute()
 
-    # 3) call the Edge Function once with the full set of IDs
+    # 3) Call your edge function once with the full list
     success = call_edge("/generate-response", {"email_ids": ids})
 
-    if success:
-        # Edge Fn will update each row:
-        #   • processed_content
-        #   • status -> "ready_to_send"
-        return "", 200
-    else:
-        # on failure, mark them all error
+    if not success:
+        # If the edge function failed entirely, mark as error
         supabase.table("emails") \
                 .update({
                     "status":        "error",
@@ -1417,6 +1418,11 @@ def process_stage2():
                 .in_("id", ids) \
                 .execute()
         return "", 500
+
+    # Otherwise: edge function will have updated each row's
+    # processed_content and set status to "ready_to_send"
+    return "", 204
+
 
 
 @app.route("/process/stage3", methods=["POST"])
