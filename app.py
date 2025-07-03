@@ -1378,7 +1378,8 @@ def process_stage2():
     """
     _auth()
 
-    resp_pending = (
+    # 1) fetch all rows awaiting AI response
+    rows = (
         supabase.table("emails")
                 .select("id")
                 .eq("status", "awaiting_response")
@@ -1386,34 +1387,37 @@ def process_stage2():
                 .data
         or []
     )
+    if not rows:
+        # nothing to do
+        return "", 204
 
-    if resp_pending:
-        ids = [r["id"] for r in resp_pending]
+    ids = [r["id"] for r in rows]
+
+    # 2) mark all as "processing" so we don't double‐invoke
+    supabase.table("emails") \
+            .update({"status": "processing"}) \
+            .in_("id", ids) \
+            .execute()
+
+    # 3) call the Edge Function once with the full set of IDs
+    success = call_edge("/generate-response", {"email_ids": ids})
+
+    if success:
+        # Edge Fn will update each row:
+        #   • processed_content
+        #   • status -> "ready_to_send"
+        return "", 200
+    else:
+        # on failure, mark them all error
         supabase.table("emails") \
-                .update({"status": "processing"}) \
+                .update({
+                    "status":        "error",
+                    "error_message": "generate-response failed"
+                }) \
                 .in_("id", ids) \
                 .execute()
+        return "", 500
 
-        batch_size = 5
-        for i in range(0, len(ids), batch_size):
-            batch = ids[i : i + batch_size]
-            success = call_edge("/generate-response", {"email_ids": batch})
-            if success:
-                for eid in batch:
-                    supabase.table("emails") \
-                            .update({"status": "ready_to_send"}) \
-                            .eq("id", eid) \
-                            .execute()
-            else:
-                supabase.table("emails") \
-                        .update({
-                            "status":        "error",
-                            "error_message": "generate-response failed"
-                        }) \
-                        .in_("id", batch) \
-                        .execute()
-
-    return "", 204
 
 @app.route("/process/stage3", methods=["POST"])
 def process_stage3():
