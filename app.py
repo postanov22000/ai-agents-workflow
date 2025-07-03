@@ -1355,42 +1355,50 @@ def process_stage1():
                 }).eq("id", r["id"]).execute()
 
 @app.route("/process/stage2", methods=["POST"])
-def process_stage2():    
-        #### STAGE 2 → Generate Response (batched)
-      _auth()
+def process_stage2():
+    """
+    STAGE 2 → Generate Response (batched)
+    """
+    _auth()
+
+    # Fetch all emails awaiting a response
     resp_pending = (
         supabase.table("emails")
                 .select("id")
                 .eq("status", "awaiting_response")
-                .execute().data
+                .execute()
+                .data
         or []
     )
+
     if resp_pending:
         ids = [r["id"] for r in resp_pending]
-        # mark them all as processing up‐front
+
+        # Mark them all as "processing" up‑front
         supabase.table("emails") \
                 .update({"status": "processing"}) \
                 .in_("id", ids) \
                 .execute()
 
-        # break into batches of 5
+        # Break into batches of 5
         batch_size = 5
         for i in range(0, len(ids), batch_size):
             batch = ids[i : i + batch_size]
+
             success = call_edge(
                 "/generate-response",
                 {"email_ids": batch}
             )
+
             if success:
-                # on success mark each id in batch as ready_to_send
+                # On success mark each id in batch as ready_to_send
                 for eid in batch:
                     supabase.table("emails") \
                             .update({"status": "ready_to_send"}) \
                             .eq("id", eid) \
                             .execute()
-                    all_processed.append(eid)
             else:
-                # on failure mark each id in batch as error
+                # On failure mark each id in batch as error
                 supabase.table("emails") \
                         .update({
                             "status": "error",
@@ -1398,6 +1406,9 @@ def process_stage2():
                         }) \
                         .in_("id", batch) \
                         .execute()
+
+    # No content to return
+    return "", 204
 
 @app.route("/process/stage3", methods=["POST"])
 def process_stage3():
