@@ -45,43 +45,48 @@ jobs:
     needs: poll-gmail
     runs-on: ubuntu-latest
     env:
-      BASE_URL: ${{ secrets.PROCESS_BASE_URL }}
-      TOKEN: ${{ secrets.PROCESS_SECRET_TOKEN }}
+      BASE_URL: ${{ secrets.PROCESS_BASE_URL }}    # e.g. https://replyzeai.onrender.com
+      TOKEN:    ${{ secrets.PROCESS_SECRET_TOKEN }}
     steps:
-      - name: Stage 1 - Detect Jargon
+      - name: Stage 1 – Detect Jargon
         run: |
           echo "Running Stage 1..."
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/process/stage1?token=$TOKEN")
+          STATUS=$(curl -s -X POST -w "%{http_code}" \
+            "$BASE_URL/process/stage1?token=$TOKEN" -o /dev/null)
           echo "Stage 1 HTTP $STATUS"
-          test "$STATUS" = "200" || test "$STATUS" = "204" || exit 1
+          test "$STATUS" = "200" || test "$STATUS" = "204"
 
-      - name: Stage 2 - Generate Response
+      - name: Stage 2 – Generate Response
         run: |
           echo "Running Stage 2..."
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/process/stage2?token=$TOKEN")
+          STATUS=$(curl -s -X POST -w "%{http_code}" \
+            "$BASE_URL/process/stage2?token=$TOKEN" -o /dev/null)
           echo "Stage 2 HTTP $STATUS"
-          test "$STATUS" = "200" || test "$STATUS" = "204" || exit 1
+          test "$STATUS" = "200" || test "$STATUS" = "204"
 
-      - name: Stage 3 - Personalize Template
+      - name: Stage 3 – Personalize Template
         run: |
           echo "Running Stage 3..."
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/process/stage3?token=$TOKEN")
+          STATUS=$(curl -s -X POST -w "%{http_code}" \
+            "$BASE_URL/process/stage3?token=$TOKEN" -o /dev/null)
           echo "Stage 3 HTTP $STATUS"
-          test "$STATUS" = "200" || test "$STATUS" = "204" || exit 1
+          test "$STATUS" = "200" || test "$STATUS" = "204"
 
-      - name: Stage 4 - Generate Proposal
+      - name: Stage 4 – Generate Proposal
         run: |
           echo "Running Stage 4..."
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/process/stage4?token=$TOKEN")
+          STATUS=$(curl -s -X POST -w "%{http_code}" \
+            "$BASE_URL/process/stage4?token=$TOKEN" -o /dev/null)
           echo "Stage 4 HTTP $STATUS"
-          test "$STATUS" = "200" || test "$STATUS" = "204" || exit 1
+          test "$STATUS" = "200" || test "$STATUS" = "204"
 
-      - name: Stage 5 - Send/Draft via Gmail
+      - name: Stage 5 – Send/Draft via Gmail
         run: |
           echo "Running Stage 5..."
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/process/stage5?token=$TOKEN")
+          STATUS=$(curl -s -X POST -w "%{http_code}" \
+            "$BASE_URL/process/stage5?token=$TOKEN" -o /dev/null)
           echo "Stage 5 HTTP $STATUS"
-          test "$STATUS" = "200" || test "$STATUS" = "204" || exit 1
+          test "$STATUS" = "200" || test "$STATUS" = "204"
 
   run-autopilot:
     needs: trigger-processing
