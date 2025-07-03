@@ -60,7 +60,7 @@ def call_edge(endpoint_path: str, payload: dict) -> bool:
 
     for attempt in range(MAX_RETRIES):
         try:
-            resp = requests.post(url, json=payload, headers=headers, timeout=60)
+            resp = requests.post(url, json=payload, headers=headers, timeout=120)
             if resp.status_code == 200:
                 return True
             elif resp.status_code == 429:
