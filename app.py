@@ -1320,8 +1320,11 @@ def debug_env():
         "EDGE_BASE_URL": os.environ.get("EDGE_BASE_URL")
     }
 
-@app.route("/process")
-def trigger_process():
+app = Flask(__name__)
+
+def _auth():
+    if request.args.get("token") != os.environ["PROCESS_SECRET_TOKEN"]:
+        abort(401)
     """
     Main processing pipeline endpoint. Call this with:
       GET /process?token=<PROCESS_SECRET_TOKEN>
@@ -1333,14 +1336,11 @@ def trigger_process():
       5) If generate_leases ON → create Gmail Draft
          Else → send via Gmail
     """
-    # 1) Token‐based auth
-    token = request.args.get("token")
-    if token != os.environ.get("PROCESS_SECRET_TOKEN"):
-        return "Unauthorized", 401
 
-    all_processed = []
-
+@app.route("/process/stage1", methods=["POST"])
+def process_stage1():    
     #### STAGE 1 → Detect Jargon
+    _auth()
     jargon_rows = (
         supabase.table("emails")
                 .select("id, original_content")
@@ -1361,7 +1361,10 @@ def trigger_process():
                     "error_message": "detect-jargon failed"
                 }).eq("id", r["id"]).execute()
 
+@app.route("/process/stage2", methods=["POST"])
+def process_stage2():    
         #### STAGE 2 → Generate Response (batched)
+      _auth()
     resp_pending = (
         supabase.table("emails")
                 .select("id")
@@ -1403,8 +1406,10 @@ def trigger_process():
                         .in_("id", batch) \
                         .execute()
 
-
+@app.route("/process/stage3", methods=["POST"])
+def process_stage3():
     #### STAGE 3 → Personalize Template
+      _auth()
     per_pending = (
         supabase.table("emails")
                 .select("id, template_text, past_emails, deal_data")
@@ -1429,8 +1434,10 @@ def trigger_process():
                     "status": "error",
                     "error_message": "personalize-template failed"
                 }).eq("id", r["id"]).execute()
-
+@app.route("/process/stage4", methods=["POST"])
+def process_stage4():
     #### STAGE 4 → Generate Proposal
+      _auth()
     prop_pending = (
         supabase.table("emails")
                 .select("id, market, deal_type, cap_rate, tenant_type, style")
@@ -1463,8 +1470,11 @@ def trigger_process():
                         }) \
                         .eq("id", r["id"]) \
                         .execute()
-
+                
+@app.route("/process/stage5", methods=["POST"])
+def process_stage5():
     #### STAGE 5 → Send or Draft via Gmail
+      _auth()
     sent, drafted, failed = [], [], []
     ready_list = (
         supabase.table("emails")
