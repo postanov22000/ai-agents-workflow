@@ -1361,7 +1361,7 @@ def trigger_process():
                     "error_message": "detect-jargon failed"
                 }).eq("id", r["id"]).execute()
 
-    #### STAGE 2 → Generate Response
+        #### STAGE 2 → Generate Response (batched)
     resp_pending = (
         supabase.table("emails")
                 .select("id")
@@ -1371,16 +1371,38 @@ def trigger_process():
     )
     if resp_pending:
         ids = [r["id"] for r in resp_pending]
-        supabase.table("emails").update({"status": "processing"}).in_("id", ids).execute()
-        if call_edge("/generate-response", {"email_ids": ids}):
-            for eid in ids:
-                supabase.table("emails").update({"status": "ready_to_send"}).eq("id", eid).execute()
-                all_processed.append(eid)
-        else:
-            supabase.table("emails").update({
-                "status": "error",
-                "error_message": "generate-response failed"
-            }).in_("id", ids).execute()
+        # mark them all as processing up‐front
+        supabase.table("emails") \
+                .update({"status": "processing"}) \
+                .in_("id", ids) \
+                .execute()
+
+        # break into batches of 5
+        batch_size = 5
+        for i in range(0, len(ids), batch_size):
+            batch = ids[i : i + batch_size]
+            success = call_edge(
+                "/generate-response",
+                {"email_ids": batch}
+            )
+            if success:
+                # on success mark each id in batch as ready_to_send
+                for eid in batch:
+                    supabase.table("emails") \
+                            .update({"status": "ready_to_send"}) \
+                            .eq("id", eid) \
+                            .execute()
+                    all_processed.append(eid)
+            else:
+                # on failure mark each id in batch as error
+                supabase.table("emails") \
+                        .update({
+                            "status": "error",
+                            "error_message": "generate-response failed"
+                        }) \
+                        .in_("id", batch) \
+                        .execute()
+
 
     #### STAGE 3 → Personalize Template
     per_pending = (
