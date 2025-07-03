@@ -2,8 +2,8 @@ name: Email & Autopilot Scheduler
 
 on:
   schedule:
-    - cron: '*/5 * * * *'     # Every 5 minutes
-    - cron: '0 2 * * *'       # Daily at 02:00 UTC
+    - cron: '*/5 * * * *'   # Every 5 minutes
+    - cron: '0 2 * * *'     # Daily at 02:00 UTC
   workflow_dispatch:
   repository_dispatch:
     types: [autopilot-trigger]
@@ -44,16 +44,44 @@ jobs:
   trigger-processing:
     needs: poll-gmail
     runs-on: ubuntu-latest
+    env:
+      BASE_URL: ${{ secrets.PROCESS_BASE_URL }}
+      TOKEN: ${{ secrets.PROCESS_SECRET_TOKEN }}
     steps:
-      - name: Trigger Main Processing Endpoint
+      - name: Stage 1 - Detect Jargon
         run: |
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
-            "https://replyzeai.onrender.com/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
-          echo "HTTP status: $RESPONSE"
-          if [[ "$RESPONSE" != "200" && "$RESPONSE" != "204" ]]; then
-            echo "::error::Processing failed with status: $RESPONSE"
-            exit 1
-          fi
+          echo "Running Stage 1..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/process/stage1?token=$TOKEN")
+          echo "Stage 1 HTTP $STATUS"
+          test "$STATUS" = "200" || test "$STATUS" = "204" || exit 1
+
+      - name: Stage 2 - Generate Response
+        run: |
+          echo "Running Stage 2..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/process/stage2?token=$TOKEN")
+          echo "Stage 2 HTTP $STATUS"
+          test "$STATUS" = "200" || test "$STATUS" = "204" || exit 1
+
+      - name: Stage 3 - Personalize Template
+        run: |
+          echo "Running Stage 3..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/process/stage3?token=$TOKEN")
+          echo "Stage 3 HTTP $STATUS"
+          test "$STATUS" = "200" || test "$STATUS" = "204" || exit 1
+
+      - name: Stage 4 - Generate Proposal
+        run: |
+          echo "Running Stage 4..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/process/stage4?token=$TOKEN")
+          echo "Stage 4 HTTP $STATUS"
+          test "$STATUS" = "200" || test "$STATUS" = "204" || exit 1
+
+      - name: Stage 5 - Send/Draft via Gmail
+        run: |
+          echo "Running Stage 5..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/process/stage5?token=$TOKEN")
+          echo "Stage 5 HTTP $STATUS"
+          test "$STATUS" = "200" || test "$STATUS" = "204" || exit 1
 
   run-autopilot:
     needs: trigger-processing
