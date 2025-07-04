@@ -1371,9 +1371,7 @@ def process_stage1():
     return "", 204
 
 
-from flask import abort
-import os
-import requests
+
 
 @app.route("/process/stage2", methods=["POST"])
 def process_stage2():
@@ -1381,12 +1379,13 @@ def process_stage2():
     STAGE 2 → Generate Response (batched)
 
     1) Auth via ?token=
-    2) Batch all awaiting_response emails into one call
-    3) Let the Edge Function update processed_content & status
+    2) Mark all awaiting_response as processing
+    3) Call the Edge Function _once_ with the full list
+       (it will write processed_content & set ready_to_send)
     """
     _auth()
 
-    # 1) Fetch all emails awaiting AI response
+    # 1) pull all the rows
     resp_pending = (
         supabase.table("emails")
                 .select("id")
@@ -1396,33 +1395,32 @@ def process_stage2():
         or []
     )
     if not resp_pending:
-        # nothing to do
         return "", 204
 
-    # 2) Collect IDs and mark them as "processing"
+    # 2) mark them as 'processing'
     ids = [r["id"] for r in resp_pending]
     supabase.table("emails") \
             .update({"status": "processing"}) \
             .in_("id", ids) \
             .execute()
 
-    # 3) Call your Edge Function once with the full list
-    success = call_edge("/generate-response", {"email_ids": ids})
-
-    if not success:
-        # Edge Function failed entirely → mark error on all
+    # 3) invoke your Supabase Edge Function once
+    ok = call_edge("/generate-response", {"email_ids": ids})
+    if not ok:
+        # if it couldn’t be called at all, mark an error
         supabase.table("emails") \
                 .update({
                     "status":        "error",
-                    "error_message": "generate-response failed"
+                    "error_message": "generate-response function failed"
                 }) \
                 .in_("id", ids) \
                 .execute()
         return "", 500
 
-    # On success: Clever‑Service will have updated each row’s
-    # `processed_content` and flipped status → no further action
+    # on success: your Function itself did all of the upserts,
+    # so we’re done here
     return "", 204
+
 
 
 
