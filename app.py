@@ -1373,19 +1373,21 @@ def process_stage1():
 
 
 
+
+
 @app.route("/process/stage2", methods=["POST"])
 def process_stage2():
     """
     STAGE 2 → Generate Response (batched)
-     • Auth via ?token=
-     • Call your Edge Fn with all pending IDs
-     • Parse its JSON {results: [...]}
-     • Update each row’s processed_content & status here
+      • Auth via ?token=
+      • Batch all awaiting_response emails into one call
+      • Parse the edge‐fn JSON results[]
+      • Update each email row here with processed_content, status, processed_at
     """
     _auth()
 
-    # 1) Fetch all emails awaiting AI response
-    resp_pending = (
+    # 1) Grab all rows awaiting AI
+    to_process = (
         supabase.table("emails")
                 .select("id")
                 .eq("status", "awaiting_response")
@@ -1393,18 +1395,18 @@ def process_stage2():
                 .data
         or []
     )
-    if not resp_pending:
+    if not to_process:
         return "", 204
 
-    ids = [r["id"] for r in resp_pending]
+    ids = [r["id"] for r in to_process]
 
-    # 2) Mark them as 'processing' so we don’t double‐process
+    # 2) Mark them processing
     supabase.table("emails") \
             .update({"status": "processing"}) \
             .in_("id", ids) \
             .execute()
 
-    # 3) Call your Edge Function directly
+    # 3) Call your clever‐service endpoint
     url = f"{EDGE_BASE_URL}/generate-response"
     headers = {
         "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
@@ -1414,45 +1416,46 @@ def process_stage2():
     try:
         resp = requests.post(url, json={"email_ids": ids}, headers=headers, timeout=120)
         resp.raise_for_status()
-    except requests.RequestException as e:
-        # If the edge function failed entirely, mark as error
+    except requests.RequestException as err:
+        # Fatal: mark all as error
         supabase.table("emails") \
                 .update({
                     "status":        "error",
-                    "error_message": f"generate-response call failed: {e}"
+                    "error_message": f"call to generate-response failed: {err}"
                 }) \
                 .in_("id", ids) \
                 .execute()
         return "", 502
 
-    payload = resp.json()
-    results = payload.get("results", [])
+    data = resp.json()
+    results = data.get("results", [])
 
-    # 4) For each returned result, update the table
-    for r in results:
-        eid    = r.get("id")
-        st     = r.get("status")
-        if st == "success":
-            # data from the function is already in the DB?  If not, pick it up here:
-            ai_resp = r.get("generated_text") or r.get("result") or ""
+    # 4) Loop and persist each result
+    for out in results:
+        eid    = out.get("id")
+        status = out.get("status")
+        if status == "success":
+            ai_text = out.get("result") or out.get("generated_text") or ""
             supabase.table("emails") \
                     .update({
-                        "processed_content": ai_resp,
+                        "processed_content": ai_text,
                         "status":            "ready_to_send",
                         "processed_at":      datetime.utcnow().isoformat()
                     }) \
                     .eq("id", eid) \
                     .execute()
         else:
+            # something went wrong on a per-email basis
             supabase.table("emails") \
                     .update({
                         "status":        "error",
-                        "error_message": r.get("error", "unknown")
+                        "error_message": out.get("error", "unknown error")
                     }) \
                     .eq("id", eid) \
                     .execute()
 
     return "", 204
+
 
 
 
