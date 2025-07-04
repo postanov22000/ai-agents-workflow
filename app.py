@@ -1371,14 +1371,18 @@ def process_stage1():
     return "", 204
 
 
+from flask import abort
+import os
+import requests
+
 @app.route("/process/stage2", methods=["POST"])
 def process_stage2():
     """
-    STAGE 2 → Generate Response (batched)
+    STAGE 2 → Generate Response (batched)
 
-    - Auth via ?token=
-    - Batch all awaiting_response emails into one call
-    - Let the edge function update processed_content & status
+    1) Auth via ?token=
+    2) Batch all awaiting_response emails into one call
+    3) Let the Edge Function update processed_content & status
     """
     _auth()
 
@@ -1391,25 +1395,22 @@ def process_stage2():
                 .data
         or []
     )
-
     if not resp_pending:
-        # Nothing to do
+        # nothing to do
         return "", 204
 
-    # Collect IDs
+    # 2) Collect IDs and mark them as "processing"
     ids = [r["id"] for r in resp_pending]
-
-    # 2) Mark them as 'processing' so we don’t double‐process
     supabase.table("emails") \
             .update({"status": "processing"}) \
             .in_("id", ids) \
             .execute()
 
-    # 3) Call your edge function once with the full list
+    # 3) Call your Edge Function once with the full list
     success = call_edge("/generate-response", {"email_ids": ids})
 
     if not success:
-        # If the edge function failed entirely, mark as error
+        # Edge Function failed entirely → mark error on all
         supabase.table("emails") \
                 .update({
                     "status":        "error",
@@ -1419,8 +1420,8 @@ def process_stage2():
                 .execute()
         return "", 500
 
-    # Otherwise: edge function will have updated each row's
-    # processed_content and set status to "ready_to_send"
+    # On success: Clever‑Service will have updated each row’s
+    # `processed_content` and flipped status → no further action
     return "", 204
 
 
