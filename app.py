@@ -619,228 +619,105 @@ def debug_env():
         "EDGE_BASE_URL": os.environ.get("EDGE_BASE_URL")
     }
 
-app = Flask(__name__)
+@app.route("/process")
+def trigger_process():
+    """
+    Main processing pipeline endpoint. Call this with:
+      GET /process?token=<PROCESS_SECRET_TOKEN>
+    Pipeline steps:
+      1) Detect Jargon
+      2) Generate Response
+      3) Personalize Template
+      4) Generate Proposal
+      5) If generate_leases ON → create Gmail Draft
+         Else → send via Gmail
+    """
+    # 1) Token‐based auth
+    token = request.args.get("token")
+    if token != os.environ.get("PROCESS_SECRET_TOKEN"):
+        return "Unauthorized", 401
 
-def _auth():
-    """
-    Enforce token‐based auth for all /process/stageX endpoints.
-    Call with ?token=<PROCESS_SECRET_TOKEN>
-    """
-    if request.args.get("token") != os.environ["PROCESS_SECRET_TOKEN"]:
-        abort(401)
+    all_processed = []
 
-@app.route("/process/stage1", methods=["POST"])
-def process_stage1():
-    """
-    STAGE 1 → Detect Jargon
-    """
-    _auth()
-
+    #### STAGE 1 → Detect Jargon
     jargon_rows = (
         supabase.table("emails")
                 .select("id, original_content")
                 .eq("status", "preprocessing")
-                .execute()
-                .data
+                .execute().data
         or []
     )
-
     if jargon_rows:
         ids = [r["id"] for r in jargon_rows]
-        supabase.table("emails") \
-                .update({"status": "processing"}) \
-                .in_("id", ids) \
-                .execute()
-
+        supabase.table("emails").update({"status": "processing"}).in_("id", ids).execute()
         for r in jargon_rows:
             if call_edge("/detect-jargon", {"text": r["original_content"]}):
-                supabase.table("emails") \
-                        .update({"status": "awaiting_response"}) \
-                        .eq("id", r["id"]) \
-                        .execute()
+                supabase.table("emails").update({"status": "awaiting_response"}).eq("id", r["id"]).execute()
+                all_processed.append(r["id"])
             else:
-                supabase.table("emails") \
-                        .update({
-                            "status":        "error",
-                            "error_message": "detect-jargon failed"
-                        }) \
-                        .eq("id", r["id"]) \
-                        .execute()
+                supabase.table("emails").update({
+                    "status": "error",
+                    "error_message": "detect-jargon failed"
+                }).eq("id", r["id"]).execute()
 
-    return "", 204
-
-
-
-
-
-
-from datetime import datetime
-import requests, time
-
-@app.route("/process/stage2", methods=["POST"])
-def process_stage2():
-    """
-    STAGE 2 → Generate Response (batched)
-     • Auth via ?token=
-     • Batch all awaiting_response emails into one call
-     • Parse the edge‐fn JSON results[]
-     • Update each email row here with processed_content, status, processed_at
-    """
-    _auth()
-
-    # 1) Grab all rows awaiting AI
-    to_process = (
+    #### STAGE 2 → Generate Response
+    resp_pending = (
         supabase.table("emails")
                 .select("id")
                 .eq("status", "awaiting_response")
-                .execute()
-                .data
+                .execute().data
         or []
     )
-    if not to_process:
-        return "", 204
-
-    ids = [r["id"] for r in to_process]
-
-    # 2) Mark them processing so we don’t double‐handle
-    supabase.table("emails") \
-            .update({"status": "processing"}) \
-            .in_("id", ids) \
-            .execute()
-
-    # 3) Call your clever‐service endpoint (Supabase Edge Function)
-    url = f"{EDGE_BASE_URL.rstrip('/')}/generate-response"
-    headers = {
-        "Content-Type": "application/json",
-        # if your function is private, include its service key here:
-        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-        "apikey":        SUPABASE_SERVICE_ROLE_KEY,
-    }
-
-    try:
-        resp = requests.post(url, json={"email_ids": ids}, headers=headers, timeout=120)
-        resp.raise_for_status()
-    except requests.RequestException as err:
-        # fatal: mark all as error
-        supabase.table("emails") \
-                .update({
-                    "status":        "error",
-                    "error_message": f"generate-response call failed: {err}"
-                }) \
-                .in_("id", ids) \
-                .execute()
-        return "", 502
-
-    # 4) Parse the per‑email results array
-    payload = resp.json()
-    results = payload.get("results", [])
-
-    for out in results:
-        eid    = out.get("id")
-        status = out.get("status")
-
-        if status == "success":
-            # your handler returns `result` containing the AI reply
-            ai_text = out.get("result", "").strip()
-            supabase.table("emails") \
-                    .update({
-                        "processed_content": ai_text,
-                        "status":            "ready_to_send",
-                        "processed_at":      datetime.utcnow().isoformat()
-                    }) \
-                    .eq("id", eid) \
-                    .execute()
+    if resp_pending:
+        ids = [r["id"] for r in resp_pending]
+        supabase.table("emails").update({"status": "processing"}).in_("id", ids).execute()
+        if call_edge("/generate-response", {"email_ids": ids}):
+            for eid in ids:
+                supabase.table("emails").update({"status": "ready_to_send"}).eq("id", eid).execute()
+                all_processed.append(eid)
         else:
-            # individual‐email failure
-            supabase.table("emails") \
-                    .update({
-                        "status":        "error",
-                        "error_message": out.get("error", "unknown")
-                    }) \
-                    .eq("id", eid) \
-                    .execute()
+            supabase.table("emails").update({
+                "status": "error",
+                "error_message": "generate-response failed"
+            }).in_("id", ids).execute()
 
-    return "", 204
-
-
-
-
-
-
-@app.route("/process/stage3", methods=["POST"])
-def process_stage3():
-    """
-    STAGE 3 → Personalize Template
-    """
-    _auth()
-
-    # Fetch rows ready to personalize
+    #### STAGE 3 → Personalize Template
     per_pending = (
         supabase.table("emails")
                 .select("id, template_text, past_emails, deal_data")
                 .eq("status", "ready_to_personalize")
-                .execute()
-                .data
+                .execute().data
         or []
     )
-
     if per_pending:
         ids = [r["id"] for r in per_pending]
-        # Mark them all as "processing"
-        supabase.table("emails") \
-                .update({"status": "processing"}) \
-                .in_("id", ids) \
-                .execute()
-
+        supabase.table("emails").update({"status": "processing"}).in_("id", ids).execute()
         for r in per_pending:
             payload = {
                 "template_text": r.get("template_text", ""),
                 "past_emails":   r.get("past_emails", []),
                 "deal_data":     r.get("deal_data", {})
             }
-            success = call_edge("/personalize-template", payload)
-            if success:
-                supabase.table("emails") \
-                        .update({"status": "awaiting_proposal"}) \
-                        .eq("id", r["id"]) \
-                        .execute()
+            if call_edge("/personalize-template", payload):
+                supabase.table("emails").update({"status": "awaiting_proposal"}).eq("id", r["id"]).execute()
+                all_processed.append(r["id"])
             else:
-                supabase.table("emails") \
-                        .update({
-                            "status":        "error",
-                            "error_message": "personalize-template failed"
-                        }) \
-                        .eq("id", r["id"]) \
-                        .execute()
+                supabase.table("emails").update({
+                    "status": "error",
+                    "error_message": "personalize-template failed"
+                }).eq("id", r["id"]).execute()
 
-    return "", 204
-
-
-@app.route("/process/stage4", methods=["POST"])
-def process_stage4():
-    """
-    STAGE 4 → Generate Proposal
-    """
-    _auth()
-
-    # Fetch rows awaiting proposal
+    #### STAGE 4 → Generate Proposal
     prop_pending = (
         supabase.table("emails")
                 .select("id, market, deal_type, cap_rate, tenant_type, style")
                 .eq("status", "awaiting_proposal")
-                .execute()
-                .data
+                .execute().data
         or []
     )
-
     if prop_pending:
         ids = [r["id"] for r in prop_pending]
-        # Mark them all as "processing"
-        supabase.table("emails") \
-                .update({"status": "processing"}) \
-                .in_("id", ids) \
-                .execute()
-
+        supabase.table("emails").update({"status": "processing"}).in_("id", ids).execute()
         for r in prop_pending:
             payload = {
                 "market":      r.get("market"),
@@ -849,40 +726,22 @@ def process_stage4():
                 "tenant_type": r.get("tenant_type"),
                 "style":       r.get("style")
             }
-            success = call_edge("/generate-proposal", payload)
-            if success:
-                supabase.table("emails") \
-                        .update({"status": "ready_to_send"}) \
-                        .eq("id", r["id"]) \
-                        .execute()
+            if call_edge("/generate-proposal", payload):
+                supabase.table("emails").update({"status": "ready_to_send"}).eq("id", r["id"]).execute()
+                all_processed.append(r["id"])
             else:
-                supabase.table("emails") \
-                        .update({
-                            "status":        "error",
-                            "error_message": "generate-proposal failed"
-                        }) \
-                        .eq("id", r["id"]) \
-                        .execute()
+                supabase.table("emails").update({
+                    "status": "error",
+                    "error_message": "generate-proposal failed"
+                }).eq("id", r["id"]).execute()
 
-    return "", 204
-
-
-@app.route("/process/stage5", methods=["POST"])
-def process_stage5():
-    """
-    STAGE 5 → Send or Draft via Gmail
-    """
-    _auth()
-
+    #### STAGE 5 → Send or Draft via Gmail
     sent, drafted, failed = [], [], []
-
-    # Fetch all messages ready to send/draft
     ready_list = (
         supabase.table("emails")
                 .select("id, user_id, sender_email, processed_content")
                 .eq("status", "ready_to_send")
-                .execute()
-                .data
+                .execute().data
         or []
     )
 
@@ -892,22 +751,19 @@ def process_stage5():
         to_addr = r["sender_email"]
         ai_text = (r.get("processed_content") or "").rstrip()
 
-        # fetch user settings
+        # ── fetch user’s name, signature & lease‐toggle ──
         prof = supabase.table("profiles") \
                 .select("display_name, signature, generate_leases") \
-                .eq("id", uid) \
-                .single() \
-                .execute() \
-                .data or {}
+                .eq("id", uid).single().execute().data or {}
         name            = prof.get("display_name", "").strip()
         sig             = prof.get("signature", "").strip()
         generate_leases = prof.get("generate_leases", False)
 
-        # substitute placeholder
+        # ── substitute placeholder ──
         if name:
             ai_text = ai_text.replace("[Your Name]", name)
 
-        # assemble HTML
+        # ── assemble HTML body ──
         html_body = (
             "<html><body>"
             + "<p>" + ai_text.replace("\n", "<br>") + "</p>"
@@ -915,13 +771,20 @@ def process_stage5():
             + "</body></html>"
         )
 
-        # load and refresh Gmail creds
-        cd = supabase.table("gmail_tokens") \
+        # ── get Gmail creds ──
+        tok = supabase.table("gmail_tokens") \
                      .select("credentials") \
-                     .eq("user_id", uid) \
-                     .limit(1) \
-                     .execute() \
-                     .data[0]["credentials"]
+                     .eq("user_id", uid).limit(1).execute().data or []
+        if not tok:
+            app.logger.warning(f"No Gmail token for user {uid}, skipping {em_id}")
+            failed.append(em_id)
+            supabase.table("emails").update({
+                "status": "error",
+                "error_message": "No Gmail token"
+            }).eq("id", em_id).execute()
+            continue
+
+        cd = tok[0]["credentials"]
         creds = Credentials(
             token=cd["token"],
             refresh_token=cd["refresh_token"],
@@ -932,23 +795,12 @@ def process_stage5():
         )
         if creds.expired and creds.refresh_token:
             creds.refresh(GoogleRequest())
-            SUPABASE_SERVICE.table("gmail_tokens") \
-                .update({"credentials": {
-                    "token":         creds.token,
-                    "refresh_token": creds.refresh_token,
-                    "token_uri":     creds.token_uri,
-                    "client_id":     creds.client_id,
-                    "client_secret": creds.client_secret,
-                    "scopes":        creds.scopes
-                }}) \
-                .eq("user_id", uid) \
-                .execute()
 
         svc = build("gmail", "v1", credentials=creds, cache_discovery=False)
 
         try:
             if generate_leases:
-                # create draft
+                # ── create a Gmail Draft ──
                 msg = MIMEText(html_body, "html")
                 msg["to"]      = to_addr
                 msg["from"]    = "me"
@@ -961,15 +813,13 @@ def process_stage5():
                 ).execute()
 
                 drafted.append(em_id)
-                supabase.table("emails") \
-                        .update({
-                            "status":   "drafted",
-                            "sent_at":  datetime.utcnow().isoformat()
-                        }) \
-                        .eq("id", em_id) \
-                        .execute()
+                app.logger.info(f"Drafted lease for {em_id} → Draft ID {draft_res['id']}")
+                supabase.table("emails").update({
+                    "status": "drafted",
+                    "sent_at": datetime.utcnow().isoformat()
+                }).eq("id", em_id).execute()
             else:
-                # send immediately
+                # ── send immediately ──
                 msg = MIMEText(html_body, "html")
                 msg["to"]      = to_addr
                 msg["from"]    = "me"
@@ -981,28 +831,25 @@ def process_stage5():
                 ).execute()
 
                 sent.append(em_id)
-                supabase.table("emails") \
-                        .update({
-                            "status":   "sent",
-                            "sent_at":  datetime.utcnow().isoformat()
-                        }) \
-                        .eq("id", em_id) \
-                        .execute()
+                app.logger.info(f"Sent email {em_id} → Gmail ID {send_res.get('id')}")
+                supabase.table("emails").update({
+                    "status": "sent",
+                    "sent_at": datetime.utcnow().isoformat()
+                }).eq("id", em_id).execute()
         except Exception as e:
             failed.append(em_id)
-            supabase.table("emails") \
-                    .update({
-                        "status":        "error",
-                        "error_message": str(e)
-                    }) \
-                    .eq("id", em_id) \
-                    .execute()
+            app.logger.error(f"Error processing {em_id}: {e}", exc_info=True)
+            supabase.table("emails").update({
+                "status": "error",
+                "error_message": str(e)
+            }).eq("id", em_id).execute()
 
     return jsonify({
-        "sent":    sent,
-        "drafted": drafted,
-        "failed":  failed,
-        "summary": f"{len(sent)} sent, {len(drafted)} drafted, {len(failed)} failed"
+        "processed": all_processed,
+        "sent":      sent,
+        "drafted":   drafted,
+        "failed":    failed,
+        "summary":   f"{len(sent)} sent, {len(drafted)} drafted, {len(failed)} failed"
     }), 200
 
 
