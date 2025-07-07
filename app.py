@@ -50,12 +50,10 @@ RETRY_BACKOFF_BASE = 2
 
 # ---------------------------------------------------------------------------
 def call_edge(endpoint_path: str, payload: dict) -> bool:
-    """
-    POSTs `payload` to the clever-service endpoint at:
-      EDGE_BASE_URL + endpoint_path
-    Retries up to MAX_RETRIES times on 429. Returns True if status_code == 200.
-    """
     url = f"{EDGE_BASE_URL}{endpoint_path}"
+    app.logger.info(f"🔗 call_edge → URL: {url}")
+    app.logger.info(f"🔗 call_edge → Payload: {payload}")
+
     headers = {
         "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
         "apikey":        SUPABASE_SERVICE_ROLE_KEY,
@@ -65,6 +63,8 @@ def call_edge(endpoint_path: str, payload: dict) -> bool:
     for attempt in range(MAX_RETRIES):
         try:
             resp = requests.post(url, json=payload, headers=headers, timeout=120)
+            app.logger.info(f"↩️  Response [{resp.status_code}]: {resp.text}")
+
             if resp.status_code == 200:
                 return True
             elif resp.status_code == 429:
