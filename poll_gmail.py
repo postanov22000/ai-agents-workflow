@@ -135,7 +135,7 @@ def poll_gmail_for_user(user_email: str):
                 "recipient_email": user_email,
                 "subject": subject,
                 "original_content": body,
-                "status": "preprocessing",
+                "status": "processing",
                 "gmail_id": msg["id"]
             }).execute()
 
