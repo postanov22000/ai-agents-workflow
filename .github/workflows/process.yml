@@ -50,7 +50,7 @@ jobs:
           RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
             "https://replyzeai.onrender.com/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
           echo "HTTP status: $RESPONSE"
-          if [[ "$RESPONSE" != "200" && "$RESPONSE" != "204" ]]; then
+          if [[ "$RESPONSE" != "200" && "$RESPONSE" != "204" && "$RESPONSE" != "429" ]]; then
             echo "::error::Processing failed with status: $RESPONSE"
             exit 1
           fi
