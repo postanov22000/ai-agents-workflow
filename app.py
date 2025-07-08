@@ -635,23 +635,23 @@ def trigger_process():
     if token != os.environ.get("PROCESS_SECRET_TOKEN"):
         return jsonify({"error": "Unauthorized"}), 401
 
+    # 1.5) Early exit if no work in any stage
+    gen     = supabase.table("emails").select("id").eq("status", "processing").execute().data or []
+    per     = supabase.table("emails").select("id").eq("status", "ready_to_personalize").execute().data or []
+    prop    = supabase.table("emails").select("id").eq("status", "awaiting_proposal").execute().data or []
+    ready   = supabase.table("emails").select("id").eq("status", "ready_to_send").execute().data or []
+    if not (gen or per or prop or ready):
+        app.logger.info("⚡ No emails to process — returning 204")
+        return "", 204
+
     all_processed = []
     sent, drafted, failed = [], [], []
 
     # ── STAGE 1 → Generate Response ──
-    gen_rows = (
-        supabase.table("emails")
-                .select("id")
-                .eq("status", "processing")
-                .execute().data
-        or []
-    )
-    if gen_rows:
-        ids = [r["id"] for r in gen_rows]
-        # mark as processing
-        supabase.table("emails").update({"status": "processing"}).in_("id", ids).execute()
-        # call edge
-        if call_edge("/generate-response", {"email_ids": ids}):
+    if gen:
+        ids = [r["id"] for r in gen]
+        # call edge function
+        if call_edge("/functions/v1/clever-service/generate-response", {"email_ids": ids}):
             all_processed.extend(ids)
         else:
             supabase.table("emails").update({
@@ -660,19 +660,10 @@ def trigger_process():
             }).in_("id", ids).execute()
 
     # ── STAGE 2 → Personalize Template ──
-    per_rows = (
-        supabase.table("emails")
-                .select("id")
-                .eq("status", "ready_to_personalize")
-                .execute().data
-        or []
-    )
-    if per_rows:
-        ids = [r["id"] for r in per_rows]
-        supabase.table("emails").update({"status": "processing"}).in_("id", ids).execute()
-        # call edge for each
+    if per:
+        ids = [r["id"] for r in per]
         for eid in ids:
-            if call_edge("/personalize-template", {"email_ids": [eid]}):
+            if call_edge("/functions/v1/clever-service/personalize-template", {"email_ids": [eid]}):
                 supabase.table("emails").update({"status": "awaiting_proposal"}).eq("id", eid).execute()
                 all_processed.append(eid)
             else:
@@ -682,18 +673,10 @@ def trigger_process():
                 }).eq("id", eid).execute()
 
     # ── STAGE 3 → Generate Proposal ──
-    prop_rows = (
-        supabase.table("emails")
-                .select("id")
-                .eq("status", "awaiting_proposal")
-                .execute().data
-        or []
-    )
-    if prop_rows:
-        ids = [r["id"] for r in prop_rows]
-        supabase.table("emails").update({"status": "processing"}).in_("id", ids).execute()
+    if prop:
+        ids = [r["id"] for r in prop]
         for eid in ids:
-            if call_edge("/generate-proposal", {"email_ids": [eid]}):
+            if call_edge("/functions/v1/clever-service/generate-proposal", {"email_ids": [eid]}):
                 supabase.table("emails").update({"status": "ready_to_send"}).eq("id", eid).execute()
                 all_processed.append(eid)
             else:
@@ -722,10 +705,8 @@ def trigger_process():
         if display:
             html_body = html_body.replace("[Your Name]", display)
 
-        # build full HTML
         full_html = f"<html><body><p>{html_body}</p>{sig}</body></html>"
 
-        # get creds
         tok = (supabase.table("gmail_tokens").select("credentials").eq("user_id", uid).limit(1).execute().data) or []
         if not tok:
             failed.append(em_id)
