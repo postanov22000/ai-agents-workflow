@@ -3,7 +3,7 @@ name: Email & Autopilot Scheduler
 on:
   schedule:
     - cron: '*/5 * * * *'     # Every 5 minutes
-    - cron: '0 2 * * * *'     # Daily at 02:00 UTC
+    - cron: '0 2 * * *'       # Daily at 02:00 UTC
   workflow_dispatch:
   repository_dispatch:
     types: [autopilot-trigger]
@@ -76,12 +76,13 @@ jobs:
       - name: Install GitHub Models CLI extension
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}           # your fine‑grained PAT
-        run: gh extension install github/gh-models
+        run: |
+          gh extension install github/gh-models
 
       - name: List enabled GitHub Models
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           gh models list | tee gh-models.txt
-          echo "Available slugs (copy these into your GH_MODELS env var):"
-          jq -r '.[] | .slug + " (" + (.quota.rpm|tostring) + " rpm/" + (.quota.rpd|tostring) + " rpd)"' gh-models.txt
+          echo "Available model slugs (copy into GH_MODELS env var):"
+          jq -r '.[] | .slug + " → " + (.quota.rpm|tostring) + "rpm/" + (.quota.rpd|tostring) + "rpd"' gh-models.txt
