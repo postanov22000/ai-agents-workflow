@@ -65,3 +65,16 @@ jobs:
             -X POST "https://replyzeai.onrender.com/autopilot/trigger-all")
           echo "Autopilot-all returned $HTTP"
           test "$HTTP" = "200" || test "$HTTP" = "204"
+
+
+
+  list-models:
+    runs-on: ubuntu-latest
+    steps:
+      - name: List GitHub Models
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -H "Authorization: Bearer $GITHUB_TOKEN" \
+               -H "Accept: application/vnd.github+json" \
+               https://api.github.com/models | jq
