@@ -3,7 +3,7 @@ name: Email & Autopilot Scheduler
 on:
   schedule:
     - cron: '*/5 * * * *'     # Every 5 minutes
-    - cron: '0 2 * * *'       # Daily at 02:00 UTC
+    - cron: '0 2 * * * *'     # Daily at 02:00 UTC
   workflow_dispatch:
   repository_dispatch:
     types: [autopilot-trigger]
@@ -45,7 +45,7 @@ jobs:
     needs: poll-gmail
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Main Processing Endpoint
+      - name: Trigger Main Processing Endpoint on Render
         run: |
           RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
             "https://replyzeai.onrender.com/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
@@ -66,15 +66,22 @@ jobs:
           echo "Autopilot-all returned $HTTP"
           test "$HTTP" = "200" || test "$HTTP" = "204"
 
-
-
   list-models:
+    if: github.event_name == 'workflow_dispatch'   # only on manual trigger
     runs-on: ubuntu-latest
     steps:
-      - name: List GitHub Models
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Install GitHub Models CLI extension
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}           # your fine‑grained PAT
+        run: gh extension install github/gh-models
+
+      - name: List enabled GitHub Models
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          curl -H "Authorization: Bearer $GITHUB_TOKEN" \
-               -H "Accept: application/vnd.github+json" \
-               https://api.github.com/models | jq
+          gh models list | tee gh-models.txt
+          echo "Available slugs (copy these into your GH_MODELS env var):"
+          jq -r '.[] | .slug + " (" + (.quota.rpm|tostring) + " rpm/" + (.quota.rpd|tostring) + " rpd)"' gh-models.txt
