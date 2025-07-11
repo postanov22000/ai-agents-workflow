@@ -1,22 +1,13 @@
 {
   "rewrites": [
     {
-      "source": "/:path",
-      "destination": "/:path.html"
+      "source": "/(.*)",
+      "destination": "/PUBLIC/$1.html"
     },
     {
-      "source": "/:path/",
-      "destination": "/:path.html"
+      "source": "/",
+      "destination": "/PUBLIC/index.html"
     }
   ],
   "cleanUrls": true
-
-  
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/PUBLIC/$1"
-    }
-  ]
-
 }
