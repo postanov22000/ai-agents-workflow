@@ -709,7 +709,7 @@
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
 
     try {
-      const res = await fetch('https://replyzeai.onrender.com/api/generate-reply', {
+      const res = await fetch('https://replyzeai.vercel.app/api/generate-reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt })
@@ -766,7 +766,7 @@ document.querySelectorAll('.doc-btn').forEach(btn => btn.addEventListener('click
    .forEach(i => i.id && (payload[i.id] = i.value));
 
   try {
-    const res = await fetch(`https://replyzeai.onrender.com/api/generate-${type}`, {
+    const res = await fetch(`https://replyzeai.vercel.app/api/generate-${type}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
