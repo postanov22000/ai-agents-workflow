@@ -686,10 +686,120 @@
     
     // Rate limit counters
     let aiCount=3, loiCount=3, psaCount=3;
-    // AI Responder
-    document.getElementById('generate-reply-btn').addEventListener('click',async function(){if(aiCount<=0){alert('No more free AI responses. Please sign up.');return document.querySelector('#trial').scrollIntoView({behavior:'smooth'});}const btn=this, txt=document.getElementById('incoming-email').value.trim();if(!txt)return alert('Please paste an email text.');aiCount--,document.getElementById('ai-counter').textContent=aiCount;btn.disabled=true,btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Generating...';try{const res=await fetch('/api/generate-reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:txt})});const data=await res.json();document.getElementById('reply-content').textContent=data.reply;document.getElementById('reply-preview').style.display='block';}catch{alert('Error generating reply.');}finally{btn.disabled=false,btn.innerHTML='Generate Reply';}if(aiCount===0)setTimeout(()=>{alert("You've used your free AI responses! Sign up now.");document.querySelector('#trial').scrollIntoView({behavior:'smooth'});},1000);});
+   <script>
+  // … existing scroll & document-generation code …
+
+  // AI Responder (updated)
+  document.getElementById('generate-reply-btn').addEventListener('click', async function() {
+    if (aiCount <= 0) {
+      alert('No more free AI responses. Please sign up.');
+      return document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    const btn = this;
+    const prompt = document.getElementById('incoming-email').value.trim();
+    if (!prompt) {
+      return alert('Please paste an email text.');
+    }
+
+    aiCount--;
+    document.getElementById('ai-counter').textContent = aiCount;
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+
+    try {
+      const res = await fetch('https://replyzeai.onrender.com/api/generate-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt })
+      });
+
+      const data = await res.json();
+      if (data.reply) {
+        document.getElementById('reply-content').textContent = data.reply;
+        document.getElementById('reply-preview').style.display = 'block';
+      } else {
+        alert('Error: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Request failed:', err);
+      alert('Network error. Please try again.');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = 'Generate Reply';
+    }
+
+    if (aiCount === 0) {
+      setTimeout(() => {
+        alert("You've used your free AI responses! Sign up now.");
+        document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
+      }, 1000);
+    }
+  });
+
     // Document Generation
-    document.querySelectorAll('.doc-btn').forEach(btn=>btn.addEventListener('click',async function(){const type=this.getAttribute('data-type'),cnt=type==='loi'?loiCount:psaCount;if(cnt<=0){alert('Free trials exhausted. Please sign up.');return document.querySelector('#trial').scrollIntoView({behavior:'smooth'});}if(type==='loi')loiCount--;else psaCount--;document.getElementById(type+'-counter').textContent=type==='loi'?loiCount:psaCount;const b=this;const orig=b.innerHTML;b.disabled=true,b.innerHTML='<i class="fas fa-spinner fa-spin"></i> Generating...';const payload={};b.closest('.generator-card').querySelectorAll('input,textarea,select').forEach(i=>i.id&&(payload[i.id]=i.value));try{const res=await fetch(`/api/generate-${type}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const blob=await res.blob();const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`${type.toUpperCase()}-Document.docx`;document.body.appendChild(a);a.click();a.remove();}catch{alert('Error generating document.');}finally{b.disabled=false,b.innerHTML=orig;}if((type==='loi'&&loiCount===0)||(type==='psa'&&psaCount===0))setTimeout(()=>{alert('Free trials exhausted. Sign up for unlimited access.');document.querySelector('#trial').scrollIntoView({behavior:'smooth'});},1000);}));
+document.querySelectorAll('.doc-btn').forEach(btn => btn.addEventListener('click', async function() {
+  const type = this.getAttribute('data-type'),
+        cnt  = type === 'loi' ? loiCount : psaCount;
+
+  if (cnt <= 0) {
+    alert('Free trials exhausted. Please sign up.');
+    return document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  // decrement counter
+  if (type === 'loi') loiCount--;
+  else psaCount--;
+  document.getElementById(type + '-counter').textContent =
+    type === 'loi' ? loiCount : psaCount;
+
+  const b = this;
+  const orig = b.innerHTML;
+  b.disabled = true;
+  b.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+
+  // collect payload
+  const payload = {};
+  b.closest('.generator-card')
+   .querySelectorAll('input,textarea,select')
+   .forEach(i => i.id && (payload[i.id] = i.value));
+
+  try {
+    const res = await fetch(`https://replyzeai.onrender.com/api/generate-${type}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a   = document.createElement('a');
+    a.href    = url;
+    a.download= `${type.toUpperCase()}-Document.docx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error('Error generating document:', err);
+    alert('Error generating document. Please try again.');
+  } finally {
+    b.disabled = false;
+    b.innerHTML = orig;
+  }
+
+  if ((type === 'loi' && loiCount === 0) ||
+      (type === 'psa' && psaCount === 0)) {
+    setTimeout(() => {
+      alert('Free trials exhausted. Sign up for unlimited access.');
+      document.querySelector('#trial')
+              .scrollIntoView({ behavior: 'smooth' });
+    }, 1000);
+  }
+}));
+
     // Existing trial form handler unchanged...
 document.querySelector('.trial-form button').addEventListener('click', function(e) {
   e.preventDefault();
