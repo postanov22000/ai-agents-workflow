@@ -973,7 +973,7 @@ def generate_psa():
     )
 
 @app.route("/api/generate-reply-prompt", methods=["POST"])
-def generate_reply-prompt():
+def generate_reply_prompt():
     data = request.get_json(force=True)
     prompt = data.get("prompt", "").strip()
     if not prompt:
