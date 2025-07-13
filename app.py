@@ -872,6 +872,105 @@ def create_transaction():
 
 
 
+from flask import send_file
+from io import BytesIO
+
+# 1) AI Responder endpoint
+@app.route("/api/generate-reply", methods=["POST"])
+def generate_reply():
+    data = request.get_json()
+    prompt = data.get("email", "").strip()
+    if not prompt:
+        return jsonify({"error": "No email text provided"}), 400
+
+    try:
+        # call your GitHub Models inference (or proxy into your Deno Edge)
+        ai_response = callAIML_from_flask(prompt)  
+        # callAIML_from_flask should wrap the same logic you use in Deno:
+        #   model rotation, fetch to https://models.github.ai/…
+        return jsonify({"reply": ai_response}), 200
+
+    except Exception as e:
+        app.logger.error("AI reply error: %s", e)
+        return jsonify({"error": "Inference failed"}), 500
+
+
+# Utility: replicate your Deno callAIML in Python
+def callAIML_from_flask(prompt: str) -> str:
+    from requests import post
+    import os
+
+    GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
+    MODELS = os.environ.get("GH_MODELS", "openai/gpt-4o-mini").split(",")
+    for model in MODELS:
+        resp = post(
+            "https://models.github.ai/inference/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GITHUB_TOKEN}",
+                "Accept": "application/vnd.github+json",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": model.strip(),
+                "messages": [
+                    {"role": "system", "content": "You are a professional real estate agent."},
+                    {"role": "user",   "content": prompt}
+                ],
+                "temperature": 0.7,
+                "top_p": 0.7,
+                "max_tokens": 512
+            },
+            timeout=300
+        )
+        if resp.status_code == 200:
+            content = resp.json()["choices"][0]["message"]["content"]
+            return content.strip()
+        elif resp.status_code in (404, 429):
+            continue
+        else:
+            resp.raise_for_status()
+    raise RuntimeError("All models failed or were rate‑limited")
+
+
+# 2) LOI generator endpoint
+@app.route("/api/generate-loi", methods=["POST"])
+def generate_loi():
+    payload = request.get_json(force=True)
+    # render LOI with the same docxtpl template
+    from docxtpl import DocxTemplate
+
+    tpl = DocxTemplate("templates/transaction_autopilot/loi_template.docx")
+    tpl.render(payload)
+    bio = BytesIO()
+    tpl.save(bio)
+    bio.seek(0)
+
+    return send_file(
+        bio,
+        as_attachment=True,
+        download_name=f"LOI_{payload.get('id', 'doc')}.docx",
+        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+
+# 3) PSA generator endpoint
+@app.route("/api/generate-psa", methods=["POST"])
+def generate_psa():
+    payload = request.get_json(force=True)
+    from docxtpl import DocxTemplate
+
+    tpl = DocxTemplate("templates/transaction_autopilot/psa_template.docx")
+    tpl.render(payload)
+    bio = BytesIO()
+    tpl.save(bio)
+    bio.seek(0)
+
+    return send_file(
+        bio,
+        as_attachment=True,
+        download_name=f"PSA_{payload.get('id', 'doc')}.docx",
+        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
 
 # ---------------------------------------------------------------------------
 
