@@ -972,7 +972,7 @@ def generate_psa():
         mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
 
-@app.route("/api/generate-reply", methods=["POST"])
+@app.route("/api/generate-reply-prompt", methods=["POST"])
 def generate_reply():
     data = request.get_json(force=True)
     prompt = data.get("prompt", "").strip()
