@@ -972,6 +972,21 @@ def generate_psa():
         mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
 
+
+@app.route("/api/generate-reply", methods=["POST"])
+def generate_reply():
+    data = request.get_json(force=True)
+    prompt = data.get("prompt", "")
+    
+    if not prompt:
+        return {"error": "Missing prompt"}, 400
+
+    try:
+        reply = callAIML_from_flask(prompt)
+        return {"reply": reply}, 200
+    except Exception as e:
+        return {"error": str(e)}, 500
+
 # ---------------------------------------------------------------------------
 
 
