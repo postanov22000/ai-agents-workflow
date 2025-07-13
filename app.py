@@ -11,6 +11,8 @@ from flask import Flask, render_template, request, redirect, jsonify, render_tem
 
 from supabase import create_client, Client
 
+from io import BytesIO
+
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request as GoogleRequest
 from googleapiclient.discovery import build
@@ -985,6 +987,14 @@ def generate_reply_prompt():
     except Exception as e:
         app.logger.error("AI reply error", exc_info=True)
         return jsonify({"error": str(e)}), 500
+
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "https://replyzeai.vercel.app"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    return response
 
 # ---------------------------------------------------------------------------
 
