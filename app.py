@@ -973,7 +973,7 @@ def generate_psa():
     )
 
 
-@app.route("/api/generate-reply", methods=["POST"])
+@app.route("/api/generate-reply", methods=["POST"], endpoint="generate_reply_flask")
 def generate_reply():
     data = request.get_json(force=True)
     prompt = data.get("prompt", "")
