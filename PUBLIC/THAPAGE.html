@@ -709,7 +709,7 @@
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
 
     try {
-      const res = await fetch('https://https://replyzeai.onrender.com/api/generate-reply-prompt', {
+      const res = await fetch('https://replyzeai.onrender.com/api/generate-reply-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt })
