@@ -709,7 +709,7 @@
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
 
     try {
-      const res = await fetch('https://replyzeai.vercel.app/api/generate-reply', {
+      const res = await fetch('https://replyzeai.vercel.app/api/generate-reply-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt })
