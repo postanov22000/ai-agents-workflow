@@ -675,32 +675,36 @@
 
 
   <script>
-    // Progress Bar
-    window.addEventListener('scroll', ()=>{
-      const st=document.documentElement.scrollTop, sh=document.documentElement.scrollHeight, ch=document.documentElement.clientHeight;
-      document.getElementById('progressBar').style.width=((st/(sh-ch))*100)+'%';
-    });
-    // Scroll Anim
-    const els=document.querySelectorAll('[data-scroll]');const inView=(e,off=100)=>(e.getBoundingClientRect().top <=(window.innerHeight||document.documentElement.clientHeight)-off);
-    const handleScroll=()=>els.forEach(e=>{if(inView(e))e.setAttribute('data-scroll','in');});window.addEventListener('scroll',handleScroll);document.addEventListener('DOMContentLoaded',handleScroll);
-    
-    // Rate limit counters
-    let aiCount=3, loiCount=3, psaCount=3;
-   
-  // … existing scroll & document-generation code …
+  // Progress Bar
+  window.addEventListener('scroll', () => {
+    const st = document.documentElement.scrollTop,
+          sh = document.documentElement.scrollHeight,
+          ch = document.documentElement.clientHeight;
+    document.getElementById('progressBar').style.width = ((st / (sh - ch)) * 100) + '%';
+  });
 
-  // AI Responder (updated)
+  // Scroll Anim
+  const els = document.querySelectorAll('[data-scroll]');
+  const inView = (e, off = 100) =>
+    e.getBoundingClientRect().top <= (window.innerHeight || document.documentElement.clientHeight) - off;
+  const handleScroll = () => els.forEach(e => {
+    if (inView(e)) e.setAttribute('data-scroll', 'in');
+  });
+  window.addEventListener('scroll', handleScroll);
+  document.addEventListener('DOMContentLoaded', handleScroll);
+
+  // Rate limit counters
+  let aiCount = 3, loiCount = 3, psaCount = 3;
+
+  // AI Responder
   document.getElementById('generate-reply-btn').addEventListener('click', async function() {
     if (aiCount <= 0) {
       alert('No more free AI responses. Please sign up.');
       return document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
     }
-
     const btn = this;
     const prompt = document.getElementById('incoming-email').value.trim();
-    if (!prompt) {
-      return alert('Please paste an email text.');
-    }
+    if (!prompt) return alert('Please paste an email text.');
 
     aiCount--;
     document.getElementById('ai-counter').textContent = aiCount;
@@ -714,7 +718,6 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt })
       });
-
       const data = await res.json();
       if (data.reply) {
         document.getElementById('reply-content').textContent = data.reply;
@@ -734,91 +737,85 @@
       setTimeout(() => {
         alert("You've used your free AI responses! Sign up now.");
         document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
-      }, 1000);
+      }, 1_000);
     }
   });
 
-    // Document Generation
-document.querySelectorAll('.doc-btn').forEach(btn => btn.addEventListener('click', async function() {
-  const type = this.getAttribute('data-type'),
-        cnt  = type === 'loi' ? loiCount : psaCount;
+  // Document Generation (LOI & PSA)
+  document.querySelectorAll('.doc-btn').forEach(btn =>
+    btn.addEventListener('click', async function() {
+      const type = this.getAttribute('data-type'),
+            cnt  = type === 'loi' ? loiCount : psaCount;
 
-  if (cnt <= 0) {
-    alert('Free trials exhausted. Please sign up.');
-    return document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
-  }
+      if (cnt <= 0) {
+        alert('Free trials exhausted. Please sign up.');
+        return document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
+      }
 
-  // decrement counter
-  if (type === 'loi') loiCount--;
-  else psaCount--;
-  document.getElementById(type + '-counter').textContent =
-    type === 'loi' ? loiCount : psaCount;
+      // decrement
+      if (type === 'loi') loiCount--; else psaCount--;
+      document.getElementById(type + '-counter').textContent = (type === 'loi' ? loiCount : psaCount);
 
-  const b = this;
-  const orig = b.innerHTML;
-  b.disabled = true;
-  b.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+      const b = this, orig = b.innerHTML;
+      b.disabled = true;
+      b.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
 
-  // collect payload
-  const payload = {};
-  b.closest('.generator-card')
-   .querySelectorAll('input,textarea,select')
-   .forEach(i => i.id && (payload[i.id] = i.value));
+      // collect payload
+      const payload = {};
+      b.closest('.generator-card')
+       .querySelectorAll('input,textarea,select')
+       .forEach(i => i.id && (payload[i.id] = i.value));
 
-  try {
-    const res = await fetch(`https://replyzeai.onrender.com/api/generate-${type}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      try {
+        const res = await fetch(`https://replyzeai.onrender.com/api/generate-${type}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = `${type.toUpperCase()}-Document.docx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error('Error generating document:', err);
+        alert('Error generating document. Please try again.');
+      } finally {
+        b.disabled = false;
+        b.innerHTML = orig;
+      }
+
+      if ((type === 'loi' && loiCount === 0) || (type === 'psa' && psaCount === 0)) {
+        setTimeout(() => {
+          alert('Free trials exhausted. Sign up for unlimited access.');
+          document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
+        }, 1_000);
+      }
+    })
+  );
+
+  // Trial Form Handler
+  document.querySelector('.trial-form button').addEventListener('click', function(e) {
+    e.preventDefault();
+    const form = this.closest('form');
+    const inputs = form.querySelectorAll('input[required]');
+    let valid = true;
+    inputs.forEach(input => {
+      if (!input.value) {
+        valid = false;
+        input.style.borderColor = '#ff605c';
+      } else {
+        input.style.borderColor = 'rgba(100, 255, 218, 0.3)';
+      }
     });
+    if (!valid) return;
 
-    if (!res.ok) throw new Error(`Server returned ${res.status}`);
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a   = document.createElement('a');
-    a.href    = url;
-    a.download= `${type.toUpperCase()}-Document.docx`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  } catch (err) {
-    console.error('Error generating document:', err);
-    alert('Error generating document. Please try again.');
-  } finally {
-    b.disabled = false;
-    b.innerHTML = orig;
-  }
-
-  if ((type === 'loi' && loiCount === 0) ||
-      (type === 'psa' && psaCount === 0)) {
-    setTimeout(() => {
-      alert('Free trials exhausted. Sign up for unlimited access.');
-      document.querySelector('#trial')
-              .scrollIntoView({ behavior: 'smooth' });
-    }, 1000);
-  }
-}));
-
-    // Existing trial form handler unchanged...
-document.querySelector('.trial-form button').addEventListener('click', function(e) {
-  e.preventDefault();
-  const form = this.closest('form');
-  const inputs = form.querySelectorAll('input[required]');
-  let valid = true;
-
-  inputs.forEach(input => {
-    if (!input.value) {
-      valid = false;
-      input.style.borderColor = '#ff605c';
-    } else {
-      input.style.borderColor = 'rgba(100, 255, 218, 0.3)';
-    }
-  });
-
-  if (valid) {
-    const btn = this;
-    const originalText = btn.innerHTML;
+    const btn = this, originalText = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-check"></i> Trial Started!';
     btn.style.background = 'linear-gradient(135deg, #00ca4e 0%, #00a83a 100%)';
     btn.disabled = true;
@@ -828,17 +825,13 @@ document.querySelector('.trial-form button').addEventListener('click', function(
       btn.style.background = 'linear-gradient(135deg, #64ffda 0%, #52d1b8 100%)';
       btn.disabled = false;
       form.reset();
-
-      // Reset counters for AI responder, LOI, and PSA
-      document.getElementById('ai-counter').textContent = '3';
+      // reset counters
+      document.getElementById('ai-counter').textContent  = '3';
       document.getElementById('loi-counter').textContent = '3';
       document.getElementById('psa-counter').textContent = '3';
-
       alert("Your free trial has been activated! You now have 3 free AI responses, 3 LOI, and 3 PSA documents.");
-    }, 3000);
-  }
-});
-
-  </script>
+    }, 3_000);
+  });
+</script>
 </body>
 </html>
