@@ -22,5 +22,7 @@ spacy==3.5.0
 pillow==10.0.0
 pdf2image
 
+Flask-Cors==3.0.10
+
 redis
 rq
