@@ -989,12 +989,13 @@ def generate_reply_prompt():
         return jsonify({"error": str(e)}), 500
 
 
-@app.after_request
-def add_cors_headers(response):
-    response.headers["Access-Control-Allow-Origin"] = "https://replyzeai.vercel.app"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-    return response
+from flask import Flask
+from flask_cors import CORS
+
+app = Flask(__name__, template_folder="templates")
+# allow your frontend origin to hit your /api/* endpoints
+CORS(app, resources={r"/api/*": {"origins": "https://replyzeai.vercel.app"}})
+
 
 # ---------------------------------------------------------------------------
 
