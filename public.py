@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify, send_file
 from flask_cors import CORS
 from io import BytesIO
 from docxtpl import DocxTemplate
-from app import callAIML_from_flask  # your utility function
+from utils import callAIML_from_flask  # your utility function
 # (you may need to adjust imports depending on your package layout)
 
 public_bp = Blueprint("public", __name__)
