@@ -885,7 +885,8 @@ from public import public_bp
 app.register_blueprint(public_bp)
 
 if __name__ == "__main__":
-    app.run(…)
+    app.run(host="0.0.0.0",
+            port=int(os.environ.get("PORT", 10000)))
 
 
 # ---------------------------------------------------------------------------
