@@ -99,51 +99,47 @@ def dashboard():
     emails_sent     = 0
     time_saved      = 0
     show_reconnect  = False
+    revenue         = 0
+    revenue_change  = 0
 
     if user_id:
-        # 1) Load real profile
+        # 1) Load profile
         try:
-            profile_resp = (
-                supabase.table("profiles")
-                        .select("full_name, ai_enabled, generate_leases")
-                        .eq("id", user_id)
-                        .single()
-                        .execute()
-            )
-            if profile_resp.data:
-                name            = profile_resp.data["full_name"]
-                ai_enabled      = profile_resp.data["ai_enabled"]
-                generate_leases = profile_resp.data["generate_leases"]
+            resp = (supabase.table("profiles")
+                            .select("full_name, ai_enabled, generate_leases")
+                            .eq("id", user_id)
+                            .single()
+                            .execute())
+            if resp.data:
+                name            = resp.data["full_name"]
+                ai_enabled      = resp.data["ai_enabled"]
+                generate_leases = resp.data["generate_leases"]
         except Exception:
-            app.logger.warning(f"dashboard(): invalid user_id or missing profile")
+            app.logger.warning(f"dashboard: failed to load profile for {user_id}")
 
         # 2) Count today's emails
         try:
             today     = date.today().isoformat()
-            sent_rows = (
-                supabase.table("emails")
-                        .select("sent_at")
-                        .eq("user_id", user_id)
-                        .eq("status", "sent")
-                        .execute()
-                        .data or []
-            )
-            emails_sent = sum(1 for e in sent_rows if e.get("sent_at", "").startswith(today))
+            rows      = (supabase.table("emails")
+                                .select("sent_at")
+                                .eq("user_id", user_id)
+                                .eq("status", "sent")
+                                .execute()
+                                .data or [])
+            emails_sent = sum(1 for e in rows if e.get("sent_at", "").startswith(today))
             time_saved  = emails_sent * 5.5
         except Exception:
-            pass
+            app.logger.warning(f"dashboard: failed to count emails for {user_id}")
 
-        # 3) Show reconnect if token exists & expired
+        # 3) Gmail reconnect flag
         try:
-            token_rows = (
-                supabase.table("gmail_tokens")
-                        .select("credentials")
-                        .eq("user_id", user_id)
-                        .execute()
-                        .data or []
-            )
-            if token_rows:
-                cd = token_rows[0]["credentials"]
+            toks = (supabase.table("gmail_tokens")
+                           .select("credentials")
+                           .eq("user_id", user_id)
+                           .execute()
+                           .data or [])
+            if toks:
+                cd = toks[0]["credentials"]
                 creds = Credentials(
                     token=cd["token"],
                     refresh_token=cd["refresh_token"],
@@ -152,11 +148,15 @@ def dashboard():
                     client_secret=cd["client_secret"],
                     scopes=cd["scopes"],
                 )
-                show_reconnect = creds.expired
+                show_reconnect = bool(creds.expired)
         except Exception:
-            pass
+            app.logger.warning(f"dashboard: failed to check Gmail token for {user_id}")
 
-    # 4) Render the same dashboard.html with either real or guest data
+        # 4) (Optional) set revenue & change if you ever have real data
+        # revenue = your_calc()
+        # revenue_change = your_calc_change()
+
+    # Render with safe, numeric defaults
     return render_template(
         "dashboard.html",
         user_id=user_id,
@@ -166,14 +166,9 @@ def dashboard():
         emails_sent=emails_sent,
         time_saved=time_saved,
         show_reconnect=show_reconnect,
-        # optional placeholders
-        revenue=0,
-        revenue_change=0
+        revenue=revenue,
+        revenue_change=revenue_change
     )
-except Exception as e:
-        app.logger.exception("Error in /dashboard")
-        # Render an error page or a simple message:
-        return "<h1>Sorry, something went wrong.</h1><p>Check your logs for details.</p>", 500
 
 @app.route("/dashboard/new_transaction")
 def dashboard_new_transaction():
