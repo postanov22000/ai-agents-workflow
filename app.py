@@ -3,15 +3,11 @@ import time
 import base64
 import requests
 
-from flask import abort
+from flask import abort, Flask, render_template, request, redirect, jsonify
 from datetime import date, datetime
 from email.mime.text import MIMEText
 
-from flask import Flask, render_template, request, redirect, jsonify, render_template_string
-
 from supabase import create_client, Client
-
-from io import BytesIO
 
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request as GoogleRequest
@@ -20,35 +16,28 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 import google.auth.transport.requests as grequests
 
-# bring in your Blueprint (which has /autopilot/trigger, etc.)
+# bring in your Blueprints
 from transaction_autopilot import bp as autopilot_bp
-
-# bring in your stand-alone task version (if you ever call it directly)
-import transaction_autopilot_task
+from public import public_bp
 
 # ── single Flask app & blueprint registration ──
 app = Flask(__name__, template_folder="templates")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
 app.register_blueprint(autopilot_bp, url_prefix="/autopilot")
+app.register_blueprint(public_bp)
 
 # --- Supabase setup ---
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_ANON_KEY = os.environ["SUPABASE_ANON_KEY"]
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-# Service‐role client (needed to update tokens)
 SUPABASE_SERVICE: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 # Edge Function base URL *without* trailing slash or endpoint
-# e.g. "https://<PROJECT_REF>.functions.supabase.co/functions/v1/clever-service"
 EDGE_BASE_URL = os.environ.get("EDGE_BASE_URL", "").rstrip("/")
 
 # Retry configuration for calling the Edge Function
 MAX_RETRIES = 5
 RETRY_BACKOFF_BASE = 2
-
-# ---------------------------------------------------------------------------
-
-
 
 # ---------------------------------------------------------------------------
 def call_edge(endpoint_path: str, payload: dict) -> bool:
@@ -84,7 +73,8 @@ def call_edge(endpoint_path: str, payload: dict) -> bool:
     app.logger.error(f"[{endpoint_path}] Exceeded max retries.")
     return False
 
-# ---------------------------------------------------------------------------
+# ── Routes ──
+
 @app.route("/")
 def home():
     """
@@ -113,14 +103,14 @@ def dashboard():
         app.logger.error(f"Failed to load profile for {user_id}: {profile_resp}")
         return "Profile query error", 500
 
-    profile        = profile_resp.data
-    full_name      = profile.get("full_name", "")
-    ai_enabled     = profile.get("ai_enabled", True)
+    profile         = profile_resp.data
+    full_name       = profile.get("full_name", "")
+    ai_enabled      = profile.get("ai_enabled", True)
     generate_leases = profile.get("generate_leases", False)
 
     # 2) Emails sent today & time saved
-    today       = date.today().isoformat()
-    sent_rows   = (
+    today     = date.today().isoformat()
+    sent_rows = (
         supabase.table("emails")
                 .select("sent_at")
                 .eq("user_id", user_id)
@@ -173,57 +163,35 @@ def dashboard_new_transaction():
     user_id = request.args.get("user_id") or abort(401)
     return render_template("partials/new_transaction.html", user_id=user_id)
 
-
 @app.route("/dashboard/analytics")
 def dashboard_analytics():
     user_id = _require_user()
-    # load whatever data you need for analytics:
-    # e.g. charts, tables, etc.
-    # For now we’ll just show a placeholder.
-    return render_template(
-        "partials/analytics.html",
-        user_id=user_id,
-        # pass any metrics or data here...
-    )
+    return render_template("partials/analytics.html", user_id=user_id)
 
 @app.route("/dashboard/users")
 def dashboard_users():
     user_id = _require_user()
-    # fetch your users list from Supabase:
     users = supabase.table("profiles").select("id, full_name, email").execute().data or []
-    return render_template(
-        "partials/users.html",
-        users=users
-    )
+    return render_template("partials/users.html", users=users)
 
 @app.route("/dashboard/billing")
 def dashboard_billing():
     user_id = _require_user()
-    # load any billing info you need:
-    # e.g. invoices, plan status…
-    return render_template(
-        "partials/billing.html",
-        user_id=user_id
-    )
+    return render_template("partials/billing.html", user_id=user_id)
 
 @app.route("/dashboard/settings")
 def dashboard_settings():
     user_id = _require_user()
     profile = supabase.table("profiles").select("display_name, signature, ai_enabled").eq("id", user_id).single().execute().data
-    return render_template(
-        "partials/settings.html",
-        profile=profile,
-        user_id=user_id
-    )
+    return render_template("partials/settings.html", profile=profile, user_id=user_id)
 
 @app.route("/dashboard/home")
 def dashboard_home():
-    """HTMX endpoint: only renders the inner `.main-content`."""
     user_id = request.args.get("user_id")
     if not user_id:
         return "Missing user_id", 401
 
-    # (Exact same logic as /dashboard, so all vars are defined)
+    # (Same logic as /dashboard for HTMX partial)
     profile_resp = (
         supabase.table("profiles")
                 .select("full_name, ai_enabled, email, generate_leases")
@@ -234,13 +202,13 @@ def dashboard_home():
     if profile_resp.data is None:
         return "Profile query error", 500
 
-    profile        = profile_resp.data
-    full_name      = profile.get("full_name", "")
-    ai_enabled     = profile.get("ai_enabled", True)
+    profile         = profile_resp.data
+    full_name       = profile.get("full_name", "")
+    ai_enabled      = profile.get("ai_enabled", True)
     generate_leases = profile.get("generate_leases", False)
 
-    today       = date.today().isoformat()
-    sent_rows   = (
+    today     = date.today().isoformat()
+    sent_rows = (
         supabase.table("emails")
                 .select("sent_at")
                 .eq("user_id", user_id)
@@ -252,7 +220,7 @@ def dashboard_home():
     emails_sent_today = sum(1 for e in sent_rows if e.get("sent_at", "").startswith(today))
     time_saved        = emails_sent_today * 5.5
 
-    token_rows    = (
+    token_rows = (
         supabase.table("gmail_tokens")
                 .select("credentials")
                 .eq("user_id", user_id)
@@ -287,8 +255,6 @@ def dashboard_home():
         generate_leases=generate_leases,
     )
 
-
-
 @app.route("/connect_gmail")
 def connect_gmail():
     """
@@ -308,7 +274,7 @@ def connect_gmail():
             "https://www.googleapis.com/auth/gmail.send",
             "https://www.googleapis.com/auth/gmail.readonly",
             "https://www.googleapis.com/auth/userinfo.email",
-            "https://www.googleapis.com/auth/gmail.compose", 
+            "https://www.googleapis.com/auth/gmail.compose",
             "openid"
         ]
     )
@@ -323,14 +289,9 @@ def connect_gmail():
 @app.route("/oauth2callback")
 def oauth2callback():
     """
-    Handles OAuth2 callback from Google:
-      - Verifies ID token
-      - Finds or creates Supabase profile
-      - Upserts Gmail credentials in supabase.gmail_tokens
-      - Redirects to /complete-profile so the user can enter their display name & signature
+    Handles OAuth2 callback from Google.
     """
     try:
-        # Reconstruct the OAuth flow
         flow = Flow.from_client_config(
             {
                 "web": {
@@ -345,7 +306,7 @@ def oauth2callback():
                 "https://www.googleapis.com/auth/gmail.send",
                 "https://www.googleapis.com/auth/gmail.readonly",
                 "https://www.googleapis.com/auth/userinfo.email",
-                "https://www.googleapis.com/auth/gmail.compose", 
+                "https://www.googleapis.com/auth/gmail.compose",
                 "openid"
             ]
         )
@@ -353,7 +314,6 @@ def oauth2callback():
         flow.fetch_token(authorization_response=request.url)
         credentials = flow.credentials
 
-        # Verify the ID token to get the user's email (and possibly name)
         id_info = id_token.verify_oauth2_token(
             credentials.id_token,
             grequests.Request(),
@@ -365,7 +325,7 @@ def oauth2callback():
         if not email:
             raise ValueError("No email found in Google ID token")
 
-        # Use Supabase Admin API to look up the Auth user by email
+        # Find or create Auth user in Supabase
         auth_url = f"{SUPABASE_URL}/auth/v1/admin/users"
         headers = {
             "apikey": SUPABASE_SERVICE_ROLE_KEY,
@@ -376,13 +336,12 @@ def oauth2callback():
             raise Exception(f"Supabase Admin API error: {resp.status_code} {resp.text}")
 
         users = resp.json().get("users", [])
-        matching_users = [u for u in users if u["email"] == email]
-        if not matching_users:
+        matching = [u for u in users if u["email"] == email]
+        if not matching:
             raise Exception("User not found in Supabase Auth")
+        user_id = matching[0]["id"]
 
-        user_id = matching_users[0]["id"]
-
-        # Ensure a row exists in the "profiles" table (with at least id & email)
+        # Ensure profiles row
         profile_resp = supabase.table("profiles").select("id").eq("id", user_id).execute()
         if not profile_resp.data:
             supabase.table("profiles").insert({
@@ -392,7 +351,7 @@ def oauth2callback():
                 "ai_enabled": True
             }).execute()
 
-        # Store or update the Gmail credentials in supabase.gmail_tokens
+        # Upsert gmail_tokens
         creds_payload = {
             "user_id": user_id,
             "user_email": email,
@@ -407,13 +366,11 @@ def oauth2callback():
         }
         supabase.table("gmail_tokens").upsert(creds_payload).execute()
 
-        # Redirect to the "complete profile" page so the user can enter their display name & signature
         return redirect(f"/complete_profile?user_id={user_id}")
 
     except Exception as e:
         app.logger.error(f"OAuth2 Callback Error: {str(e)}", exc_info=True)
         return f"<h1>Authentication Failed</h1><p>{str(e)}</p>", 500
-
 
 @app.route("/complete_profile", methods=["GET", "POST"])
 def complete_profile():
@@ -426,33 +383,22 @@ def complete_profile():
         signature    = request.form.get("signature", "").strip()
 
         supabase.table("profiles") \
-            .update({
-                "display_name": display_name,
-                "signature": signature
-            }) \
+            .update({"display_name": display_name,
+                     "signature": signature}) \
             .eq("id", user_id) \
             .execute()
 
         return redirect(f"/dashboard?user_id={user_id}")
 
-    # On GET, render your full styled template
     return render_template("complete_profile.html", user_id=user_id)
-
 
 @app.route("/disconnect_gmail", methods=["POST"])
 def disconnect_gmail():
-    """
-    Deletes the Gmail token for a user.
-    """
     user_id = request.form.get("user_id")
     supabase.table("gmail_tokens").delete().eq("user_id", user_id).execute()
     return redirect(f"/dashboard?user_id={user_id}")
 
-
-# … your existing imports, supabase setup, etc. …
-
 def _require_user():
-    # allow user_id via ?user_id= or form field
     uid = request.args.get("user_id") or request.form.get("user_id")
     if not uid:
         abort(401, "Missing user_id")
@@ -460,21 +406,13 @@ def _require_user():
 
 @app.route("/new_lease", methods=["GET"])
 def new_lease_form():
-    """
-    Renders the Create New Lease form.
-    """
     user_id = _require_user()
     return render_template("new_lease.html", user_id=user_id)
 
 @app.route("/new_lease", methods=["POST"])
 def new_lease_submit():
-    """
-    Receives the lease form, builds simple HTML,
-    and creates a Gmail Draft in the user’s account.
-    """
     user_id = _require_user()
 
-    # 1) collect all your form fields into a dict
     data = {
         "property_name":    request.form["propertyName"],
         "property_type":    request.form["propertyType"],
@@ -498,7 +436,6 @@ def new_lease_submit():
         "exclusive_use":       "Yes" if request.form.get("exclusiveUse") else "No",
     }
 
-    # 2) render a minimal HTML body for your lease
     html_body = f"""
     <html><body>
       <h2>Lease Agreement</h2>
@@ -530,7 +467,6 @@ def new_lease_submit():
     </body></html>
     """
 
-    # 3) fetch the user’s Gmail creds from Supabase
     tok = (supabase.table("gmail_tokens")
                 .select("credentials")
                 .eq("user_id", user_id)
@@ -554,9 +490,8 @@ def new_lease_submit():
 
     service = build("gmail", "v1", credentials=creds, cache_discovery=False)
 
-    # 4) build MIME and create draft
     mime = MIMEText(html_body, "html")
-    mime["To"]      = ""  # leave blank in draft
+    mime["To"]      = ""
     mime["Subject"] = f"Draft Lease: {data['property_name']} → {data['tenant_name']}"
     raw = base64.urlsafe_b64encode(mime.as_bytes()).decode()
     draft = {"message": {"raw": raw}}
@@ -564,23 +499,14 @@ def new_lease_submit():
 
     app.logger.info(f"Gmail Draft {created['id']} created for user {user_id}")
 
-    # 5) send them back to dashboard
     return redirect(f"/dashboard?user_id={user_id}")
-
-
 
 @app.route("/admin")
 def admin():
-    """
-    Renders an admin dashboard (should be protected in production).
-    """
     return render_template("admin.html")
 
 @app.route("/api/admin/users")
 def api_admin_users():
-    """
-    Returns JSON of all profiles and their daily email count.
-    """
     users = supabase.table("profiles").select("*").execute().data or []
     today = date.today().isoformat()
     results = []
@@ -602,9 +528,6 @@ def api_admin_users():
 
 @app.route("/api/admin/toggle_status", methods=["POST"])
 def api_toggle_status():
-    """
-    Toggles AI-enabled status for a given user_id.
-    """
     user_id = request.json.get("user_id")
     enable = request.json.get("enable", True)
     supabase.table("profiles").update({"ai_enabled": enable}).eq("id", user_id).execute()
@@ -612,9 +535,6 @@ def api_toggle_status():
 
 @app.route("/debug_env")
 def debug_env():
-    """
-    Returns key environment variables for debugging.
-    """
     return {
         "GOOGLE_CLIENT_ID": os.environ.get("GOOGLE_CLIENT_ID"),
         "REDIRECT_URI": os.environ.get("REDIRECT_URI"),
@@ -623,25 +543,15 @@ def debug_env():
 
 @app.route("/process", methods=["GET"])
 def trigger_process():
-    """
-    Main processing pipeline endpoint:
-      GET /process?token=<PROCESS_SECRET_TOKEN>
-    Stages:
-      1) Generate Response via Edge Function
-      2) Personalize Template via Edge Function
-      3) Generate Proposal via Edge Function
-      4) Send or Draft via Gmail
-    """
-    # 1) Token-based auth
     token = request.args.get("token")
     if token != os.environ.get("PROCESS_SECRET_TOKEN"):
         return jsonify({"error": "Unauthorized"}), 401
 
-    # 1.5) Early exit if no work in any stage
-    gen     = supabase.table("emails").select("id").eq("status", "processing").execute().data or []
-    per     = supabase.table("emails").select("id").eq("status", "ready_to_personalize").execute().data or []
-    prop    = supabase.table("emails").select("id").eq("status", "awaiting_proposal").execute().data or []
-    ready   = supabase.table("emails").select("id").eq("status", "ready_to_send").execute().data or []
+    gen   = supabase.table("emails").select("id").eq("status", "processing").execute().data or []
+    per   = supabase.table("emails").select("id").eq("status", "ready_to_personalize").execute().data or []
+    prop  = supabase.table("emails").select("id").eq("status", "awaiting_proposal").execute().data or []
+    ready = supabase.table("emails").select("id").eq("status", "ready_to_send").execute().data or []
+
     if not (gen or per or prop or ready):
         app.logger.info("⚡ No emails to process — returning 204")
         return "", 204
@@ -649,59 +559,42 @@ def trigger_process():
     all_processed = []
     sent, drafted, failed = [], [], []
 
-    # ── STAGE 1 → Generate Response ──
+    # Stage 1: Generate Response
     if gen:
         ids = [r["id"] for r in gen]
-        # call edge function
         if call_edge("/functions/v1/clever-service/generate-response", {"email_ids": ids}):
             all_processed.extend(ids)
         else:
-            supabase.table("emails").update({
-                "status": "error",
-                "error_message": "generate-response failed"
-            }).in_("id", ids).execute()
+            supabase.table("emails").update({"status": "error", "error_message": "generate-response failed"}).in_("id", ids).execute()
 
-    # ── STAGE 2 → Personalize Template ──
+    # Stage 2: Personalize Template
     if per:
-        ids = [r["id"] for r in per]
-        for eid in ids:
+        for eid in [r["id"] for r in per]:
             if call_edge("/functions/v1/clever-service/personalize-template", {"email_ids": [eid]}):
                 supabase.table("emails").update({"status": "awaiting_proposal"}).eq("id", eid).execute()
                 all_processed.append(eid)
             else:
-                supabase.table("emails").update({
-                    "status": "error",
-                    "error_message": "personalize-template failed"
-                }).eq("id", eid).execute()
+                supabase.table("emails").update({"status": "error", "error_message": "personalize-template failed"}).eq("id", eid).execute()
 
-    # ── STAGE 3 → Generate Proposal ──
+    # Stage 3: Generate Proposal
     if prop:
-        ids = [r["id"] for r in prop]
-        for eid in ids:
+        for eid in [r["id"] for r in prop]:
             if call_edge("/functions/v1/clever-service/generate-proposal", {"email_ids": [eid]}):
                 supabase.table("emails").update({"status": "ready_to_send"}).eq("id", eid).execute()
                 all_processed.append(eid)
             else:
-                supabase.table("emails").update({
-                    "status": "error",
-                    "error_message": "generate-proposal failed"
-                }).eq("id", eid).execute()
+                supabase.table("emails").update({"status": "error", "error_message": "generate-proposal failed"}).eq("id", eid).execute()
 
-    # ── STAGE 4 → Send or Draft via Gmail ──
-    ready_list = (
-        supabase.table("emails")
-                .select("id, user_id, sender_email, processed_content")
-                .eq("status", "ready_to_send")
-                .execute().data
-        or []
-    )
-    for r in ready_list:
-        em_id = r["id"]
-        uid = r["user_id"]
-        to_addr = r.get("sender_email")
-        html_body = (r.get("processed_content") or "").replace("\n", "<br>")
+    # Stage 4: Send or Draft via Gmail
+    for r in (supabase.table("emails")
+                    .select("id, user_id, sender_email, processed_content")
+                    .eq("status", "ready_to_send")
+                    .execute().data or []):
+        em_id      = r["id"]
+        uid        = r["user_id"]
+        to_addr    = r.get("sender_email")
+        html_body  = (r.get("processed_content") or "").replace("\n", "<br>")
 
-        # fetch profile
         prof = supabase.table("profiles").select("display_name, signature, generate_leases").eq("id", uid).single().execute().data or {}
         display, sig, lease_flag = prof.get("display_name",""), prof.get("signature",""), prof.get("generate_leases", False)
         if display:
@@ -730,8 +623,8 @@ def trigger_process():
 
         try:
             msg = MIMEText(full_html, "html")
-            msg["to"] = to_addr
-            msg["from"] = "me"
+            msg["to"]    = to_addr
+            msg["from"]  = "me"
             subject = "Lease Agreement Draft" if lease_flag else "Re: Your Email"
             msg["subject"] = subject
             raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
@@ -754,30 +647,14 @@ def trigger_process():
     summary = {"processed": all_processed, "sent": sent, "drafted": drafted, "failed": failed}
     return jsonify(summary), 200
 
-
-
-
-
-
 @app.route("/transaction/<txn_id>/ready", methods=["POST"])
 def mark_ready(txn_id):
-    supabase.table("transactions")\
-            .update({"ready_for_kit": True})\
-            .eq("id", txn_id)\
-            .execute()
+    supabase.table("transactions").update({"ready_for_kit": True}).eq("id", txn_id).execute()
     return "", 204
-
-
 
 @app.route("/autopilot/batch", methods=["POST"])
 def batch_autopilot():
-    # 1) Fetch all transactions ready for kit
-    txns = supabase.table("transactions") \
-                   .select("*") \
-                   .eq("ready_for_kit", True) \
-                   .eq("kit_generated", False) \
-                   .execute().data or []
-
+    txns = supabase.table("transactions").select("*").eq("ready_for_kit", True).eq("kit_generated", False).execute().data or []
     results = []
     for t in txns:
         payload = {
@@ -795,54 +672,26 @@ def batch_autopilot():
         resp = requests.post(f"{os.environ.get('BASE_URL')}/autopilot/trigger", json=payload)
         results.append({"id": t["id"], "status": resp.status_code})
         if resp.ok:
-            supabase.table("transactions") \
-                    .update({"kit_generated": True}) \
-                    .eq("id", t["id"]) \
-                    .execute()
-
+            supabase.table("transactions").update({"kit_generated": True}).eq("id", t["id"]).execute()
     return jsonify(results), 200
-
 
 @app.route("/dashboard/autopilot")
 def dashboard_autopilot():
     user_id = request.args.get("user_id") or abort(401)
     txn_id  = request.args.get("txn_id")
-    # Fetch all the user’s transactions so the dropdown can populate
-    transactions = (
-        supabase.table("transactions")
-                .select("*")
-                .eq("user_id", user_id)
-                .execute()
-                .data
-        or []
-    )
+    transactions = supabase.table("transactions").select("*").eq("user_id", user_id).execute().data or []
     current_txn = None
     if txn_id:
-        # safe .single() only if exists
         resp = supabase.table("transactions").select("*").eq("id", txn_id).execute()
         current_txn = resp.data[0] if resp.data else None
-
-    return render_template(
-        "partials/autopilot.html",
-        user_id=user_id,
-        transactions=transactions,
-        current_transaction=current_txn
-    )
-
-from flask import request, redirect, render_template, abort
-
-import uuid
-from flask import request, abort, jsonify
+    return render_template("partials/autopilot.html", user_id=user_id, transactions=transactions, current_transaction=current_txn)
 
 @app.route("/transactions/new", methods=["POST"])
 def create_transaction():
-    # 1) require user
     user_id = request.args.get("user_id") or request.form.get("user_id")
     if not user_id:
         abort(401, "Missing user_id")
-
-    # 2) generate id & collect form data
-    new_id = str(uuid.uuid4())
+    new_id = str(__import__('uuid').uuid4())
     payload = {
         "id":                new_id,
         "transaction_type":  request.form["transaction_type"],
@@ -855,42 +704,18 @@ def create_transaction():
         "closing_location":  request.form.get("closing_location"),
         "user_id":           user_id,
     }
-
-    # 3) insert into Supabase
     try:
         resp = supabase.table("transactions").insert(payload).execute()
-        inserted = resp.data[0]  # your new row
+        inserted = resp.data[0]
     except Exception as e:
-        # PostgREST will raise on constraint errors, etc.
         return jsonify({"status": "error", "message": str(e)}), 500
 
-    # 4) return success feedback and auto‑reload the Autopilot partial
     feedback = (
       f'<div class="alert alert-success">Transaction <strong>{inserted["id"]}</strong> created.</div>'
-      # trigger a reload of the Autopilot tab so the new txn shows up
       + '<script>htmx.trigger(document.querySelector(\'[hx-get*="/dashboard/autopilot"]\'), "click")</script>'
     )
     return feedback, 200
 
-
-
-from flask import Flask
-# … all your existing imports …
-
-app = Flask(__name__, template_folder="templates")
-app.secret_key = os.environ.get("FLASK_SECRET_KEY","dev-secret")
-
-# register your new blueprint:
-from public import public_bp
-app.register_blueprint(public_bp)
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0",
-            port=int(os.environ.get("PORT", 10000)))
-
-
-# ---------------------------------------------------------------------------
-
-
+# ── Final entry point ──
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
