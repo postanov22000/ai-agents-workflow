@@ -75,15 +75,77 @@ def call_edge(endpoint_path: str, payload: dict) -> bool:
 
 # ── Routes ──
 
+from flask import url_for
+
 @app.route("/")
 def home():
     """
-    Redirect to /dashboard with a user_id parameter.
+    Render the full dashboard page.
+    If you do want to deep‐link a specific user, still accept ?user_id=
+    and pass it through (so HTMX tabs will load correctly).
     """
-    user_id = request.args.get("user_id")
+    user_id = request.args.get("user_id", "")
+    # Gather exactly the same context you do in /dashboard
+    # so your template variables all resolve.
+    profile_resp = (
+        supabase.table("profiles")
+                .select("full_name, ai_enabled, generate_leases")
+                .eq("id", user_id)
+                .single()
+                .execute()
+    )
+    if profile_resp.data:
+        name            = profile_resp.data["full_name"]
+        ai_enabled      = profile_resp.data["ai_enabled"]
+        generate_leases = profile_resp.data["generate_leases"]
+    else:
+        name = "Guest"
+        ai_enabled = False
+        generate_leases = False
+
+    # If you want to still show “Emails Sent” etc, you can default them to zero:
+    emails_sent = 0
+    time_saved   = 0
+
+    # Decide whether to show reconnect button
+    show_reconnect = True
     if user_id:
-        return redirect(f"/dashboard?user_id={user_id}")
-    return "Missing user_id", 401
+        token_rows = (
+            supabase.table("gmail_tokens")
+                    .select("credentials")
+                    .eq("user_id", user_id)
+                    .execute()
+                    .data or []
+        )
+        if token_rows:
+            try:
+                creds_data = token_rows[0]["credentials"]
+                creds = Credentials(
+                    token=creds_data["token"],
+                    refresh_token=creds_data["refresh_token"],
+                    token_uri=creds_data["token_uri"],
+                    client_id=creds_data["client_id"],
+                    client_secret=creds_data["client_secret"],
+                    scopes=creds_data["scopes"],
+                )
+                show_reconnect = creds.expired
+            except Exception:
+                pass
+
+    return render_template(
+        "dashboard.html",
+        user_id=user_id,
+        name=name,
+        emails_sent=emails_sent,
+        time_saved=time_saved,
+        ai_enabled=ai_enabled,
+        show_reconnect=show_reconnect,
+        generate_leases=generate_leases,
+        # optional revenue placeholders
+        revenue=None,
+        revenue_change=None
+    )
+
 
 @app.route("/dashboard")
 def dashboard():
