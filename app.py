@@ -167,8 +167,8 @@ def dashboard():
         time_saved=time_saved,
         show_reconnect=show_reconnect,
         # optional placeholders
-        revenue=None,
-        revenue_change=None
+        revenue=0,
+        revenue_change=0
     )
 
 
