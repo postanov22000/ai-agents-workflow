@@ -170,7 +170,10 @@ def dashboard():
         revenue=0,
         revenue_change=0
     )
-
+except Exception as e:
+        app.logger.exception("Error in /dashboard")
+        # Render an error page or a simple message:
+        return "<h1>Sorry, something went wrong.</h1><p>Check your logs for details.</p>", 500
 
 @app.route("/dashboard/new_transaction")
 def dashboard_new_transaction():
