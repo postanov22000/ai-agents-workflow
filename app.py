@@ -80,145 +80,97 @@ from flask import url_for
 @app.route("/")
 def home():
     """
-    Render the full dashboard page.
-    If you do want to deep‐link a specific user, still accept ?user_id=
-    and pass it through (so HTMX tabs will load correctly).
+    Just redirect to /dashboard, passing along user_id if any.
     """
     user_id = request.args.get("user_id", "")
-    # Gather exactly the same context you do in /dashboard
-    # so your template variables all resolve.
-    profile_resp = (
-        supabase.table("profiles")
-                .select("full_name, ai_enabled, generate_leases")
-                .eq("id", user_id)
-                .single()
-                .execute()
-    )
-    if profile_resp.data:
-        name            = profile_resp.data["full_name"]
-        ai_enabled      = profile_resp.data["ai_enabled"]
-        generate_leases = profile_resp.data["generate_leases"]
-    else:
-        name = "Guest"
-        ai_enabled = False
-        generate_leases = False
+    # Redirect to /dashboard?user_id=<...> (blank if none)
+    return redirect(f"/dashboard?user_id={user_id}")
 
-    # If you want to still show “Emails Sent” etc, you can default them to zero:
-    emails_sent = 0
-    time_saved   = 0
-
-    # Decide whether to show reconnect button
-    show_reconnect = True
-    if user_id:
-        token_rows = (
-            supabase.table("gmail_tokens")
-                    .select("credentials")
-                    .eq("user_id", user_id)
-                    .execute()
-                    .data or []
-        )
-        if token_rows:
-            try:
-                creds_data = token_rows[0]["credentials"]
-                creds = Credentials(
-                    token=creds_data["token"],
-                    refresh_token=creds_data["refresh_token"],
-                    token_uri=creds_data["token_uri"],
-                    client_id=creds_data["client_id"],
-                    client_secret=creds_data["client_secret"],
-                    scopes=creds_data["scopes"],
-                )
-                show_reconnect = creds.expired
-            except Exception:
-                pass
-
-    return render_template(
-        "dashboard.html",
-        user_id=user_id,
-        name=name,
-        emails_sent=emails_sent,
-        time_saved=time_saved,
-        ai_enabled=ai_enabled,
-        show_reconnect=show_reconnect,
-        generate_leases=generate_leases,
-        # optional revenue placeholders
-        revenue=None,
-        revenue_change=None
-    )
 
 
 @app.route("/dashboard")
 def dashboard():
-    user_id = request.args.get("user_id")
-    if not user_id:
-        return "Missing user_id", 401
+    user_id = request.args.get("user_id", "").strip()
 
-    # 1) Profile
-    profile_resp = (
-        supabase.table("profiles")
-                .select("full_name, ai_enabled, email, generate_leases")
-                .eq("id", user_id)
-                .single()
-                .execute()
-    )
-    if profile_resp.data is None:
-        app.logger.error(f"Failed to load profile for {user_id}: {profile_resp}")
-        return "Profile query error", 500
+    # --- GUEST DEFAULTS ---
+    name            = "Guest"
+    ai_enabled      = False
+    generate_leases = False
+    emails_sent     = 0
+    time_saved      = 0
+    show_reconnect  = False
 
-    profile         = profile_resp.data
-    full_name       = profile.get("full_name", "")
-    ai_enabled      = profile.get("ai_enabled", True)
-    generate_leases = profile.get("generate_leases", False)
-
-    # 2) Emails sent today & time saved
-    today     = date.today().isoformat()
-    sent_rows = (
-        supabase.table("emails")
-                .select("sent_at")
-                .eq("user_id", user_id)
-                .eq("status", "sent")
-                .execute()
-                .data
-        or []
-    )
-    emails_sent_today = sum(1 for e in sent_rows if e.get("sent_at", "").startswith(today))
-    time_saved        = emails_sent_today * 5.5
-
-    # 3) Gmail token status
-    token_rows = (
-        supabase.table("gmail_tokens")
-                .select("credentials")
-                .eq("user_id", user_id)
-                .execute()
-                .data
-        or []
-    )
-    show_reconnect = True
-    if token_rows:
-        creds_data = token_rows[0]["credentials"]
+    if user_id:
+        # 1) Load real profile
         try:
-            creds = Credentials(
-                token=creds_data["token"],
-                refresh_token=creds_data["refresh_token"],
-                token_uri=creds_data["token_uri"],
-                client_id=creds_data["client_id"],
-                client_secret=creds_data["client_secret"],
-                scopes=creds_data["scopes"],
+            profile_resp = (
+                supabase.table("profiles")
+                        .select("full_name, ai_enabled, generate_leases")
+                        .eq("id", user_id)
+                        .single()
+                        .execute()
             )
-            show_reconnect = creds.expired
+            if profile_resp.data:
+                name            = profile_resp.data["full_name"]
+                ai_enabled      = profile_resp.data["ai_enabled"]
+                generate_leases = profile_resp.data["generate_leases"]
+        except Exception:
+            app.logger.warning(f"dashboard(): invalid user_id or missing profile")
+
+        # 2) Count today's emails
+        try:
+            today     = date.today().isoformat()
+            sent_rows = (
+                supabase.table("emails")
+                        .select("sent_at")
+                        .eq("user_id", user_id)
+                        .eq("status", "sent")
+                        .execute()
+                        .data or []
+            )
+            emails_sent = sum(1 for e in sent_rows if e.get("sent_at", "").startswith(today))
+            time_saved  = emails_sent * 5.5
         except Exception:
             pass
 
+        # 3) Show reconnect if token exists & expired
+        try:
+            token_rows = (
+                supabase.table("gmail_tokens")
+                        .select("credentials")
+                        .eq("user_id", user_id)
+                        .execute()
+                        .data or []
+            )
+            if token_rows:
+                cd = token_rows[0]["credentials"]
+                creds = Credentials(
+                    token=cd["token"],
+                    refresh_token=cd["refresh_token"],
+                    token_uri=cd["token_uri"],
+                    client_id=cd["client_id"],
+                    client_secret=cd["client_secret"],
+                    scopes=cd["scopes"],
+                )
+                show_reconnect = creds.expired
+        except Exception:
+            pass
+
+    # 4) Render the same dashboard.html with either real or guest data
     return render_template(
         "dashboard.html",
-        name=full_name,
         user_id=user_id,
-        emails_sent=emails_sent_today,
-        time_saved=time_saved,
+        name=name,
         ai_enabled=ai_enabled,
-        show_reconnect=show_reconnect,
         generate_leases=generate_leases,
+        emails_sent=emails_sent,
+        time_saved=time_saved,
+        show_reconnect=show_reconnect,
+        # optional placeholders
+        revenue=None,
+        revenue_change=None
     )
+
 
 @app.route("/dashboard/new_transaction")
 def dashboard_new_transaction():
