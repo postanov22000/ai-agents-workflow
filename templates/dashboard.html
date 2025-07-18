@@ -1042,16 +1042,15 @@ input:checked + .slider:before {
                 <div class="metric-card">
   <i class="fas fa-dollar-sign metric-icon"></i>
   <h3>Monthly Revenue</h3>
-  {# ensure rev is always a number #}
-  {% set rev = revenue if revenue is not none else 45230 %}
-  <div class="metric-value" id="revenue">
-    ${{ "{:,.0f}".format(rev) }}
-  </div>
-  <div class="trend up">
-      <i class="fas fa-arrow-up"></i>
-      <span>{{ revenue_change|default(12) }}% from last month</span>
-  </div>
-</div>
+  <!-- Always show a number, no Python-formatting -->
++   <div class="metric-value" id="revenue">
++     ${{ revenue if revenue is not none else 0 }}
++   </div>
++   <div class="trend {{ 'up' if (revenue_change or 0) >= 0 else 'down' }}">
++     <i class="fas fa-arrow-{{ 'up' if (revenue_change or 0) >= 0 else 'down' }}"></i>
++     <span>{{ revenue_change if revenue_change is not none else 0 }}% from last month</span>
++   </div>
++ </div>
 
             </div>
 
@@ -1136,7 +1135,7 @@ input:checked + .slider:before {
             // Animate metric values
             animateValue('emails-sent', 0, emailsSent, 1000);
             animateValue('time-saved', 0, {{ time_saved }}, 1000);
-            animateValue('revenue', 0, {{ revenue|default(45230) }}, 1500);
+            animateValue('revenue', 0, {{ revenue or 0 }}, 1500);
             
             // Add hover effects to cards
             const cards = document.querySelectorAll('.metric-card, .action-card');
