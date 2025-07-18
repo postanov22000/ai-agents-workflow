@@ -1040,17 +1040,19 @@ input:checked + .slider:before {
                 </div>
 
                 <div class="metric-card">
-                    <i class="fas fa-dollar-sign metric-icon"></i>
-                    <h3>Monthly Revenue</h3>
-                    {# ensure rev is always a number #}
-{% set rev = revenue if revenue is not none else 45230 %}
-<div class="metric-value" id="revenue">
-  ${{ "{:,.0f}".format(rev) }}</div>
-                    <div class="trend up">
-                        <i class="fas fa-arrow-up"></i>
-                        <span>{{ revenue_change|default(12) }}% from last month</span>
-                    </div>
-                </div>
+  <i class="fas fa-dollar-sign metric-icon"></i>
+  <h3>Monthly Revenue</h3>
+  {# ensure rev is always a number #}
+  {% set rev = revenue if revenue is not none else 45230 %}
+  <div class="metric-value" id="revenue">
+    ${{ "{:,.0f}".format(rev) }}
+  </div>
+  <div class="trend up">
+      <i class="fas fa-arrow-up"></i>
+      <span>{{ revenue_change|default(12) }}% from last month</span>
+  </div>
+</div>
+
             </div>
 
             <!-- Action Section -->
