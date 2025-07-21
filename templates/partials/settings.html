@@ -8,23 +8,25 @@
       <h2><i class="fas fa-user"></i> Profile Information</h2>
     </div>
     <form class="settings-form" method="POST" action="/dashboard/settings?user_id={{ user_id }}">
-      <div class="form-row">
-        <div class="form-group">
-          <label for="firstName">full Name</label>
-          <input type="text" id="fullName" class="form-control" value="John">
-        </div>
-        <div class="form-group">
-          <label for="lastName">Last Name</label>
-          <input type="text" id="lastName" class="form-control" value="Broker">
-        </div>
+      <input type="hidden" name="section" value="profile">
+      <div class="form-group">
+        <label for="displayName">Display Name</label>
+        <input
+          type="text"
+          id="displayName"
+          name="display_name"
+          class="form-control"
+          value="{{ profile.display_name or '' }}"
+        >
       </div>
       <div class="form-group">
-        <label for="email">Email Address</label>
-        <input type="email" id="email" class="form-control" value="john@crebroker.com">
-      </div>
-      <div class="form-group">
-        <label for="phone">Phone Number</label>
-        <input type="tel" id="phone" class="form-control" value="(212) 555-1234">
+        <label for="signature">Email Signature</label>
+        <textarea
+          id="signature"
+          name="signature"
+          class="form-control"
+          rows="4"
+        >{{ profile.signature or '' }}</textarea>
       </div>
       <button type="submit" class="btn btn-primary">
         <i class="fas fa-save"></i> Update Profile
@@ -37,37 +39,40 @@
     <div class="section-header">
       <h2><i class="fas fa-lock"></i> Security</h2>
     </div>
-    <div class="toggle-group">
-      <label class="toggle-label">
-        <span>Two-Factor Authentication</span>
-        <label class="toggle-switch">
-          <input type="checkbox" checked>
-          <span class="slider"></span>
+    <form method="POST" action="/dashboard/settings?user_id={{ user_id }}">
+      <input type="hidden" name="section" value="security">
+      <div class="toggle-group">
+        <label class="toggle-label">
+          <span>Two-Factor Authentication</span>
+          <label class="toggle-switch">
+            <input type="checkbox" name="two_factor" {{ 'checked' if profile.two_factor else '' }}>
+            <span class="slider"></span>
+          </label>
         </label>
-      </label>
-      <p class="toggle-description">Add an extra layer of security to your account</p>
-    </div>
-    <div class="toggle-group">
-      <label class="toggle-label">
-        <span>Email Notifications</span>
-        <label class="toggle-switch">
-          <input type="checkbox" checked>
-          <span class="slider"></span>
+        <p class="toggle-description">Add an extra layer of security to your account</p>
+      </div>
+      <div class="toggle-group">
+        <label class="toggle-label">
+          <span>Email Notifications</span>
+          <label class="toggle-switch">
+            <input type="checkbox" name="email_notifications" {{ 'checked' if profile.email_notifications else '' }}>
+            <span class="slider"></span>
+          </label>
         </label>
-      </label>
-    </div>
-    <div class="toggle-group">
-      <label class="toggle-label">
-        <span>SMS Alerts</span>
-        <label class="toggle-switch">
-          <input type="checkbox">
-          <span class="slider"></span>
+      </div>
+      <div class="toggle-group">
+        <label class="toggle-label">
+          <span>SMS Alerts</span>
+          <label class="toggle-switch">
+            <input type="checkbox" name="sms_alerts" {{ 'checked' if profile.sms_alerts else '' }}>
+            <span class="slider"></span>
+          </label>
         </label>
-      </label>
-    </div>
-    <button class="btn btn-secondary">
-      <i class="fas fa-key"></i> Change Password
-    </button>
+      </div>
+      <button type="submit" class="btn btn-secondary">
+        <i class="fas fa-save"></i> Save Security Settings
+      </button>
+    </form>
   </div>
 
   <!-- Integrations -->
@@ -76,30 +81,42 @@
       <h2><i class="fas fa-plug"></i> Integrations</h2>
     </div>
     <div class="integration-grid">
+      <!-- Gmail Integration -->
       <div class="integration-card">
         <div class="integration-icon">
           <i class="fab fa-google"></i>
         </div>
         <div class="integration-details">
           <h4>Gmail</h4>
-          <div class="integration-status status-connected">
-            <i class="fas fa-check-circle"></i> Connected
+          <div class="integration-status {{ 'status-connected' if profile.ai_enabled else '' }}">
+            <i class="fas {{ 'fa-check-circle' if profile.ai_enabled else 'fa-times-circle' }}"></i>
+            {{ 'Connected' if profile.ai_enabled else 'Not Connected' }}
           </div>
         </div>
         <div class="integration-actions">
-          <button class="btn btn-danger btn-sm">
-            <i class="fas fa-unlink"></i> Disconnect
-          </button>
+          {% if profile.ai_enabled %}
+          <form method="POST" action="/disconnect_gmail" style="display:inline">
+            <input type="hidden" name="user_id" value="{{ user_id }}">
+            <button class="btn btn-danger btn-sm">
+              <i class="fas fa-unlink"></i> Disconnect
+            </button>
+          </form>
+          {% else %}
+          <a href="/connect_gmail?user_id={{ user_id }}" class="btn btn-primary btn-sm">
+            <i class="fas fa-link"></i> Connect
+          </a>
+          {% endif %}
         </div>
       </div>
 
+      <!-- Other integrations placeholders -->
       <div class="integration-card">
         <div class="integration-icon">
           <i class="fas fa-calendar-alt"></i>
         </div>
         <div class="integration-details">
           <h4>Google Calendar</h4>
-          <div class="integration-status">
+          <div class="integration-status status-not-connected">
             <i class="fas fa-times-circle"></i> Not Connected
           </div>
         </div>
@@ -116,7 +133,7 @@
         </div>
         <div class="integration-details">
           <h4>CRM Integration</h4>
-          <div class="integration-status">
+          <div class="integration-status status-not-connected">
             <i class="fas fa-times-circle"></i> Not Connected
           </div>
         </div>
