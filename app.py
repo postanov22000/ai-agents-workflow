@@ -191,11 +191,41 @@ def dashboard_billing():
     user_id = _require_user()
     return render_template("partials/billing.html", user_id=user_id)
 
-@app.route("/dashboard/settings")
+@app.route("/dashboard/settings", methods=["GET", "POST"])
 def dashboard_settings():
     user_id = _require_user()
-    profile = supabase.table("profiles").select("display_name, signature, ai_enabled").eq("id", user_id).single().execute().data
-    return render_template("partials/settings.html", profile=profile, user_id=user_id)
+
+    if request.method == "POST":
+        # Only handling profile section here; you can extend for security/integrations
+        new_display_name = request.form.get("display_name", "").strip()
+        new_signature    = request.form.get("signature", "").strip()
+
+        # Persist updates
+        supabase.table("profiles") \
+                .update({
+                    "display_name": new_display_name,
+                    "signature":    new_signature
+                }) \
+                .eq("id", user_id) \
+                .execute()
+
+    # On both GET and after POST, re‑fetch the latest profile
+    profile = (
+        supabase
+        .table("profiles")
+        .select("display_name, signature, ai_enabled")
+        .eq("id", user_id)
+        .single()
+        .execute()
+        .data
+    )
+
+    return render_template(
+        "partials/settings.html",
+        profile=profile,
+        user_id=user_id
+    )
+
 
 @app.route("/dashboard/home")
 def dashboard_home():
