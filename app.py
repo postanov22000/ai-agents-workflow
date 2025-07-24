@@ -733,19 +733,28 @@ def create_transaction():
     user_id = request.args.get("user_id") or request.form.get("user_id")
     if not user_id:
         abort(401, "Missing user_id")
+
     new_id = str(__import__('uuid').uuid4())
-    payload = {
-        "id":                new_id,
-        "transaction_type":  request.form["transaction_type"],
-        "property_address":  request.form["property_address"],
-        "buyer":             request.form["buyer"],
-        "seller":            request.form["seller"],
-        "date":              request.form["date"],
-        "closing_date":      request.form.get("closing_date"),
-        "purchase_price":    request.form.get("purchase_price"),
-        "closing_location":  request.form.get("closing_location"),
-        "user_id":           user_id,
-    }
+
+    # All accepted fields from the gamified form
+    accepted_fields = [
+        "transaction_type", "property_address", "buyer", "seller", "date", "closing_date",
+        "purchase_price", "closing_location", "Buyer_Name", "Buyer_Address", "Seller_Name",
+        "Seller_Address", "Agreement_Date", "Buyer_Signature", "Seller_Signature",
+        "Deposit_Amount", "Legal_Description", "Broker_Name", "Commission_Amount",
+        "occupy_property_date", "structure_age", "Additional_explanations", "Time",
+        "Name_of_Property", "City", "County", "State", "Description_of_Property",
+        "square_feet", "mortgage_amount", "mortgage_years", "interest_rate", "broker_payday",
+        "inspection_days", "possession_Date", "brokerage_fee", "Location", "Rent_type",
+        "Apartment_address", "Apartment_description", "Premises_description", "Lease_Terms",
+        "Agreed_Rent", "Maintenance_terms", "Landlord_Phone", "Tenant_Phone",
+        "Landlord_Email", "Tenant_Email", "agency_Name"
+    ]
+
+    payload = {"id": new_id, "user_id": user_id}
+    for field in accepted_fields:
+        payload[field] = request.form.get(field)
+
     try:
         resp = supabase.table("transactions").insert(payload).execute()
         inserted = resp.data[0]
@@ -753,10 +762,11 @@ def create_transaction():
         return jsonify({"status": "error", "message": str(e)}), 500
 
     feedback = (
-      f'<div class="alert alert-success">Transaction <strong>{inserted["id"]}</strong> created.</div>'
-      + '<script>htmx.trigger(document.querySelector(\'[hx-get*="/dashboard/autopilot"]\'), "click")</script>'
+        f'<div class="alert alert-success">🎉 Transaction <strong>{inserted["id"]}</strong> created.</div>'
+        + '<script>htmx.trigger(document.querySelector(\'[hx-get*="/dashboard/autopilot"]\'), "click")</script>'
     )
     return feedback, 200
+
 
 # ── Final entry point ──
 if __name__ == "__main__":
