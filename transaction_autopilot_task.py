@@ -58,7 +58,13 @@ def trigger_autopilot_task(transaction_type: str, data: dict) -> str:
     # 1) render both templates
     docs = [
         _render_docx("loi_template.docx", data, "LOI"),
-        _render_docx("psa_template.docx", data, "PSA")
+        _render_docx("psa_template.docx", data, "PSA"),
+        _render_docx("purchase_offer_template.docx", data, "PURCHASE_OFFER"),
+        _render_docx("agency_disclosure_template.docx", data, "AGENCY_DISCLOSURE"),
+        _render_docx("real_estate_purchase_template.docx", data, "REAL_ESTATE_PURCHASE"),
+        # later:
+        # _render_docx("lease_template.docx", data, "LEASE"),
+        # _render_docx("seller_disclosure_template.docx", data, "SELLER_DISCLOSURE"),
     ]
 
     # 2) bundle into a zip
