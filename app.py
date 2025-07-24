@@ -730,13 +730,22 @@ def dashboard_autopilot():
 
 @app.route("/transactions/new", methods=["POST"])
 def create_transaction():
+    import uuid
+    import traceback
+
     user_id = request.args.get("user_id") or request.form.get("user_id")
     if not user_id:
-        abort(401, "Missing user_id")
+        return jsonify({"status": "error", "message": "Missing user_id"}), 401
 
-    new_id = str(__import__('uuid').uuid4())
+    new_id = str(uuid.uuid4())
 
-    # All accepted fields from the gamified form
+    # 🔐 Validate required fields
+    required = ["transaction_type", "property_address", "buyer", "seller", "date"]
+    missing = [f for f in required if not request.form.get(f)]
+    if missing:
+        return jsonify({"status": "error", "message": f"Missing required fields: {', '.join(missing)}"}), 400
+
+    # ✅ All accepted fields from gamified form
     accepted_fields = [
         "transaction_type", "property_address", "buyer", "seller", "date", "closing_date",
         "purchase_price", "closing_location", "Buyer_Name", "Buyer_Address", "Seller_Name",
@@ -753,19 +762,29 @@ def create_transaction():
 
     payload = {"id": new_id, "user_id": user_id}
     for field in accepted_fields:
-        payload[field] = request.form.get(field)
+        value = request.form.get(field)
+        payload[field] = None if value == "" else value
 
     try:
+        app.logger.info(f"🚀 Inserting transaction with ID {new_id}")
+        app.logger.debug(f"Payload: {payload}")
         resp = supabase.table("transactions").insert(payload).execute()
         inserted = resp.data[0]
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        app.logger.error("❌ Transaction insert failed")
+        app.logger.error(traceback.format_exc())
+        return jsonify({
+            "status": "error",
+            "message": f"Insertion failed: {str(e)}"
+        }), 500
 
+    # ✅ Success response with htmx trigger
     feedback = (
         f'<div class="alert alert-success">🎉 Transaction <strong>{inserted["id"]}</strong> created.</div>'
         + '<script>htmx.trigger(document.querySelector(\'[hx-get*="/dashboard/autopilot"]\'), "click")</script>'
     )
     return feedback, 200
+
 
 
 # ── Final entry point ──
