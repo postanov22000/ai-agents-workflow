@@ -1,69 +1,227 @@
-<div class="p-4">
-  <h2>Create New Transaction</h2>
+<!-- templates/partials/new_transaction_gamified.html -->
+<div class="p-4 gamified-form">
+  <h2 class="mb-4">🚀 Start Your Mission: Create a New Transaction</h2>
   <form
     id="new-txn-form"
     hx-post="/transactions/new?user_id={{ user_id }}"
     hx-swap="none"
-    class="space-y-4"
+    class="space-y-5"
   >
-    <!-- Transaction type -->
-    <div class="form-group">
-      <label for="transaction_type">Type</label>
-      <select name="transaction_type" id="transaction_type" class="form-control" required>
-        <option value="">— select type —</option>
-        <option value="sale">Sale</option>
-        <option value="lease">Lease</option>
-        <option value="purchase">Purchase</option>
-      </select>
+    <!-- Progress Bar -->
+    <div class="progress mb-3">
+      <div class="progress-bar bg-success" role="progressbar" style="width: 12.5%">Level 1 of 8</div>
     </div>
 
-    <!-- Address -->
-    <div class="form-group">
-      <label for="property_address">Property Address</label>
-      <input
-        type="text"
-        name="property_address"
-        id="property_address"
-        class="form-control"
-        placeholder="123 Main St, City, State"
-        required
-      />
-    </div>
+    <!-- MISSION 1: Property Basics -->
+    <fieldset>
+      <legend>🏠 Level 1: Property Basics</legend>
+      <div class="form-group">
+        <label>📍 Property Address</label>
+        <input type="text" name="Property_Address" class="form-control" required>
+      </div>
+      <div class="form-group">
+        <label>🏙️ City</label>
+        <input type="text" name="City" class="form-control" required>
+      </div>
+      <div class="form-group">
+        <label>🌎 State</label>
+        <input type="text" name="State" class="form-control" required>
+      </div>
+      <div class="form-group">
+        <label>🏷️ Property Name / Nickname</label>
+        <input type="text" name="Name_of_Property" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>📝 Property Description</label>
+        <input type="text" name="Description_of_Property" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>📐 Square Feet</label>
+        <input type="number" name="square_feet" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>📜 Legal Description</label>
+        <input type="text" name="Legal_Description" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>🏢 Apartment Address (if applicable)</label>
+        <input type="text" name="Apartment_address" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>📋 Premises Description</label>
+        <input type="text" name="Premises_description" class="form-control">
+      </div>
+    </fieldset>
 
-    <!-- Buyer & Seller -->
-    <div class="form-group">
-      <label for="buyer">Buyer</label>
-      <input type="text" name="buyer" id="buyer" class="form-control" required/>
-    </div>
-    <div class="form-group">
-      <label for="seller">Seller</label>
-      <input type="text" name="seller" id="seller" class="form-control" required/>
-    </div>
+    <!-- MISSION 2: Parties Involved -->
+    <fieldset>
+      <legend>👥 Level 2: Parties Involved</legend>
+      <div class="form-group">
+        <label>👤 Buyer Name</label>
+        <input type="text" name="Buyer_Name" class="form-control" required>
+      </div>
+      <div class="form-group">
+        <label>📫 Buyer Address</label>
+        <input type="text" name="Buyer_Address" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>🧍 Seller Name</label>
+        <input type="text" name="Seller_Name" class="form-control" required>
+      </div>
+      <div class="form-group">
+        <label>📬 Seller Address</label>
+        <input type="text" name="Seller_Address" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>🏢 Agency Name</label>
+        <input type="text" name="agency_Name" class="form-control">
+      </div>
+    </fieldset>
 
-    <!-- Dates -->
-    <div class="form-group">
-      <label for="date">Date</label>
-      <input type="date" name="date" id="date" class="form-control" required/>
-    </div>
-    <div class="form-group">
-      <label for="closing_date">Closing Date</label>
-      <input type="date" name="closing_date" id="closing_date" class="form-control"/>
-    </div>
+    <!-- MISSION 3: Deal Terms -->
+    <fieldset>
+      <legend>💰 Level 3: Deal Terms</legend>
+      <div class="form-group">
+        <label>💸 Purchase Price</label>
+        <input type="number" step="0.01" name="Purchase_Price" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>💰 Deposit Amount</label>
+        <input type="number" step="0.01" name="Deposit_Amount" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>📆 Agreement Date</label>
+        <input type="date" name="Agreement_Date" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>💼 Broker Name</label>
+        <input type="text" name="Broker_Name" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>💲 Commission Amount</label>
+        <input type="number" step="0.01" name="Commission_Amount" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>📊 Brokerage Fee</label>
+        <input type="number" step="0.01" name="brokerage_fee" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>📅 Broker Payday</label>
+        <input type="date" name="broker_payday" class="form-control">
+      </div>
+    </fieldset>
 
-    <!-- Purchase price & location -->
-    <div class="form-group">
-      <label for="purchase_price">Purchase Price</label>
-      <input type="number" step="0.01" name="purchase_price" id="purchase_price" class="form-control"/>
-    </div>
-    <div class="form-group">
-      <label for="closing_location">Closing Location</label>
-      <input type="text" name="closing_location" id="closing_location" class="form-control"/>
-    </div>
+    <!-- MISSION 4: Timing & Mortgages -->
+    <fieldset>
+      <legend>🕒 Level 4: Timing & Loans</legend>
+      <div class="form-group">
+        <label>📆 Closing Date</label>
+        <input type="date" name="Closing_Date" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>📅 Occupancy Date</label>
+        <input type="date" name="occupy_property_date" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>🏦 Mortgage Amount</label>
+        <input type="number" name="mortgage_amount" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>📈 Mortgage Years</label>
+        <input type="number" name="mortgage_years" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>📉 Interest Rate (%)</label>
+        <input type="number" step="0.01" name="interest_rate" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>🔍 Inspection Deadline (Days)</label>
+        <input type="number" name="inspection_days" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>📦 Possession Date</label>
+        <input type="date" name="possession_Date" class="form-control">
+      </div>
+    </fieldset>
 
-    <button type="submit" class="btn btn-primary">
-      <i class="fas fa-plus-circle"></i> Create
+    <!-- MISSION 5: Rent & Lease -->
+    <fieldset>
+      <legend>🏘️ Level 5: Lease & Rent Terms (optional)</legend>
+      <div class="form-group">
+        <label>🧾 Rent Type</label>
+        <input type="text" name="Rent_type" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>💳 Agreed Rent</label>
+        <input type="number" name="Agreed_Rent" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>🛠️ Maintenance Terms</label>
+        <input type="text" name="Maintenance_terms" class="form-control">
+      </div>
+    </fieldset>
+
+    <!-- MISSION 6: Contact Info -->
+    <fieldset>
+      <legend>📞 Level 6: Landlord & Tenant Contacts</legend>
+      <div class="form-group">
+        <label>📱 Landlord Phone</label>
+        <input type="tel" name="Landlord_Phone" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>📱 Tenant Phone</label>
+        <input type="tel" name="Tenant_Phone" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>📧 Landlord Email</label>
+        <input type="email" name="Landlord_Email" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>📧 Tenant Email</label>
+        <input type="email" name="Tenant_Email" class="form-control">
+      </div>
+    </fieldset>
+
+    <!-- MISSION 7: Final Details -->
+    <fieldset>
+      <legend>🧠 Level 7: Final Property Details</legend>
+      <div class="form-group">
+        <label>🏗️ Structure Age</label>
+        <input type="text" name="structure_age" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>📍 Location</label>
+        <input type="text" name="Location" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>🏛️ County</label>
+        <input type="text" name="County" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>🗒️ Additional Explanations</label>
+        <textarea name="Additional_explanations" class="form-control"></textarea>
+      </div>
+    </fieldset>
+
+    <!-- MISSION 8: Signatures -->
+    <fieldset>
+      <legend>✍️ Level 8: Digital Signatures</legend>
+      <div class="form-group">
+        <label>✒️ Buyer Signature</label>
+        <input type="text" name="Buyer_Signature" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>✒️ Seller Signature</label>
+        <input type="text" name="Seller_Signature" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>🕓 Time</label>
+        <input type="time" name="Time" class="form-control">
+      </div>
+    </fieldset>
+
+    <button type="submit" class="btn btn-success btn-block mt-4">
+      ✅ Launch Transaction
     </button>
   </form>
-
-  <div id="new-txn-feedback" style="margin-top:12px;"></div>
 </div>
