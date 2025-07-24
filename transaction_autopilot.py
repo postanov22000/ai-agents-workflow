@@ -61,8 +61,8 @@ def trigger_autopilot_from_payload(payload: dict) -> dict:
     generate_document("agency_disclosure_template.docx", data, "AGENCY_DISCLOSURE"),
     generate_document("real_estate_purchase_template.docx", data, "REAL_ESTATE_PURCHASE"),
     # future:
-    # generate_document("lease_template.docx", data, "LEASE"),
-    # generate_document("seller_disclosure_template.docx", data, "SELLER_DISCLOSURE"),
+    generate_document("lease_template.docx", data, "LEASE"),
+    generate_document("seller_disclosure_template.docx", data, "SELLER_DISCLOSURE"),
 ]
 
     kit_zip_list = bundle_closing_kit(ttype, docs)
