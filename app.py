@@ -743,6 +743,7 @@ def create_transaction():
     required = ["transaction_type", "property_address", "buyer", "seller", "date"]
     missing = [f for f in required if not request.form.get(f)]
     if missing:
+        app.logger.warning(f"⚠️ Missing required fields: {missing}")
         return jsonify({"status": "error", "message": f"Missing required fields: {', '.join(missing)}"}), 400
 
     # ✅ All accepted fields from gamified form
