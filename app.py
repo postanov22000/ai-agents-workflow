@@ -740,7 +740,7 @@ def create_transaction():
     new_id = str(uuid.uuid4())
 
     # 🔐 Validate required fields
-    required = ["transaction_type", "property_address", "buyer", "seller", "date"]
+    required = ["Buyer_Name", "Seller_Name", "Property_Address", "Agreement_Date"]
     missing = [f for f in required if not request.form.get(f)]
     if missing:
         app.logger.warning(f"⚠️ Missing required fields: {missing}")
