@@ -54,9 +54,16 @@ def trigger_autopilot_from_payload(payload: dict) -> dict:
     ttype = payload.get("transaction_type", "generic")
     data = payload.get("data", {})
 
-    loi_path = generate_document("loi_template.docx", data, "LOI")
-    psa_path = generate_document("psa_template.docx", data, "PSA")
-    docs = [loi_path, psa_path]
+    docs = [
+    generate_document("loi_template.docx", data, "LOI"),
+    generate_document("psa_template.docx", data, "PSA"),
+    generate_document("purchase_offer_template.docx", data, "PURCHASE_OFFER"),
+    generate_document("agency_disclosure_template.docx", data, "AGENCY_DISCLOSURE"),
+    generate_document("real_estate_purchase_template.docx", data, "REAL_ESTATE_PURCHASE"),
+    # future:
+    # generate_document("lease_template.docx", data, "LEASE"),
+    # generate_document("seller_disclosure_template.docx", data, "SELLER_DISCLOSURE"),
+]
 
     kit_zip_list = bundle_closing_kit(ttype, docs)
     uploaded_files = []
