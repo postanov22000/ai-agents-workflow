@@ -10,11 +10,11 @@
     <!-- Progress Bar -->
     <div class="relative h-2 bg-gray-200 rounded-full overflow-hidden">
       <div id="progress-bar" class="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 to-green-400" style="width:12.5%"></div>
-      <span class="absolute top-2 left-1 text-sm font-medium">Stage 1/8</span>
+      <span class="absolute top-2 left-1 text-sm font-medium">Stage 1/10</span>
     </div>
 
     <!-- MISSION 1: Property Quest -->
-    <fieldset class="space-y-3">
+    <fieldset class="space-y-3 mission-card active">
       <legend class="text-lg font-semibold">🏠 Property Quest</legend>
       <div class="form-group">
         <label>📍 Address of Adventure</label>
@@ -30,8 +30,13 @@
           <input type="text" name="state" class="form-control" placeholder="e.g. NY" required>
         </div>
       </div>
+    </fieldset>
+
+    <!-- MISSION 2: Quick Property Details -->
+    <fieldset class="space-y-3 mission-card">
+      <legend class="text-lg font-semibold">🔍 Quick Property Details</legend>
       <div class="form-group">
-        <label>📝 Quick Brief</label>
+        <label>📝 Description</label>
         <input type="text" name="description_of_property" class="form-control" placeholder="One-liner summary">
       </div>
       <div class="form-group grid grid-cols-2 gap-4">
@@ -41,15 +46,15 @@
         </div>
         <div>
           <label>📜 Legal Desc.</label>
-          <input type="text" name="legal_description" class="form-control" placeholder="Official legal details">
+          <input type="text" name="legal_description" class="form-control" placeholder="Official details">
         </div>
       </div>
     </fieldset>
 
-    <!-- MISSION 2: Meet the Cast -->
-    <fieldset class="space-y-3">
-      <legend class="text-lg font-semibold">👥 Meet the Cast</legend>
-      <div class="form-group grid grid-cols-1 md:grid-cols-2 gap-4">
+    <!-- MISSION 3: Cast & Crew -->
+    <fieldset class="space-y-3 mission-card">
+      <legend class="text-lg font-semibold">👥 Cast & Crew</legend>
+      <div class="grid grid-cols-2 gap-4">
         <div>
           <label>🎭 Buyer Name</label>
           <input type="text" name="buyer_name" class="form-control" placeholder="Hero of the story" required>
@@ -59,22 +64,36 @@
           <input type="text" name="seller_name" class="form-control" placeholder="Your counterpart" required>
         </div>
       </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label>🏠 Buyer Address</label>
+          <input type="text" name="buyer_address" class="form-control" placeholder="Where they live">
+        </div>
+        <div>
+          <label>🏠 Seller Address</label>
+          <input type="text" name="seller_address" class="form-control" placeholder="Original owner address">
+        </div>
+      </div>
     </fieldset>
 
-    <!-- MISSION 3: Deal Dynamics -->
-    <fieldset class="space-y-3">
+    <!-- MISSION 4: Deal Dynamics -->
+    <fieldset class="space-y-3 mission-card">
       <legend class="text-lg font-semibold">💰 Deal Dynamics</legend>
       <div class="grid grid-cols-2 gap-4">
-        <div class="form-group">
+        <div>
           <label>💸 Offer Price</label>
           <input type="number" name="purchase_price" step="0.01" class="form-control" placeholder="e.g. 250000">
         </div>
-        <div class="form-group">
+        <div>
           <label>💰 Deposit</label>
           <input type="number" name="deposit_amount" step="0.01" class="form-control" placeholder="e.g. 5000">
         </div>
       </div>
+    </fieldset>
 
+    <!-- MISSION 5: Timeline -->
+    <fieldset class="space-y-3 mission-card">
+      <legend class="text-lg font-semibold">🗓️ Timeline</legend>
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label>📆 Agreement Date</label>
@@ -85,11 +104,21 @@
           <input type="date" name="closing_date" class="form-control">
         </div>
       </div>
+      <div class="grid grid-cols-2 gap-4 mt-4">
+        <div>
+          <label>🚪 Possession Date</label>
+          <input type="date" name="possession_date" class="form-control">
+        </div>
+        <div>
+          <label>🏠 Occupancy Date</label>
+          <input type="date" name="occupy_property_date" class="form-control">
+        </div>
+      </div>
     </fieldset>
 
-    <!-- MISSION 4: Financing & Timing -->
-    <fieldset class="space-y-3">
-      <legend class="text-lg font-semibold">🏦 Financing & Timing</legend>
+    <!-- MISSION 6: Financing -->
+    <fieldset class="space-y-3 mission-card">
+      <legend class="text-lg font-semibold">🏦 Financing</legend>
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label>💼 Mortgage Amt.</label>
@@ -100,47 +129,101 @@
           <input type="number" name="mortgage_years" class="form-control" placeholder="e.g. 30">
         </div>
       </div>
-      <div class="grid grid-cols-2 gap-4">
+      <div class="grid grid-cols-2 gap-4 mt-4">
         <div>
           <label>📊 Interest %</label>
           <input type="number" step="0.01" name="interest_rate" class="form-control" placeholder="e.g. 3.5">
         </div>
         <div>
-          <label>🔍 Inspect Days</label>
+          <label>🔍 Inspection Days</label>
           <input type="number" name="inspection_days" class="form-control" placeholder="e.g. 10">
-        </div>
+        </</div>
       </div>
     </fieldset>
 
-    <!-- MISSION 5: Contact Allies -->
-    <fieldset class="space-y-3">
-      <legend class="text-lg font-semibold">📞 Contact Allies</legend>
+    <!-- MISSION 7: Extras -->
+    <fieldset class="space-y-3 mission-card">
+      <legend class="text-lg font-semibold">⭐ Extras & Details</legend>
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <label>🤝 Broker Name</label>
-          <input type="text" name="broker_name" class="form-control" placeholder="Your broker sidekick">
+          <label>🏢 Agency Name</label>
+          <input type="text" name="agency_name" class="form-control" placeholder="Your agency">
         </div>
         <div>
-          <label>💼 Commission %</label>
-          <input type="number" step="0.01" name="commission_amount" class="form-control" placeholder="e.g. 3">
+          <label>📋 County</label>
+          <input type="text" name="county" class="form-control" placeholder="e.g. King">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4 mt-4">
+        <div>
+          <label>📍 Location Note</label>
+          <input type="text" name="location" class="form-control" placeholder="Neighborhood details">
+        </div>
+        <div>
+          <label>🏢 Structure Age</label>
+          <input type="text" name="structure_age" class="form-control" placeholder="e.g. Built 1990">
         </div>
       </div>
     </fieldset>
 
-    <!-- MISSION 6: Final Voices & Signatures -->
-    <fieldset class="space-y-3">
-      <legend class="text-lg font-semibold">✍️ Final Voices & Signatures</legend>
+    <!-- MISSION 8: Rent/Lease Terms -->
+    <fieldset class="space-y-3 mission-card">
+      <legend class="text-lg font-semibold">🏘️ Rent/Lease Terms (optional)</legend>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label>🧾 Rent Type</label>
+          <input type="text" name="rent_type" class="form-control" placeholder="e.g. Month-to-month">
+        </div>
+        <div>
+          <label>💳 Agreed Rent</label>
+          <input type="number" name="agreed_rent" class="form-control" placeholder="Amount">
+        </div>
+      </div>
+      <div class="form-group mt-4">
+        <label>🛠️ Maintenance Terms</label>
+        <input type="text" name="maintenance_terms" class="form-control" placeholder="Who handles repairs?">
+      </div>
+    </fieldset>
+
+    <!-- MISSION 9: Contact Info -->
+    <fieldset class="space-y-3 mission-card">
+      <legend class="text-lg font-semibold">📞 Landlord & Tenant Contacts</legend>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label>📱 Landlord Phone</label>
+          <input type="tel" name="landlord_phone" class="form-control" placeholder="e.g. (123) 456-7890">
+        </div>
+        <div>
+          <label>📱 Tenant Phone</label>
+          <input type="tel" name="tenant_phone" class="form-control" placeholder="e.g. (098) 765-4321">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4 mt-4">
+        <div>
+          <label>📧 Landlord Email</label>
+          <input type="email" name="landlord_email" class="form-control" placeholder="email@example.com">
+        </div>
+        <div>
+          <label>📧 Tenant Email</label>
+          <input type="email" name="tenant_email" class="form-control" placeholder="email@example.com">
+        </div>
+      </div>
+    </fieldset>
+
+    <!-- MISSION 10: Final Sign & Go -->
+    <fieldset class="space-y-3 mission-card">
+      <legend class="text-lg font-semibold">✍️ Final Sign & Go</legend>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label>🖋 Buyer Sign</label>
+          <label>🖋 Buyer Signature</label>
           <input type="text" name="buyer_signature" class="form-control" placeholder="Type full name">
         </div>
         <div>
-          <label>🖋 Seller Sign</label>
+          <label>🖋 Seller Signature</label>
           <input type="text" name="seller_signature" class="form-control" placeholder="Type full name">
         </div>
       </div>
-      <div class="form-group">
+      <div class="form-group mt-4">
         <label>⏱ Timestamp</label>
         <input type="time" name="time" class="form-control">
       </div>
