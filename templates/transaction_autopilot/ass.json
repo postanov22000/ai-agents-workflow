@@ -1,0 +1,13 @@
+{
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/PUBLIC/$1.html"
+    },
+    {
+      "source": "/",
+      "destination": "/PUBLIC/index.html"
+    }
+  ],
+  "cleanUrls": true
+}
