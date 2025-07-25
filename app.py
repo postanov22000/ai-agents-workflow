@@ -739,32 +739,44 @@ def create_transaction():
 
     new_id = str(uuid.uuid4())
 
-    # 🔐 Validate required fields
-    required = ["Buyer_Name", "Seller_Name", "Property_Address", "Agreement_Date"]
+    # 🔐 Validate required fields (lowercase unified names)
+    required = ["buyer_name", "seller_name", "property_address", "agreement_date"]
     missing = [f for f in required if not request.form.get(f)]
     if missing:
         app.logger.warning(f"⚠️ Missing required fields: {missing}")
-        return jsonify({"status": "error", "message": f"Missing required fields: {', '.join(missing)}"}), 400
+        return jsonify({
+            "status": "error",
+            "message": f"Missing required fields: {', '.join(missing)}"
+        }), 400
 
-    # ✅ All accepted fields from gamified form
+    # ✅ All accepted lowercase fields from gamified form
     accepted_fields = [
-        "transaction_type", "property_address", "buyer", "seller", "date", "closing_date",
-        "purchase_price", "closing_location", "Buyer_Name", "Buyer_Address", "Seller_Name",
-        "Seller_Address", "Agreement_Date", "Buyer_Signature", "Seller_Signature",
-        "Deposit_Amount", "Legal_Description", "Broker_Name", "Commission_Amount",
-        "occupy_property_date", "structure_age", "Additional_explanations", "Time",
-        "Name_of_Property", "City", "County", "State", "Description_of_Property",
-        "square_feet", "mortgage_amount", "mortgage_years", "interest_rate", "broker_payday",
-        "inspection_days", "possession_Date", "brokerage_fee", "Location", "Rent_type",
-        "Apartment_address", "Apartment_description", "Premises_description", "Lease_Terms",
-        "Agreed_Rent", "Maintenance_terms", "Landlord_Phone", "Tenant_Phone",
-        "Landlord_Email", "Tenant_Email", "agency_Name"
+        "transaction_type", "property_address", "city", "state", "name_of_property",
+        "description_of_property", "square_feet", "legal_description",
+        "apartment_address", "premises_description",
+
+        "buyer_name", "buyer_address", "seller_name", "seller_address", "agency_name",
+
+        "purchase_price", "deposit_amount", "agreement_date", "broker_name",
+        "commission_amount", "brokerage_fee", "broker_payday",
+
+        "closing_date", "occupy_property_date", "mortgage_amount", "mortgage_years",
+        "interest_rate", "inspection_days", "possession_date",
+
+        "rent_type", "agreed_rent", "maintenance_terms",
+
+        "landlord_phone", "tenant_phone", "landlord_email", "tenant_email",
+
+        "structure_age", "location", "county", "additional_explanations",
+
+        "buyer_signature", "seller_signature", "time"
     ]
 
+    # Build the payload, turning empty strings into None
     payload = {"id": new_id, "user_id": user_id}
     for field in accepted_fields:
-        value = request.form.get(field)
-        payload[field] = None if value == "" else value
+        val = request.form.get(field)
+        payload[field] = None if val == "" else val
 
     try:
         app.logger.info(f"🚀 Inserting transaction with ID {new_id}")
@@ -785,6 +797,7 @@ def create_transaction():
         + '<script>htmx.trigger(document.querySelector(\'[hx-get*="/dashboard/autopilot"]\'), "click")</script>'
     )
     return feedback, 200
+
 
 
 
