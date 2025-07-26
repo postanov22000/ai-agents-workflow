@@ -1,25 +1,28 @@
 // static/js/gamified-form.js
-document.addEventListener('DOMContentLoaded', function() {
+
+function initGamifiedForm() {
   const missionCards = document.querySelectorAll('.mission-card');
-  const btnPrev = document.getElementById('btn-prev');
-  const btnNext = document.getElementById('btn-next');
+  if (!missionCards.length) return;
+
+  const btnPrev    = document.getElementById('btn-prev');
+  const btnNext    = document.getElementById('btn-next');
   const progressFill = document.getElementById('progress-fill');
   const progressText = document.getElementById('progress-text');
   const achievementBadge = document.getElementById('achievement-badge');
   const confettiContainer = document.getElementById('confetti-container');
-  
+
   let currentMission = 0;
   const totalMissions = missionCards.length;
-  
+
   function updateProgress() {
-    const pct = ((currentMission + 1) / totalMissions) * 100;
+    const pct = ((currentMission+1)/totalMissions)*100;
     progressFill.style.width = pct + '%';
-    progressText.textContent = `${currentMission + 1}/${totalMissions}`;
+    progressText.textContent = `${currentMission+1}/${totalMissions}`;
   }
-  
+
   function updateButtonState() {
-    btnPrev.style.visibility = (currentMission === 0 ? 'hidden' : 'visible');
-    if (currentMission === totalMissions - 1) {
+    btnPrev.style.visibility = currentMission===0 ? 'hidden' : 'visible';
+    if (currentMission === totalMissions-1) {
       btnNext.textContent = '🚀 Launch Deal!';
       btnNext.classList.replace('btn-next','btn-submit');
     } else {
@@ -27,17 +30,7 @@ document.addEventListener('DOMContentLoaded', function() {
       btnNext.classList.replace('btn-submit','btn-next');
     }
   }
-  
-  function showAchievement(msg = 'Mission Complete! 🎉') {
-    achievementBadge.textContent = msg;
-    achievementBadge.classList.add('show');
-    createConfetti();
-  }
-  
-  function hideAchievement() {
-    achievementBadge.classList.remove('show');
-  }
-  
+
   function createConfetti() {
     confettiContainer.innerHTML = '';
     for (let i=0; i<80; i++){
@@ -60,8 +53,7 @@ document.addEventListener('DOMContentLoaded', function() {
       confettiContainer.appendChild(c);
     }
   }
-  
-  // Inject keyframes
+
   const style = document.createElement('style');
   style.textContent = `
     @keyframes confettiFall {
@@ -70,22 +62,30 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   `;
   document.head.appendChild(style);
-  
-  function validateCurrentMission() {
-    const inputs = missionCards[currentMission].querySelectorAll('input[required], select[required], input[type="checkbox"][required]');
-    for (let el of inputs) {
+
+  function showAchievement(msg='Mission Complete! 🎉') {
+    achievementBadge.textContent = msg;
+    achievementBadge.classList.add('show');
+    createConfetti();
+  }
+  function hideAchievement() {
+    achievementBadge.classList.remove('show');
+  }
+
+  function validateCurrent() {
+    const reqs = missionCards[currentMission]
+      .querySelectorAll('input[required], select[required], input[type="checkbox"][required]');
+    for (let el of reqs) {
       if (el.type==='checkbox'? !el.checked : !el.value.trim()) {
-        el.focus();
-        return false;
+        el.focus(); return false;
       }
     }
     return true;
   }
-  
-  // Next
-  btnNext.addEventListener('click', ()=>{
-    if (currentMission < totalMissions - 1) {
-      if (!validateCurrentMission()) return alert('Please complete all required fields.');
+
+  btnNext.onclick = ()=>{
+    if (currentMission < totalMissions-1) {
+      if (!validateCurrent()) return alert('Complete required fields.');
       showAchievement();
       setTimeout(()=>{
         hideAchievement();
@@ -94,18 +94,17 @@ document.addEventListener('DOMContentLoaded', function() {
         missionCards[currentMission].classList.add('active');
         updateProgress(); updateButtonState();
         window.scrollTo({top:0,behavior:'smooth'});
-      },1000);
+      },800);
     } else {
-      if (!validateCurrentMission()) return alert('Please complete all required fields.');
+      if (!validateCurrent()) return alert('Complete required fields.');
       showAchievement('Deal Complete! 🚀');
       setTimeout(()=>{
         document.getElementById('new-txn-form').submit();
-      },1200);
+      },1000);
     }
-  });
-  
-  // Prev
-  btnPrev.addEventListener('click', ()=>{
+  };
+
+  btnPrev.onclick = ()=>{
     if (currentMission>0) {
       missionCards[currentMission].classList.remove('active');
       currentMission--;
@@ -113,8 +112,17 @@ document.addEventListener('DOMContentLoaded', function() {
       updateProgress(); updateButtonState();
       window.scrollTo({top:0,behavior:'smooth'});
     }
-  });
-  
-  // Init
-  updateProgress(); updateButtonState();
+  };
+
+  updateProgress();
+  updateButtonState();
+}
+
+// initialize on page load
+document.addEventListener('DOMContentLoaded', initGamifiedForm);
+// re‑init after HTMX swap
+document.body.addEventListener('htmx:afterSwap', evt => {
+  if (evt.detail.target.closest('#new-txn-form')) {
+    initGamifiedForm();
+  }
 });
