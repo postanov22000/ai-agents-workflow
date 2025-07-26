@@ -583,71 +583,122 @@ def debug_env():
         "EDGE_BASE_URL": os.environ.get("EDGE_BASE_URL")
     }
 
+from datetime import datetime  # make sure this is imported
+
 @app.route("/process", methods=["GET"])
 def trigger_process():
     token = request.args.get("token")
     if token != os.environ.get("PROCESS_SECRET_TOKEN"):
         return jsonify({"error": "Unauthorized"}), 401
 
+    today_iso = datetime.utcnow().date().isoformat()
+
+    # Build per-user counts of emails already sent today
+    sent_rows = (
+        supabase
+        .table("emails")
+        .select("user_id, sent_at")
+        .eq("status", "sent")
+        .execute()
+        .data or []
+    )
+    emails_sent_today: dict[str, int] = {}
+    for rec in sent_rows:
+        sent_at = rec.get("sent_at", "")
+        if sent_at.startswith(today_iso):
+            uid = rec["user_id"]
+            emails_sent_today[uid] = emails_sent_today.get(uid, 0) + 1
+
+    # Fetch each processing queue
     gen   = supabase.table("emails").select("id").eq("status", "processing").execute().data or []
     per   = supabase.table("emails").select("id").eq("status", "ready_to_personalize").execute().data or []
     prop  = supabase.table("emails").select("id").eq("status", "awaiting_proposal").execute().data or []
-    ready = supabase.table("emails").select("id").eq("status", "ready_to_send").execute().data or []
+    ready = (
+        supabase.table("emails")
+        .select("id, user_id, sender_email, processed_content")
+        .eq("status", "ready_to_send")
+        .execute()
+        .data or []
+    )
 
     if not (gen or per or prop or ready):
         app.logger.info("⚡ No emails to process — returning 204")
         return "", 204
 
-    all_processed = []
-    sent, drafted, failed = [], [], []
+    all_processed: list[str] = []
+    sent_ids: list[str]      = []
+    drafted_ids: list[str]   = []
+    failed_ids: list[str]    = []
 
-    # Stage 1: Generate Response
+    # 1) Generate Response
     if gen:
         ids = [r["id"] for r in gen]
         if call_edge("/functions/v1/clever-service/generate-response", {"email_ids": ids}):
             all_processed.extend(ids)
         else:
-            supabase.table("emails").update({"status": "error", "error_message": "generate-response failed"}).in_("id", ids).execute()
+            supabase.table("emails")\
+                    .update({"status": "error", "error_message": "generate-response failed"})\
+                    .in_("id", ids).execute()
 
-    # Stage 2: Personalize Template
+    # 2) Personalize Template
     if per:
         for eid in [r["id"] for r in per]:
             if call_edge("/functions/v1/clever-service/personalize-template", {"email_ids": [eid]}):
                 supabase.table("emails").update({"status": "awaiting_proposal"}).eq("id", eid).execute()
                 all_processed.append(eid)
             else:
-                supabase.table("emails").update({"status": "error", "error_message": "personalize-template failed"}).eq("id", eid).execute()
+                supabase.table("emails")\
+                        .update({"status": "error", "error_message": "personalize-template failed"})\
+                        .eq("id", eid).execute()
 
-    # Stage 3: Generate Proposal
+    # 3) Generate Proposal
     if prop:
         for eid in [r["id"] for r in prop]:
             if call_edge("/functions/v1/clever-service/generate-proposal", {"email_ids": [eid]}):
                 supabase.table("emails").update({"status": "ready_to_send"}).eq("id", eid).execute()
                 all_processed.append(eid)
             else:
-                supabase.table("emails").update({"status": "error", "error_message": "generate-proposal failed"}).eq("id", eid).execute()
+                supabase.table("emails")\
+                        .update({"status": "error", "error_message": "generate-proposal failed"})\
+                        .eq("id", eid).execute()
 
-    # Stage 4: Send or Draft via Gmail
-    for r in (supabase.table("emails")
-                    .select("id, user_id, sender_email, processed_content")
-                    .eq("status", "ready_to_send")
-                    .execute().data or []):
-        em_id      = r["id"]
-        uid        = r["user_id"]
-        to_addr    = r.get("sender_email")
-        html_body  = (r.get("processed_content") or "").replace("\n", "<br>")
+    # 4) Send or Draft via Gmail (20/day cap per user)
+    for rec in ready:
+        em_id = rec["id"]
+        uid   = rec["user_id"]
 
-        prof = supabase.table("profiles").select("display_name, signature, generate_leases").eq("id", uid).single().execute().data or {}
+        # enforce daily limit
+        if emails_sent_today.get(uid, 0) >= 20:
+            failed_ids.append(em_id)
+            supabase.table("emails")\
+                    .update({
+                        "status": "error",
+                        "error_message": "Daily email limit of 20 reached"
+                    })\
+                    .eq("id", em_id).execute()
+            continue
+
+        # prepare message
+        to_addr   = rec["sender_email"]
+        html_body = (rec["processed_content"] or "").replace("\n", "<br>")
+
+        prof = supabase.table("profiles")\
+                       .select("display_name, signature, generate_leases")\
+                       .eq("id", uid).single().execute().data or {}
         display, sig, lease_flag = prof.get("display_name",""), prof.get("signature",""), prof.get("generate_leases", False)
         if display:
             html_body = html_body.replace("[Your Name]", display)
-
         full_html = f"<html><body><p>{html_body}</p>{sig}</body></html>"
 
-        tok = (supabase.table("gmail_tokens").select("credentials").eq("user_id", uid).limit(1).execute().data) or []
+        # load Gmail creds
+        tok = supabase.table("gmail_tokens")\
+                      .select("credentials")\
+                      .eq("user_id", uid).limit(1).execute().data or []
         if not tok:
-            failed.append(em_id)
-            supabase.table("emails").update({"status":"error","error_message":"No Gmail token"}).eq("id", em_id).execute()
+            failed_ids.append(em_id)
+            supabase.table("emails")\
+                    .update({"status":"error","error_message":"No Gmail token"})\
+                    .eq("id", em_id).execute()
             continue
 
         cd = tok[0]["credentials"]
@@ -665,29 +716,41 @@ def trigger_process():
 
         try:
             msg = MIMEText(full_html, "html")
-            msg["to"]    = to_addr
-            msg["from"]  = "me"
-            subject = "Lease Agreement Draft" if lease_flag else "Re: Your Email"
-            msg["subject"] = subject
+            msg["to"]      = to_addr
+            msg["from"]    = "me"
+            msg["subject"] = "Lease Agreement Draft" if lease_flag else "Re: Your Email"
             raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
             if lease_flag:
-                svc.users().drafts().create(userId="me", body={"message": {"raw": raw}}).execute()
-                drafted.append(em_id)
+                svc.users().drafts().create(userId="me", body={"message":{"raw": raw}}).execute()
+                drafted_ids.append(em_id)
             else:
                 svc.users().messages().send(userId="me", body={"raw": raw}).execute()
-                sent.append(em_id)
+                sent_ids.append(em_id)
 
-            supabase.table("emails").update({
-                "status": "drafted" if lease_flag else "sent",
-                "sent_at": datetime.utcnow().isoformat()
-            }).eq("id", em_id).execute()
+            # mark sent and bump counter
+            supabase.table("emails")\
+                    .update({
+                        "status": "drafted" if lease_flag else "sent",
+                        "sent_at": datetime.utcnow().isoformat()
+                    })\
+                    .eq("id", em_id).execute()
+            emails_sent_today[uid] = emails_sent_today.get(uid, 0) + 1
+
         except Exception as e:
-            failed.append(em_id)
-            supabase.table("emails").update({"status":"error","error_message":str(e)}).eq("id", em_id).execute()
+            failed_ids.append(em_id)
+            supabase.table("emails")\
+                    .update({"status":"error","error_message":str(e)})\
+                    .eq("id", em_id).execute()
 
-    summary = {"processed": all_processed, "sent": sent, "drafted": drafted, "failed": failed}
+    summary = {
+        "processed": all_processed,
+        "sent": sent_ids,
+        "drafted": drafted_ids,
+        "failed": failed_ids
+    }
     return jsonify(summary), 200
+
 
 @app.route("/transaction/<txn_id>/ready", methods=["POST"])
 def mark_ready(txn_id):
