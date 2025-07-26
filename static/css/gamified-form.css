@@ -104,7 +104,7 @@ body {
   pointer-events: all;
 }
 
-/* Headers inside missions */
+/* Mission header */
 .mission-header {
   display: flex;
   align-items: center;
@@ -144,7 +144,7 @@ body {
   font-weight: 600;
 }
 
-/* Form elements */
+/* Form controls */
 .form-group { margin-bottom: 20px; }
 .form-group label {
   display: block;
@@ -168,11 +168,11 @@ body {
   background: rgba(255,255,255,0.15);
 }
 
-/* Grid Utilities */
+/* Grid utils */
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
 
-/* Navigation buttons */
+/* Navigation */
 .navigation {
   display: flex;
   justify-content: space-between;
@@ -220,7 +220,7 @@ body {
   box-shadow: 0 8px 25px rgba(247,37,133,0.4);
 }
 
-/* Achievement badge & confetti */
+/* Achievement */
 .achievement-badge {
   position: absolute;
   top: 50%;
@@ -249,14 +249,13 @@ body {
   overflow: hidden;
 }
 
-/* Pulse keyframes */
+/* Keyframes */
 @keyframes pulse {
   0%   { box-shadow: 0 0 0 0 rgba(247,37,133,0.4); }
   70%  { box-shadow: 0 0 0 12px rgba(247,37,133,0); }
   100% { box-shadow: 0 0 0 0 rgba(247,37,133,0); }
 }
 
-/* Responsive tweaks */
 @media (max-width: 768px) {
   .grid-2, .grid-3 { grid-template-columns: 1fr; gap: 15px; }
   .mission-card { padding: 20px; }
