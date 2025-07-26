@@ -888,7 +888,8 @@
       const addr   = document.getElementById('demo-address').value.trim();
       const date  = document.getElementById('demo-closing_date').value.trim();
       const price = document.getElementById('demo-purchase_price').value.trim();
-
+      const feedback = document.getElementById('demo-kit-feedback');
+      
       if (!id || !buyer || !seller || !addr || !price || !date) {
         return alert('Please fill out all demo fields.');
       }
