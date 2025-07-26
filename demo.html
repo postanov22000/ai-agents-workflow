@@ -901,12 +901,12 @@
           headers: {'Content-Type':'application/json'},
           body: JSON.stringify({
             id,
-            buyer_name: buyer,
-            seller_name: seller,
-            property_address: addr,
-            purchase_price: price,
-            closing_date: date
-          })
+  buyer_name: buyer,
+  seller_name: seller,
+  property_address: addr,
+  offer_price: price,         // FIXED: this used to be purchase_price
+  closing_date: date
+})
         });
         if (!res.ok) throw new Error(await res.text());
         const blob = await res.blob();
