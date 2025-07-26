@@ -1186,6 +1186,13 @@ input:checked + .slider:before {
         });
     </script>
 <script src="{{ url_for('static', filename='js/gamified-form.js') }}"></script>
-
+<script>
+  // After HTMX swaps in new_transaction partial, re‑init the gamified form
+  document.body.addEventListener('htmx:afterSwap', (evt) => {
+    if (evt.detail.target.querySelector('.gamified-form')) {
+      initGamifiedForm();
+    }
+  });
+</script>
 </body>
 </html> 
