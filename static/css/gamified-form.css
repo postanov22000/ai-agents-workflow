@@ -13,7 +13,7 @@ body {
 }
 
 /* Container */
-.container {
+.gf-container {
   width: 100%;
   max-width: 1000px;
   margin: 40px auto;
