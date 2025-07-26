@@ -1,19 +1,23 @@
 # public.py
-from flask import Blueprint, request, jsonify, send_file
-from flask_cors import CORS
+
+import os
+import zipfile
+import tempfile
+import uuid
 from io import BytesIO
+
+from flask import Blueprint, request, send_file, jsonify
+from flask_cors import CORS
 from docxtpl import DocxTemplate
-from utils import callAIML_from_flask  # your utility function
-# (you may need to adjust imports depending on your package layout)
 
 public_bp = Blueprint("public", __name__)
-# Apply CORS just to this blueprint
-CORS(public_bp, resources={r"/api/*": {"origins": "https://replyzeai.vercel.app"}})
+# Allow CORS for demo endpoints
+CORS(public_bp, resources={r"/api/*": {"origins": "*"}})
 
 @public_bp.route("/api/generate-reply-prompt", methods=["OPTIONS", "POST"])
 def generate_reply_prompt():
     if request.method == "OPTIONS":
-        return ("", 204)  # CORS preflight handled by flask‑CORS
+        return ("", 204)
 
     data = request.get_json(force=True)
     prompt = data.get("prompt", "").strip()
@@ -21,6 +25,7 @@ def generate_reply_prompt():
         return jsonify({"error": "Missing prompt"}), 400
 
     try:
+        from utils import callAIML_from_flask
         reply = callAIML_from_flask(prompt)
         return jsonify({"reply": reply})
     except Exception as e:
@@ -34,7 +39,9 @@ def generate_loi():
     payload = request.get_json(force=True)
     tpl = DocxTemplate("templates/transaction_autopilot/loi_template.docx")
     tpl.render(payload)
-    bio = BytesIO(); tpl.save(bio); bio.seek(0)
+    bio = BytesIO()
+    tpl.save(bio)
+    bio.seek(0)
     return send_file(
         bio,
         as_attachment=True,
@@ -50,10 +57,52 @@ def generate_psa():
     payload = request.get_json(force=True)
     tpl = DocxTemplate("templates/transaction_autopilot/psa_template.docx")
     tpl.render(payload)
-    bio = BytesIO(); tpl.save(bio); bio.seek(0)
+    bio = BytesIO()
+    tpl.save(bio)
+    bio.seek(0)
     return send_file(
         bio,
         as_attachment=True,
         download_name=f"PSA_{payload.get('id','doc')}.docx",
         mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+@public_bp.route("/api/demo/closing-kit", methods=["POST"])
+def demo_closing_kit():
+    """
+    Demo endpoint that accepts JSON payload:
+      { id, buyer_name, seller_name, property_address, offer_price, special_terms? }
+    Renders LOI + PSA, bundles into ZIP, returns it.
+    """
+    data = request.get_json(force=True)
+    required = ["id", "buyer_name", "seller_name", "property_address", "offer_price"]
+    if any(not data.get(f) for f in required):
+        return jsonify({"error": "Missing id/buyer_name/seller_name/property_address/offer_price"}), 400
+
+    # Render templates to temp files
+    tmpdir = tempfile.mkdtemp()
+    parts = []
+    for tpl_fname, prefix in [
+        ("loi_template.docx", "LOI"),
+        ("psa_template.docx", "PSA")
+    ]:
+        tpl = DocxTemplate(f"templates/transaction_autopilot/{tpl_fname}")
+        tpl.render(data)
+        out_name = f"{prefix}_{data['id']}_{uuid.uuid4().hex[:6]}.docx"
+        out_path = os.path.join(tmpdir, out_name)
+        tpl.save(out_path)
+        parts.append(out_path)
+
+    # Bundle into an in-memory ZIP
+    zip_io = BytesIO()
+    with zipfile.ZipFile(zip_io, "w") as zf:
+        for p in parts:
+            zf.write(p, arcname=os.path.basename(p))
+    zip_io.seek(0)
+
+    return send_file(
+        zip_io,
+        as_attachment=True,
+        download_name=f"demo_closing_kit_{data['id']}.zip",
+        mimetype="application/zip"
     )
