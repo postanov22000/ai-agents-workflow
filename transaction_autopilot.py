@@ -65,7 +65,8 @@ def trigger_autopilot_from_payload(payload: dict) -> dict:
     generate_document("seller_disclosure_template.docx", data, "SELLER_DISCLOSURE"),
 ]
 
-    kit_zip_list = bundle_closing_kit(ttype, docs)
+    # switch from ttype-based to tx_id-based naming
+    kit_zip_list = bundle_closing_kit(tx_id, docs)
     uploaded_files = []
 
     for zip_path in kit_zip_list:
@@ -130,13 +131,13 @@ def error_hunting(paths: list) -> dict:
     return results
 
 
-def bundle_closing_kit(ttype: str, docs: list) -> list:
-    kit_dir = os.path.join("/tmp", f"kit_{ttype}")
+def bundle_closing_kit(tx_id: str, docs: list) -> list:
+    kit_dir = os.path.join("/tmp", f"kit_{tx_id}") 
     os.makedirs(kit_dir, exist_ok=True)
     for doc_path in docs:
         os.replace(doc_path, os.path.join(kit_dir, os.path.basename(doc_path)))
 
-    zip_path = os.path.join("/tmp", f"{ttype}_closing_kit.zip")
+    zip_path = os.path.join("/tmp", f"{tx_id}_closing_kit.zip")
     with zipfile.ZipFile(zip_path, "w") as zf:
         for fname in os.listdir(kit_dir):
             full_path = os.path.join(kit_dir, fname)
