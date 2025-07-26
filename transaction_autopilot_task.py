@@ -87,7 +87,7 @@ def trigger_autopilot_task(transaction_type: str, data: dict) -> str:
     else:
         url = pu
 
-    # 5) persist kit_url back to Supabase
+    # 5) persist kit_url back to Supabase b
     sb.table("transactions") \
       .update({"kit_url": url}) \
       .eq("id", tx_id) \
