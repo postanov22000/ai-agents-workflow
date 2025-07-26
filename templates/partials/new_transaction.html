@@ -20,9 +20,12 @@
 
     <div class="confetti-container" id="confetti-container"></div>
 
-    <form id="new-txn-form"
-          hx-post="/transactions/new?user_id={{ user_id }}"
-          hx-swap="none">
+    <form
+  id="new-txn-form"
+  action="/transactions/new?user_id={{ user_id }}"
+  method="POST"
+  class="px-0"
+>
       <div class="mission-container">
         <!-- Mission 1 -->
         <div class="mission-card active" id="mission-1">
