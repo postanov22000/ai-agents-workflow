@@ -106,3 +106,10 @@ def demo_closing_kit():
         download_name=f"demo_closing_kit_{data['id']}.zip",
         mimetype="application/zip"
     )
+@public_bp.route("/demo")
+def demo():
+    demo_data = {
+        "Closing_Date": "2025-07-15",
+        "Purchase_Price": 350000
+    }
+    return render_template("demo.html", **demo_data)
