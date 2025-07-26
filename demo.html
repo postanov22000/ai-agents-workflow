@@ -528,6 +528,47 @@
     </div>
   </section>
 
+
+  <!-- Demo Closing-Kit -->
+  <section class="generator-section" id="demo-closing-kit">
+    <div class="generator-container">
+      <div class="generator-card" data-scroll>
+        <div class="document-type">
+          <div class="document-icon"><i class="fas fa-briefcase"></i></div>
+          <h2 class="document-title">Demo Closing Kit</h2>
+        </div>
+        <p class="document-description">
+          Fill out the form below and download a ZIP containing both LOI &amp; PSA.
+        </p>
+        <div class="form-group">
+          <label for="demo-id">Transaction ID</label>
+          <input type="text" id="demo-id" placeholder="e.g. txn1234-demo">
+        </div>
+        <div class="form-group">
+          <label for="demo-buyer">Buyer Name</label>
+          <input type="text" id="demo-buyer" placeholder="Jane Doe">
+        </div>
+        <div class="form-group">
+          <label for="demo-seller">Seller Name</label>
+          <input type="text" id="demo-seller" placeholder="ACME LLC">
+        </div>
+        <div class="form-group">
+          <label for="demo-address">Property Address</label>
+          <input type="text" id="demo-address" placeholder="123 Main St">
+        </div>
+        <div class="form-group">
+          <label for="demo-price">Offer Price ($)</label>
+          <input type="number" id="demo-price" placeholder="250000">
+        </div>
+        <button class="cta-button" id="demo-kit-btn">
+          <i class="fas fa-download"></i> Download Demo Kit
+        </button>
+        <div id="demo-kit-feedback" style="margin-top:1rem;color:#64ffda;"></div>
+      </div>
+    </div>
+  </section>
+
+  
     <!-- Benefits Section -->
   <section class="benefits" id="benefits">
     <h2 data-scroll>Why Agents Choose DocuGen Pro</h2>
@@ -832,6 +873,48 @@
       alert("Your free trial has been activated! You now have 3 free AI responses, 3 LOI, and 3 PSA documents.");
     }, 3_000);
   });
+    // Demo Closing-Kit handler
+    document.getElementById('demo-kit-btn').addEventListener('click', async () => {
+      const id     = document.getElementById('demo-id').value.trim();
+      const buyer  = document.getElementById('demo-buyer').value.trim();
+      const seller = document.getElementById('demo-seller').value.trim();
+      const addr   = document.getElementById('demo-address').value.trim();
+      const price  = document.getElementById('demo-price').value.trim();
+      const feedback = document.getElementById('demo-kit-feedback');
+
+      if (!id || !buyer || !seller || !addr || !price) {
+        return alert('Please fill out all demo fields.');
+      }
+
+      feedback.textContent = '⏳ Generating demo kit…';
+      try {
+        const res = await fetch('https://replyzeai.onrender.com/api/demo/closing-kit', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({
+            id,
+            buyer_name: buyer,
+            seller_name: seller,
+            property_address: addr,
+            offer_price: price
+          })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = `demo_closing_kit_${id}.zip`;
+        document.body.append(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        feedback.textContent = '✅ Download started!';
+      } catch (err) {
+        console.error(err);
+        feedback.textContent = '❌ Failed to generate demo kit.';
+      }
+    });
 </script>
 </body>
 </html>
