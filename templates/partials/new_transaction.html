@@ -20,9 +20,10 @@
 
     <div class="confetti-container" id="confetti-container"></div>
 
-    <form id="new-txn-form" hx-post="/transactions/new?user_id={{ user_id }}" hx-swap="none">
+    <form id="new-txn-form"
+          hx-post="/transactions/new?user_id={{ user_id }}"
+          hx-swap="none">
       <div class="mission-container">
-        <!-- Missions 1–10 -->
         <!-- Mission 1 -->
         <div class="mission-card active" id="mission-1">
           <div class="mission-counter">Mission 1/10</div>
@@ -35,16 +36,31 @@
           </div>
           <div class="form-group">
             <label for="property_address">📍 Address of Adventure</label>
-            <input type="text" id="property_address" name="property_address" class="form-control" placeholder="e.g. 123 Elm St" required>
+            <input type="text"
+                   id="property_address"
+                   name="property_address"
+                   class="form-control"
+                   placeholder="e.g. 123 Elm St"
+                   required>
           </div>
           <div class="grid-2">
             <div class="form-group">
               <label for="city">🏙 City</label>
-              <input type="text" id="city" name="city" class="form-control" placeholder="e.g. Gotham" required>
+              <input type="text"
+                     id="city"
+                     name="city"
+                     class="form-control"
+                     placeholder="e.g. Gotham"
+                     required>
             </div>
             <div class="form-group">
               <label for="state">🌎 State</label>
-              <input type="text" id="state" name="state" class="form-control" placeholder="e.g. NY" required>
+              <input type="text"
+                     id="state"
+                     name="state"
+                     class="form-control"
+                     placeholder="e.g. NY"
+                     required>
             </div>
           </div>
         </div>
@@ -61,16 +77,28 @@
           </div>
           <div class="form-group">
             <label for="description_of_property">📝 Description</label>
-            <input type="text" id="description_of_property" name="description_of_property" class="form-control" placeholder="One-liner summary">
+            <input type="text"
+                   id="description_of_property"
+                   name="description_of_property"
+                   class="form-control"
+                   placeholder="One-liner summary">
           </div>
           <div class="grid-2">
             <div class="form-group">
               <label for="square_feet">📏 Sq. Feet</label>
-              <input type="number" id="square_feet" name="square_feet" class="form-control" placeholder="e.g. 1500">
+              <input type="number"
+                     id="square_feet"
+                     name="square_feet"
+                     class="form-control"
+                     placeholder="e.g. 1500">
             </div>
             <div class="form-group">
               <label for="legal_description">📜 Legal Desc.</label>
-              <input type="text" id="legal_description" name="legal_description" class="form-control" placeholder="Official details">
+              <input type="text"
+                     id="legal_description"
+                     name="legal_description"
+                     class="form-control"
+                     placeholder="Official details">
             </div>
           </div>
         </div>
@@ -88,21 +116,39 @@
           <div class="grid-2">
             <div class="form-group">
               <label for="buyer_name">🎭 Buyer Name</label>
-              <input type="text" id="buyer_name" name="buyer_name" class="form-control" placeholder="Hero of the story" required>
+              <input type="text"
+                     id="buyer_name"
+                     name="buyer_name"
+                     class="form-control"
+                     placeholder="Hero of the story"
+                     required>
             </div>
             <div class="form-group">
               <label for="seller_name">🎭 Seller Name</label>
-              <input type="text" id="seller_name" name="seller_name" class="form-control" placeholder="Your counterpart" required>
+              <input type="text"
+                     id="seller_name"
+                     name="seller_name"
+                     class="form-control"
+                     placeholder="Your counterpart"
+                     required>
             </div>
           </div>
           <div class="grid-2">
             <div class="form-group">
               <label for="buyer_address">🏠 Buyer Address</label>
-              <input type="text" id="buyer_address" name="buyer_address" class="form-control" placeholder="Where they live">
+              <input type="text"
+                     id="buyer_address"
+                     name="buyer_address"
+                     class="form-control"
+                     placeholder="Where they live">
             </div>
             <div class="form-group">
               <label for="seller_address">🏠 Seller Address</label>
-              <input type="text" id="seller_address" name="seller_address" class="form-control" placeholder="Original owner address">
+              <input type="text"
+                     id="seller_address"
+                     name="seller_address"
+                     class="form-control"
+                     placeholder="Original owner address">
             </div>
           </div>
         </div>
@@ -120,16 +166,32 @@
           <div class="grid-2">
             <div class="form-group">
               <label for="purchase_price">💸 Offer Price</label>
-              <input type="number" id="purchase_price" name="purchase_price" step="0.01" class="form-control" placeholder="e.g. 250000" required>
+              <input type="number"
+                     id="purchase_price"
+                     name="purchase_price"
+                     step="0.01"
+                     class="form-control"
+                     placeholder="e.g. 250000"
+                     required>
             </div>
             <div class="form-group">
               <label for="deposit_amount">💰 Deposit</label>
-              <input type="number" id="deposit_amount" name="deposit_amount" step="0.01" class="form-control" placeholder="e.g. 5000" required>
+              <input type="number"
+                     id="deposit_amount"
+                     name="deposit_amount"
+                     step="0.01"
+                     class="form-control"
+                     placeholder="e.g. 5000"
+                     required>
             </div>
           </div>
           <div class="form-group">
             <label for="earnest_money_held_by">🏦 Earnest Money Held By</label>
-            <input type="text" id="earnest_money_held_by" name="earnest_money_held_by" class="form-control" placeholder="e.g. Escrow Company">
+            <input type="text"
+                   id="earnest_money_held_by"
+                   name="earnest_money_held_by"
+                   class="form-control"
+                   placeholder="e.g. Escrow Company">
           </div>
         </div>
 
@@ -146,21 +208,33 @@
           <div class="grid-2">
             <div class="form-group">
               <label for="agreement_date">📆 Agreement Date</label>
-              <input type="date" id="agreement_date" name="agreement_date" class="form-control">
+              <input type="date"
+                     id="agreement_date"
+                     name="agreement_date"
+                     class="form-control">
             </div>
             <div class="form-group">
               <label for="closing_date">📅 Closing Date</label>
-              <input type="date" id="closing_date" name="closing_date" class="form-control">
+              <input type="date"
+                     id="closing_date"
+                     name="closing_date"
+                     class="form-control">
             </div>
           </div>
           <div class="grid-2">
             <div class="form-group">
               <label for="possession_date">🚪 Possession Date</label>
-              <input type="date" id="possession_date" name="possession_date" class="form-control">
+              <input type="date"
+                     id="possession_date"
+                     name="possession_date"
+                     class="form-control">
             </div>
             <div class="form-group">
               <label for="occupy_property_date">🏠 Occupancy Date</label>
-              <input type="date" id="occupy_property_date" name="occupy_property_date" class="form-control">
+              <input type="date"
+                     id="occupy_property_date"
+                     name="occupy_property_date"
+                     class="form-control">
             </div>
           </div>
         </div>
@@ -178,21 +252,37 @@
           <div class="grid-2">
             <div class="form-group">
               <label for="mortgage_amount">💼 Mortgage Amt.</label>
-              <input type="number" id="mortgage_amount" name="mortgage_amount" class="form-control" placeholder="Loan amount">
+              <input type="number"
+                     id="mortgage_amount"
+                     name="mortgage_amount"
+                     class="form-control"
+                     placeholder="Loan amount">
             </div>
             <div class="form-group">
               <label for="mortgage_years">📆 Term (years)</label>
-              <input type="number" id="mortgage_years" name="mortgage_years" class="form-control" placeholder="e.g. 30">
+              <input type="number"
+                     id="mortgage_years"
+                     name="mortgage_years"
+                     class="form-control"
+                     placeholder="e.g. 30">
             </div>
           </div>
           <div class="grid-2">
             <div class="form-group">
               <label for="interest_rate">📊 Interest %</label>
-              <input type="number" step="0.01" id="interest_rate" name="interest_rate" class="form-control" placeholder="e.g. 3.5">
+              <input type="number" step="0.01"
+                     id="interest_rate"
+                     name="interest_rate"
+                     class="form-control"
+                     placeholder="e.g. 3.5">
             </div>
             <div class="form-group">
               <label for="inspection_days">🔍 Inspection Days</label>
-              <input type="number" id="inspection_days" name="inspection_days" class="form-control" placeholder="e.g. 10">
+              <input type="number"
+                     id="inspection_days"
+                     name="inspection_days"
+                     class="form-control"
+                     placeholder="e.g. 10">
             </div>
           </div>
         </div>
@@ -210,21 +300,37 @@
           <div class="grid-2">
             <div class="form-group">
               <label for="agency_name">🏢 Agency Name</label>
-              <input type="text" id="agency_name" name="agency_name" class="form-control" placeholder="Your agency">
+              <input type="text"
+                     id="agency_name"
+                     name="agency_name"
+                     class="form-control"
+                     placeholder="Your agency">
             </div>
             <div class="form-group">
               <label for="county">📋 County</label>
-              <input type="text" id="county" name="county" class="form-control" placeholder="e.g. King">
+              <input type="text"
+                     id="county"
+                     name="county"
+                     class="form-control"
+                     placeholder="e.g. King">
             </div>
           </div>
           <div class="grid-2">
             <div class="form-group">
               <label for="location">📍 Location Note</label>
-              <input type="text" id="location" name="location" class="form-control" placeholder="Neighborhood details">
+              <input type="text"
+                     id="location"
+                     name="location"
+                     class="form-control"
+                     placeholder="Neighborhood details">
             </div>
             <div class="form-group">
               <label for="structure_age">🏢 Structure Age</label>
-              <input type="text" id="structure_age" name="structure_age" class="form-control" placeholder="e.g. Built 1990">
+              <input type="text"
+                     id="structure_age"
+                     name="structure_age"
+                     class="form-control"
+                     placeholder="e.g. Built 1990">
             </div>
           </div>
         </div>
@@ -243,21 +349,29 @@
             <div class="form-group">
               <label for="rent_type">🧾 Rent Type</label>
               <select id="rent_type" name="rent_type" class="form-control">
-                <option value=\"\">Select rent type</option>
-                <option value=\"Month-to-month\">Month-to-month</option>
-                <option value=\"Annual Lease\">Annual Lease</option>
-                <option value=\"Short-term\">Short-term</option>
-                <option value=\"Other\">Other</option>
+                <option value="">Select rent type</option>
+                <option value="Month-to-month">Month-to-month</option>
+                <option value="Annual Lease">Annual Lease</option>
+                <option value="Short-term">Short-term</option>
+                <option value="Other">Other</option>
               </select>
             </div>
             <div class="form-group">
               <label for="agreed_rent">💳 Agreed Rent</label>
-              <input type="number" id="agreed_rent" name="agreed_rent" class=\"form-control\" placeholder=\"Amount\">
+              <input type="number"
+                     id="agreed_rent"
+                     name="agreed_rent"
+                     class="form-control"
+                     placeholder="Amount">
             </div>
           </div>
           <div class="form-group">
             <label for="maintenance_terms">🛠️ Maintenance Terms</label>
-            <input type="text" id="maintenance_terms" name="maintenance_terms" class=\"form-control\" placeholder=\"Who handles repairs?\">
+            <input type="text"
+                   id="maintenance_terms"
+                   name="maintenance_terms"
+                   class="form-control"
+                   placeholder="Who handles repairs?">
           </div>
         </div>
 
@@ -274,21 +388,37 @@
           <div class="grid-2">
             <div class="form-group">
               <label for="landlord_phone">📱 Landlord Phone</label>
-              <input type="tel" id="landlord_phone" name="landlord_phone" class=\"form-control\" placeholder=\"(123) 456-7890\">
+              <input type="tel"
+                     id="landlord_phone"
+                     name="landlord_phone"
+                     class="form-control"
+                     placeholder="(123) 456-7890">
             </div>
             <div class="form-group">
               <label for="tenant_phone">📱 Tenant Phone</label>
-              <input type="tel" id="tenant_phone" name="tenant_phone" class=\"form-control\" placeholder=\"(098) 765-4321\">
+              <input type="tel"
+                     id="tenant_phone"
+                     name="tenant_phone"
+                     class="form-control"
+                     placeholder="(098) 765-4321">
             </div>
           </div>
           <div class="grid-2">
             <div class="form-group">
               <label for="landlord_email">📧 Landlord Email</label>
-              <input type="email" id="landlord_email" name="landlord_email" class=\"form-control\" placeholder=\"email@example.com\">
+              <input type="email"
+                     id="landlord_email"
+                     name="landlord_email"
+                     class="form-control"
+                     placeholder="email@example.com">
             </div>
             <div class="form-group">
               <label for="tenant_email">📧 Tenant Email</label>
-              <input type="email" id="tenant_email" name="tenant_email" class=\"form-control\" placeholder=\"email@example.com\">
+              <input type="email"
+                     id="tenant_email"
+                     name="tenant_email"
+                     class="form-control"
+                     placeholder="email@example.com">
             </div>
           </div>
         </div>
@@ -306,41 +436,57 @@
           <div class="grid-2">
             <div class="form-group">
               <label for="buyer_signature">🖋 Buyer Signature</label>
-              <input type="text" id="buyer_signature" name="buyer_signature" class=\"form-control\" placeholder=\"Type full name\" required>
+              <input type="text"
+                     id="buyer_signature"
+                     name="buyer_signature"
+                     class="form-control"
+                     placeholder="Type full name"
+                     required>
             </div>
             <div class="form-group">
               <label for="seller_signature">🖋 Seller Signature</label>
-              <input type="text" id="seller_signature" name=\"seller_signature\" class=\"form-control\" placeholder=\"Type full name\" required>
+              <input type="text"
+                     id="seller_signature"
+                     name="seller_signature"
+                     class="form-control"
+                     placeholder="Type full name"
+                     required>
             </div>
           </div>
           <div class="form-group">
             <label for="time">⏱ Timestamp</label>
-            <input type="time" id="time" name="time" class=\"form-control\">
+            <input type="time"
+                   id="time"
+                   name="time"
+                   class="form-control">
           </div>
           <div class="form-group">
             <label>
-              <input type="checkbox" name="terms_agreed" required>
+              <input type="checkbox"
+                     name="terms_agreed"
+                     required>
               I agree to the terms and conditions
             </label>
           </div>
         </div>
 
-        <div class="achievement-badge" id="achievement-badge">Mission Complete! 🎉</div>
+        <div class="achievement-badge" id="achievement-badge">
+          Mission Complete! 🎉
+        </div>
       </div>
 
       <div class="navigation">
-        <button type="button" class="btn btn-prev" id="btn-prev">
+        <button type="button"
+                class="btn btn-prev"
+                id="btn-prev">
           <i class="fas fa-arrow-left"></i> Previous
         </button>
-        <button type="button" class="btn btn-next" id="btn-next">
+        <button type="button"
+                class="btn btn-next"
+                id="btn-next">
           Next Mission <i class="fas fa-arrow-right"></i>
         </button>
       </div>
     </form>
   </div>
 </div>
-
-<!-- Include this script block at the end of the partial -->
-
-
-
