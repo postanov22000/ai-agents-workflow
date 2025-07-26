@@ -75,9 +75,9 @@ def demo_closing_kit():
     Renders LOI + PSA, bundles into ZIP, returns it.
     """
     data = request.get_json(force=True)
-    required = ["id", "buyer_name", "seller_name", "property_address", "offer_price"]
+    required = ["id", "buyer_name", "seller_name", "property_address", "purchase_price"]
     if any(not data.get(f) for f in required):
-        return jsonify({"error": "Missing id/buyer_name/seller_name/property_address/offer_price"}), 400
+        return jsonify({"error": "Missing id/buyer_name/seller_name/property_address/purchase_price"}), 400
 
     # Render templates to temp files
     tmpdir = tempfile.mkdtemp()
