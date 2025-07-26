@@ -1,19 +1,17 @@
 import os
 import logging
 import zipfile
+import shutil
 from flask import Blueprint, request, jsonify
 from supabase import create_client
 from docxtpl import DocxTemplate
 import docx2txt
 import pytesseract
 from pdf2image import convert_from_path
-import shutil
 
-# Initialize logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# Supabase client setup
 def get_supabase_client():
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
@@ -22,137 +20,99 @@ def get_supabase_client():
     return create_client(url, key)
 
 supabase = get_supabase_client()
-
-# Blueprint for Transaction Autopilot
 bp = Blueprint("transaction_autopilot", __name__)
 
 @bp.route("/trigger-all", methods=["POST"])
 def trigger_all_autopilots():
     try:
         res = supabase.table("transactions").select("*").is_("kit_url", "null").execute()
-        transactions = res.data or []
+        txns = res.data or []
     except Exception as e:
-        logger.error(f"Failed to fetch transactions: {e}")
-        return jsonify({"status": "error", "message": "Failed to fetch transactions"}), 500
+        logger.error("Failed to fetch transactions: %s", e)
+        return jsonify(status="error", message="Fetch failed"), 500
 
     processed = []
-    for txn in transactions:
+    for txn in txns:
         try:
-            response = trigger_autopilot_from_payload({
+            out = trigger_autopilot_from_payload({
                 "transaction_type": txn.get("transaction_type", "generic"),
                 "data": txn
             })
-            if response.get("status") == "success":
+            if out.get("status") == "success":
                 processed.append(txn["id"])
         except Exception as e:
-            logger.warning(f"Failed to process transaction {txn['id']}: {e}")
+            logger.warning("Failed to process %s: %s", txn["id"], e)
 
-    return jsonify({"status": "ok", "processed": processed}), 200
+    return jsonify(status="ok", processed=processed), 200
 
+@bp.route("/trigger", methods=["POST"])
+def trigger_one_autopilot():
+    payload = request.get_json(force=True)
+    try:
+        result = trigger_autopilot_from_payload(payload)
+        return jsonify(status="success", **result), 200
+    except Exception as e:
+        logger.error("trigger failed: %s", e, exc_info=True)
+        return jsonify(status="error", message=str(e)), 500
 
 def trigger_autopilot_from_payload(payload: dict) -> dict:
-    tx_id = payload.get("data", {}).get("id")
+    tx_id = payload["data"]["id"]
     ttype = payload.get("transaction_type", "generic")
-    data = payload.get("data", {})
+    data  = payload["data"]
 
     docs = [
         generate_document("loi_template.docx", data, "LOI"),
         generate_document("psa_template.docx", data, "PSA"),
-        generate_document("purchase_offer_template.docx", data, "PURCHASE_OFFER"),
-        generate_document("agency_disclosure_template.docx", data, "AGENCY_DISCLOSURE"),
-        generate_document("real_estate_purchase_template.docx", data, "REAL_ESTATE_PURCHASE"),
-        # future:
+        generate_document("purchase_offer_template.docx", data, "PO"),
+        generate_document("agency_disclosure_template.docx", data, "AD"),
+        generate_document("real_estate_purchase_template.docx", data, "REP"),
         generate_document("lease_template.docx", data, "LEASE"),
-        generate_document("seller_disclosure_template.docx", data, "SELLER_DISCLOSURE"),
+        generate_document("seller_disclosure_template.docx", data, "SD"),
     ]
 
-    # Pass tx_id into bundle_closing_kit
-    kit_zip_list = bundle_closing_kit(ttype, tx_id, docs)
-    uploaded_files = []
-
-    for zip_path in kit_zip_list:
-        filename = os.path.basename(zip_path)
-        public_url = f"{os.environ['SUPABASE_URL']}/storage/v1/object/closing-kits/{filename}"
+    zips = bundle_closing_kit(ttype, tx_id, docs)
+    uploaded = []
+    for zip_path in zips:
+        key = os.path.basename(zip_path)
         with open(zip_path, "rb") as f:
             try:
-                supabase.storage.from_("closing-kits").upload(filename, f)
+                supabase.storage.from_("closing-kits").upload(key, f)
             except Exception as e:
-                logger.warning(f"Upload failed for {filename}: {e}, reusing existing object")
+                logger.warning("Upload failed (reusing): %s", e)
 
-        try:
-            supabase.table("transactions") \
-                     .update({"kit_url": public_url}) \
-                     .eq("id", tx_id) \
-                     .execute()
-        except Exception as e:
-            logger.error(f"Failed to update transaction {tx_id} with kit_url: {e}")
+        pu = supabase.storage.from_("closing-kits").get_public_url(key)
+        url = pu.get("publicUrl") if isinstance(pu, dict) else pu
 
-        uploaded_files.append(filename)
+        supabase.table("transactions").update({"kit_url": url}).eq("id", tx_id).execute()
+        uploaded.append(key)
 
-    return {"status": "success", "files": uploaded_files}
-
+    return {"status":"success", "files": uploaded}
 
 def generate_document(template_name: str, context: dict, prefix: str) -> str:
-    tpl_path = os.path.join("templates/transaction_autopilot", template_name)
-    tpl = DocxTemplate(tpl_path)
+    tpl = DocxTemplate(os.path.join("templates/transaction_autopilot", template_name))
     tpl.render(context)
-    out_path = os.path.join("/tmp", f"{prefix}_{context.get('id','0')}.docx")
-    tpl.save(out_path)
-    logger.info(f"Generated document at {out_path}")
-    return out_path
+    out = os.path.join("/tmp", f"{prefix}_{context['id']}.docx")
+    tpl.save(out)
+    logger.info("Generated %s", out)
+    return out
 
-
-def error_hunting(paths: list) -> dict:
-    results = {}
-    for path in paths:
-        text = ""
-        if path.lower().endswith(".docx"):
-            text = docx2txt.process(path)
-        elif path.lower().endswith(".pdf"):
-            try:
-                pages = convert_from_path(path)
-                text = "".join(pytesseract.image_to_string(pg) for pg in pages)
-            except Exception as e:
-                logger.error(f"PDF OCR failed for {path}: {e}")
-                continue
-        else:
-            logger.warning(f"Skipping unknown format: {path}")
-            continue
-
-        missing = []
-        lower_text = text.lower()
-        for keyword in ["signature", "date", "buyer", "seller"]:
-            if keyword not in lower_text:
-                missing.append(keyword)
-        if missing:
-            results[path] = missing
-    return results
-
-
-# Updated signature for bundle_closing_kit
 def bundle_closing_kit(ttype: str, tx_id: str, docs: list) -> list:
-    # ensure a fresh kit directory
-    kit_dir = os.path.join("/tmp", f"kit_{ttype}")
+    kit_dir = os.path.join("/tmp", f"kit_{ttype}_{tx_id}")
     if os.path.isdir(kit_dir):
         shutil.rmtree(kit_dir)
-    os.makedirs(kit_dir, exist_ok=True)
+    os.makedirs(kit_dir)
 
-    # move docs in
-    for doc_path in docs:
-        os.replace(doc_path, os.path.join(kit_dir, os.path.basename(doc_path)))
+    for doc in docs:
+        shutil.move(doc, os.path.join(kit_dir, os.path.basename(doc)))
 
-    # name zip with both ttype and tx_id
-    zip_filename = f"{ttype}_{tx_id}_closing_kit.zip"
-    zip_path = os.path.join("/tmp", zip_filename)
-
-    # overwrite any existing zip of same name
+    zip_name = f"{ttype}_{tx_id}_closing_kit.zip"
+    zip_path = os.path.join("/tmp", zip_name)
     if os.path.exists(zip_path):
         os.remove(zip_path)
 
     with zipfile.ZipFile(zip_path, "w") as zf:
         for fname in os.listdir(kit_dir):
-            full_path = os.path.join(kit_dir, fname)
-            zf.write(full_path, arcname=fname)
+            zf.write(os.path.join(kit_dir, fname), arcname=fname)
 
-    logger.info(f"Closing kit created at {zip_path}")
+    logger.info("Created ZIP %s", zip_path)
     return [zip_path]
