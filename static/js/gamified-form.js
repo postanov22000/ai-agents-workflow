@@ -92,11 +92,11 @@ window.initGamifiedForm = function(){
         window.scrollTo({top:0,behavior:'smooth'});
       },1000);
     } else {
-      if(!validateMission()) return alert('Please complete all required fields.');
-      showBadge('Deal Complete! 🚀');
-      setTimeout(()=> document.getElementById('new-txn-form').submit(),1200);
-    }
-  };
+    if (!validateMission()) return alert('Please complete all required fields.');
+    showBadge('Deal Complete! 🚀');
+    setTimeout(() => document.getElementById('new-txn-form').submit(), 1200);
+  }
+};
   btnPrev.onclick = ()=>{
     if(currentMission>0){
       missionCards[currentMission].classList.remove('active');
