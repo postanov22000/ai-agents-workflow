@@ -109,7 +109,7 @@ def demo_closing_kit():
 @public_bp.route("/demo")
 def demo():
     demo_data = {
-        "Closing_Date": "2025-07-15",
-        "Purchase_Price": 350000
+        "closing_Date": "2025-07-15",
+        "purchase_Price": 350000
     }
     return render_template("demo.html", **demo_data)
