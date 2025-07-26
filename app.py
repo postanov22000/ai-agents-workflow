@@ -583,8 +583,7 @@ def debug_env():
         "EDGE_BASE_URL": os.environ.get("EDGE_BASE_URL")
     }
 
-from datetime import datetime  # make sure this is imported
-
+from datetime import datetime
 
 @app.route("/process", methods=["GET"])
 def trigger_process():
@@ -592,19 +591,34 @@ def trigger_process():
     if token != os.environ.get("PROCESS_SECRET_TOKEN"):
         return jsonify({"error": "Unauthorized"}), 401
 
-    # 1) Fetch the three pre‑send queues
+    # ── 0) Build per-user counts of emails already sent today (YYYY‑MM‑DD) ──
+    today_iso = datetime.utcnow().date().isoformat()
+    sent_rows = (
+        supabase.table("emails")
+                .select("user_id, sent_at")
+                .eq("status", "sent")
+                .execute()
+                .data or []
+    )
+    emails_sent_today: dict[str,int] = {}
+    for r in sent_rows:
+        sent_at = r.get("sent_at","")
+        if sent_at.startswith(today_iso):
+            uid = r["user_id"]
+            emails_sent_today[uid] = emails_sent_today.get(uid, 0) + 1
+
+    # ── 1) Fetch the three pre‑send queues ──
     gen  = supabase.table("emails").select("id").eq("status", "processing").execute().data or []
     per  = supabase.table("emails").select("id").eq("status", "ready_to_personalize").execute().data or []
     prop = supabase.table("emails").select("id").eq("status", "awaiting_proposal").execute().data or []
 
-    # if nothing to do in any queue, bail
     if not (gen or per or prop):
         app.logger.info("⚡ No emails to process — returning 204")
         return "", 204
 
     all_processed, sent, drafted, failed = [], [], [], []
 
-    # 2) Generate Response
+    # ── 2) Generate Response ──
     if gen:
         ids = [r["id"] for r in gen]
         if call_edge("/functions/v1/clever-service/generate-response", {"email_ids": ids}):
@@ -614,7 +628,7 @@ def trigger_process():
                     .update({"status":"error","error_message":"generate-response failed"})\
                     .in_("id", ids).execute()
 
-    # 3) Personalize Template
+    # ── 3) Personalize Template ──
     if per:
         for eid in [r["id"] for r in per]:
             if call_edge("/functions/v1/clever-service/personalize-template", {"email_ids":[eid]}):
@@ -625,7 +639,7 @@ def trigger_process():
                         .update({"status":"error","error_message":"personalize-template failed"})\
                         .eq("id", eid).execute()
 
-    # 4) Generate Proposal → ready_to_send
+    # ── 4) Generate Proposal → ready_to_send ──
     if prop:
         for eid in [r["id"] for r in prop]:
             if call_edge("/functions/v1/clever-service/generate-proposal", {"email_ids":[eid]}):
@@ -636,19 +650,31 @@ def trigger_process():
                         .update({"status":"error","error_message":"generate-proposal failed"})\
                         .eq("id", eid).execute()
 
-    # ── Now re‑fetch the ready_to_send rows ──
+    # ── 5) Re‑fetch ready_to_send rows ──
     ready = (
         supabase.table("emails")
-        .select("id, user_id, sender_email, processed_content")
-        .eq("status", "ready_to_send")
-        .execute()
-        .data or []
+                .select("id, user_id, sender_email, processed_content")
+                .eq("status", "ready_to_send")
+                .execute()
+                .data or []
     )
 
-    # 5) Send or Draft via Gmail
+    # ── 6) Send or Draft via Gmail, enforcing 20/day cap ──
     for rec in ready:
         em_id = rec["id"]
         uid   = rec["user_id"]
+
+        # If user already hit their 20‑email/day limit, mark as error
+        if emails_sent_today.get(uid, 0) >= 20:
+            failed.append(em_id)
+            supabase.table("emails")\
+                    .update({
+                        "status": "error",
+                        "error_message": "Daily email limit of 20 reached"
+                    })\
+                    .eq("id", em_id).execute()
+            continue
+
         to_addr   = rec["sender_email"]
         html_body = (rec["processed_content"] or "").replace("\n", "<br>")
 
@@ -697,12 +723,16 @@ def trigger_process():
                 svc.users().messages().send(userId="me", body={"raw":raw}).execute()
                 sent.append(em_id)
 
+            # Mark sent and record timestamp
             supabase.table("emails")\
                     .update({
-                        "status":"drafted" if lease_flag else "sent",
+                        "status": "drafted" if lease_flag else "sent",
                         "sent_at": datetime.utcnow().isoformat()
                     })\
                     .eq("id", em_id).execute()
+
+            # Increment this user’s daily counter
+            emails_sent_today[uid] = emails_sent_today.get(uid, 0) + 1
 
         except Exception as e:
             failed.append(em_id)
