@@ -596,13 +596,14 @@ def trigger_process():
             .select("last_reset") \
             .eq("id", "global") \
             .single() \
-            .execute().data
+            .execute().data or {}
 
-    last_date = rl and rl["last_reset"][:10]  # YYYY‑MM‑DD
+    last_date = rl.get("last_reset", "")[:10]
     if last_date != today_str:
         app.logger.info("🔄 New day detected – clearing emails table")
-        # delete every row
-        SUPABASE_SERVICE.table("emails").delete().neq("id", "").execute()
+        # <-- simply delete all rows, no bad uuid comparison
+        SUPABASE_SERVICE.table("emails").delete().execute()
+
         # update the reset marker
         SUPABASE_SERVICE.table("rate_limit_reset") \
             .update({"last_reset": datetime.now(timezone.utc).isoformat()}) \
