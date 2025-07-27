@@ -4,7 +4,7 @@ import base64
 import requests
 
 from flask import abort, Flask, render_template, request, redirect, jsonify
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from email.mime.text import MIMEText
 
 from supabase import create_client, Client
