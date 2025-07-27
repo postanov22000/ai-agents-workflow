@@ -592,26 +592,26 @@ def trigger_process():
         return jsonify({"error": "Unauthorized"}), 401
 # ── 0) DAILY RESET CHECK ──
     today_str = date.today().isoformat()
-    rl = SUPABASE_SERVICE.table("rate_limit_reset") \
-            .select("last_reset") \
-            .eq("id", "global") \
-            .single() \
-            .execute().data or {}
-
-    last_date = rl.get("last_reset", "")[:10]
-    if last_date != today_str:
-    app.logger.info("🔄 New day detected – clearing emails table")
-    # delete every row (id IS NOT NULL)
-    SUPABASE_SERVICE.table("emails") \
-        .delete() \
-        .not_("id", "is", None) \
-        .execute()
-
-    # update the reset marker
-    SUPABASE_SERVICE.table("rate_limit_reset") \
-        .update({"last_reset": datetime.now(timezone.utc).isoformat()}) \
+    rl_row = SUPABASE_SERVICE.table("rate_limit_reset") \
+        .select("last_reset") \
         .eq("id", "global") \
-        .execute()
+        .single() \
+        .execute().data or {}
+    last_date = rl_row.get("last_reset", "")[:10]  # e.g. "2025-07-27"
+
+    if last_date != today_str:
+        app.logger.info("🔄 New day detected – clearing emails table")
+        # Delete all rows in `emails` (UUIDs are never NULL)
+        SUPABASE_SERVICE.table("emails") \
+            .delete() \
+            .not_("id", "is", None) \
+            .execute()
+
+        # Update the reset timestamp
+        SUPABASE_SERVICE.table("rate_limit_reset") \
+            .update({"last_reset": datetime.now(timezone.utc).isoformat()}) \
+            .eq("id", "global") \
+            .execute()
 
         
     # ── 0) Build per-user counts of emails already sent today (YYYY‑MM‑DD) ──
