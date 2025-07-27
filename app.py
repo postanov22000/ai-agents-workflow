@@ -590,7 +590,25 @@ def trigger_process():
     token = request.args.get("token")
     if token != os.environ.get("PROCESS_SECRET_TOKEN"):
         return jsonify({"error": "Unauthorized"}), 401
+# ── 0) DAILY RESET CHECK ──
+    today_str = date.today().isoformat()
+    rl = SUPABASE_SERVICE.table("rate_limit_reset") \
+            .select("last_reset") \
+            .eq("id", "global") \
+            .single() \
+            .execute().data
 
+    last_date = rl and rl["last_reset"][:10]  # YYYY‑MM‑DD
+    if last_date != today_str:
+        app.logger.info("🔄 New day detected – clearing emails table")
+        # delete every row
+        SUPABASE_SERVICE.table("emails").delete().neq("id", "").execute()
+        # update the reset marker
+        SUPABASE_SERVICE.table("rate_limit_reset") \
+            .update({"last_reset": datetime.now(timezone.utc).isoformat()}) \
+            .eq("id", "global") \
+            .execute()
+        
     # ── 0) Build per-user counts of emails already sent today (YYYY‑MM‑DD) ──
     today_iso = datetime.utcnow().date().isoformat()
     sent_rows = (
