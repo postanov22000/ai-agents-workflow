@@ -600,15 +600,19 @@ def trigger_process():
 
     last_date = rl.get("last_reset", "")[:10]
     if last_date != today_str:
-        app.logger.info("🔄 New day detected – clearing emails table")
-        # <-- simply delete all rows, no bad uuid comparison
-        SUPABASE_SERVICE.table("emails").delete().execute()
+    app.logger.info("🔄 New day detected – clearing emails table")
+    # delete every row (id IS NOT NULL)
+    SUPABASE_SERVICE.table("emails") \
+        .delete() \
+        .not_("id", "is", None) \
+        .execute()
 
-        # update the reset marker
-        SUPABASE_SERVICE.table("rate_limit_reset") \
-            .update({"last_reset": datetime.now(timezone.utc).isoformat()}) \
-            .eq("id", "global") \
-            .execute()
+    # update the reset marker
+    SUPABASE_SERVICE.table("rate_limit_reset") \
+        .update({"last_reset": datetime.now(timezone.utc).isoformat()}) \
+        .eq("id", "global") \
+        .execute()
+
         
     # ── 0) Build per-user counts of emails already sent today (YYYY‑MM‑DD) ──
     today_iso = datetime.utcnow().date().isoformat()
