@@ -601,10 +601,11 @@ def trigger_process():
 
     if last_date != today_str:
         app.logger.info("🔄 New day detected – clearing emails table")
-        # Delete all rows in `emails` (UUIDs are never NULL)
+
+        # Delete all rows by filtering out a UUID value that never exists
         SUPABASE_SERVICE.table("emails") \
             .delete() \
-            .not_("id", "is", None) \
+            .neq("id", "00000000-0000-0000-0000-000000000000") \
             .execute()
 
         # Update the reset timestamp
