@@ -3,7 +3,7 @@ name: Email & Autopilot Scheduler
 on:
   schedule:
     - cron: '*/5 * * * *'    # Every 5 minutes
-    - cron: '0 2 * * *'      # Daily at 02:00 UTC
+    - cron: '0 2 * * * *'    # Daily at 02:00 UTC
   workflow_dispatch:
   repository_dispatch:
     types: [autopilot-trigger]
@@ -30,13 +30,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # ← New step: generate a valid Fernet key once per run
+      - name: Generate ENCRYPTION_KEY
+        id: gen_key
+        run: |
+          python - <<EOF > key.txt
+from cryptography.fernet import Fernet
+print(Fernet.generate_key().decode())
+EOF
+          # read it back and export to subsequent steps
+          echo "ENCRYPTION_KEY=$(cat key.txt)" >> $GITHUB_ENV
+
       - name: Run Gmail Poller
         id: poll-result
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          SUPABASE_URL:                ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY:   ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GOOGLE_CLIENT_ID:            ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET:        ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          ENCRYPTION_KEY:              ${{ env.ENCRYPTION_KEY }}       # now available
         run: |
           python poll_gmail.py
           echo "status=success" >> $GITHUB_OUTPUT
