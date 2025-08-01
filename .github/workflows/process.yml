@@ -3,7 +3,7 @@ name: Email & Autopilot Scheduler
 on:
   schedule:
     - cron: '*/5 * * * *'    # Every 5 minutes
-    - cron: '0 2 * * *'      # Daily at 02:00 UTC (five-field format)
+    - cron: '0 2 * * *'      # Daily at 02:00 UTC
   workflow_dispatch:
   repository_dispatch:
     types: [autopilot-trigger]
@@ -37,8 +37,10 @@ jobs:
           python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" > key.txt
           # expose it to subsequent steps
           echo "ENCRYPTION_KEY=$(<key.txt)" >> $GITHUB_ENV
-          # DEBUG ONLY: expose to log
-          echo "🔑 DEBUG KEY: $ENCRYPTION_KEY"
+
+      - name: Debug: show ENCRYPTION_KEY
+        run: |
+          echo "🔑 DEBUG KEY (should be redacted in logs): $ENCRYPTION_KEY"
 
       - name: Run Gmail Poller
         id: poll-result
@@ -51,12 +53,6 @@ jobs:
         run: |
           python poll_gmail.py
           echo "status=success" >> $GITHUB_OUTPUT
-
-      - name: Debug: show ENCRYPTION_KEY
-        run: |
-          echo "🔑 DEBUG KEY in next step: $ENCRYPTION_KEY"
-
-
 
   trigger-processing:
     needs: poll-gmail
