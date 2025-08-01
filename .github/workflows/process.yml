@@ -52,6 +52,12 @@ jobs:
           python poll_gmail.py
           echo "status=success" >> $GITHUB_OUTPUT
 
+      - name: Debug: show ENCRYPTION_KEY
+        run: |
+          echo "🔑 DEBUG KEY in next step: $ENCRYPTION_KEY"
+
+
+
   trigger-processing:
     needs: poll-gmail
     runs-on: ubuntu-latest
