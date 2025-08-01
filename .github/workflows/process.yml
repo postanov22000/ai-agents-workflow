@@ -33,7 +33,9 @@ jobs:
       - name: Generate ENCRYPTION_KEY
         id: gen_key
         run: |
+          # generate a new Fernet key and save it
           python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" > key.txt
+          # expose it to subsequent steps
           echo "ENCRYPTION_KEY=$(<key.txt)" >> $GITHUB_ENV
 
       - name: Run Gmail Poller
