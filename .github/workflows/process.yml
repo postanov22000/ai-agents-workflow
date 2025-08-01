@@ -33,11 +33,8 @@ jobs:
       - name: Generate ENCRYPTION_KEY
         id: gen_key
         run: |
-          python - <<EOF > key.txt
-from cryptography.fernet import Fernet
-print(Fernet.generate_key().decode())
-EOF
-          echo "ENCRYPTION_KEY=$(cat key.txt)" >> $GITHUB_ENV
+          python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" > key.txt
+          echo "ENCRYPTION_KEY=$(<key.txt)" >> $GITHUB_ENV
 
       - name: Run Gmail Poller
         id: poll-result
