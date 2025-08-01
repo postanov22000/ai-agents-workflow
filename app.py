@@ -356,7 +356,13 @@ def route_connect_smtp():
 
 
     return jsonify({"status": "ok"}), 200
+#------------------------------------------ 
+@app.route("/signin")
+def signin():
+    user_id = request.args.get("user_id", "")
+    return render_template("signin.html", user_id=user_id)
 
+#------------------------------------------
 @app.route("/send", methods=["POST"])
 def send_email():
     data = request.get_json()
