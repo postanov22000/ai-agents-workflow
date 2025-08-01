@@ -416,6 +416,9 @@
             <a href="https://replyzeai.onrender.com/connect_gmail" class="cta-button" style="width:100%; text-align:center; margin-top:1rem;">
                 Connect Gmail Account
             </a>
+            <a href="#" onclick="connectSMTPIMAP()" class="cta-button" style="width:100%; text-align:center; margin-top:1rem;">
+    Connect via SMTP/IMAP
+</a>
             
             <div class="security-info">
                 <div class="security-title">
@@ -506,6 +509,31 @@
             emailInput.style.transform = 'translateZ(0)';
             emailInput.style.boxShadow = 'none';
         });
+        //  smtp/imap
+        function connectSMTPIMAP() {
+    const email = prompt("Enter your email address:");
+    const appPassword = prompt("Enter your App Password (from Gmail):");
+
+    if (!email || !appPassword) {
+        alert("Both fields are required.");
+        return;
+    }
+
+    fetch('/connect-smtp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, app_password: appPassword })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.error) {
+            alert("❌ " + data.error);
+        } else {
+            alert("✅ SMTP/IMAP connected successfully.");
+        }
+    })
+    .catch(err => alert("❌ Connection failed. " + err));
+}
     </script>
 </body>
 </html>
