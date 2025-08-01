@@ -33,11 +33,9 @@ jobs:
       - name: Generate ENCRYPTION_KEY
         id: gen_key
         run: |
-          python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" > key.txt
-          echo "ENCRYPTION_KEY=$(cat key.txt)" >> $GITHUB_ENV
-
-      - name: Debug: show ENCRYPTION_KEY
-        run: echo "🔑 DEBUG KEY (will be available in env): $ENCRYPTION_KEY"
+          KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+          echo "ENCRYPTION_KEY=$KEY" >> $GITHUB_ENV
+          echo "🔑 DEBUG KEY: $KEY"
 
       - name: Run Gmail Poller
         id: poll-result
