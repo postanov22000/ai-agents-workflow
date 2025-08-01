@@ -450,7 +450,9 @@
             &copy; 2023 ReplyzeAI CRE. All rights reserved. NAR-certified AI email solution for CRE professionals.
         </div>
     </footer>
-
+ <script>
+    window.CURRENT_USER_ID = "{{ user_id|e }}";
+  </script>
     <script>
         // Particle System
         function createParticles() {
@@ -522,7 +524,7 @@ function connectSMTPIMAP() {
   const smtp_password = prompt("Enter your App Password (from your email provider):");
   const smtp_host = prompt("Enter your SMTP server (e.g., smtp.gmail.com):");
   const imap_host = prompt("Enter your IMAP server (e.g., imap.gmail.com):");
-  const user_id = new URLSearchParams(window.location.search).get('user_id');
+  const user_id       = window.CURRENT_USER_ID;     // <-- use global var
 
   if (!smtp_email || !smtp_password || !smtp_host || !imap_host || !user_id) {
     return alert("All fields + user_id are required.");
