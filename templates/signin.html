@@ -416,13 +416,15 @@
             <a href="https://replyzeai.onrender.com/connect_gmail" class="cta-button" style="width:100%; text-align:center; margin-top:1rem;">
                 Connect Gmail Account
             </a>
-            <a id="connect-smtp-btn"
-   href="javascript:void(0)" 
-   onclick="connectSMTPIMAP()"
-   class="cta-button"
-   style="width:100%; text-align:center; margin-top:1rem;">
-  Connect via SMTP/IMAP
-</a>
+            <!-- SMTP/IMAP button -->
+      <a
+        id="connect-smtp-btn"
+        href="javascript:void(0)"
+        class="cta-button"
+        style="width:100%; text-align:center; margin-top:1rem;"
+      >
+        Connect via SMTP/IMAP
+      </a>
             
             <div class="security-info">
                 <div class="security-title">
@@ -450,9 +452,9 @@
             &copy; 2023 ReplyzeAI CRE. All rights reserved. NAR-certified AI email solution for CRE professionals.
         </div>
     </footer>
- <script>
-  window.CURRENT_USER_ID = "{{ user_id|e }}";
-</script>
+  <script>
+    window.CURRENT_USER_ID = "{{ user_id }}";
+  </script>
 
     <script>
         // Particle System
@@ -516,43 +518,37 @@
             emailInput.style.transform = 'translateZ(0)';
             emailInput.style.boxShadow = 'none';
         });
-       // Only attach if the button exists
-const btn = document.getElementById('connect-smtp-btn');
-if (btn) btn.addEventListener('click', connectSMTPIMAP);
+       // SMTP/IMAP connect logic
+    function connectSMTPIMAP() {
+      const smtp_email    = prompt("Enter your email address:");
+      const smtp_password = prompt("Enter your App Password (from your email provider):");
+      const smtp_host     = prompt("Enter your SMTP server (e.g., smtp.gmail.com):");
+      const imap_host     = prompt("Enter your IMAP server (e.g., imap.gmail.com):");
+      const user_id       = window.CURRENT_USER_ID;
 
-function connectSMTPIMAP() {
-  const smtp_email = prompt("Enter your email address:");
-  const smtp_password = prompt("Enter your App Password (from your email provider):");
-  const smtp_host = prompt("Enter your SMTP server (e.g., smtp.gmail.com):");
-  const imap_host = prompt("Enter your IMAP server (e.g., imap.gmail.com):");
-  const user_id       = window.CURRENT_USER_ID;     // <-- use global var
-
-  if (!smtp_email || !smtp_password || !smtp_host || !imap_host || !user_id) {
-    return alert("All fields + user_id are required.");
-  }
-
-  fetch('https://replyzeai.onrender.com/connect-smtp', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id, smtp_email, smtp_password, smtp_host, imap_host })
-  })
-  .then(async res => {
-    const text = await res.text();
-    try {
-      // Try parse JSON
-      const data = JSON.parse(text);
-      if (res.ok && data.status==='ok') {
-        alert("✅ SMTP/IMAP connected successfully.");
-      } else {
-        alert("❌ " + (data.error || data.message || text));
+      if (!smtp_email || !smtp_password || !smtp_host || !imap_host || !user_id) {
+        return alert("All fields + user_id are required.");
       }
-    } catch {
-      // Not JSON
-      alert("❌ Unexpected response: " + text);
+
+      fetch("{{ url_for('route_connect_smtp') }}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id, smtp_email, smtp_password, smtp_host, imap_host })
+      })
+      .then(async res => {
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.status === "ok") {
+          alert("✅ SMTP/IMAP connected successfully.");
+        } else {
+          alert("❌ " + (data.error || data.message || JSON.stringify(data)));
+        }
+      })
+      .catch(err => alert("❌ Connection failed. " + err.message));
     }
-  })
-  .catch(err => alert("❌ Connection failed. " + err.message));
-}
+
+    // hook up the button
+    document.getElementById("connect-smtp-btn")
+      .addEventListener("click", connectSMTPIMAP);
     </script>
 </body>
 </html>
