@@ -21,6 +21,7 @@ from fimap import (
     send_email_smtp,
     fetch_emails_imap
 )
+from flask_cors import CORS  
 
 from cryptography.fernet import Fernet
 
@@ -30,6 +31,7 @@ from public import public_bp
 
 # ── single Flask app & blueprint registration ──
 app = Flask(__name__, template_folder="templates")
+CORS(app, resources={r"/connect-smtp": {"origins": "https://replyzeai.vercel.app"}})  # ← add this
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
 app.register_blueprint(autopilot_bp, url_prefix="/autopilot")
 app.register_blueprint(public_bp)
