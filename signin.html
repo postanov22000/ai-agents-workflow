@@ -509,30 +509,32 @@
             emailInput.style.transform = 'translateZ(0)';
             emailInput.style.boxShadow = 'none';
         });
-        //  smtp/imap
-        function connectSMTPIMAP() {
-    const email = prompt("Enter your email address:");
-    const appPassword = prompt("Enter your App Password (from Gmail):");
+        // ✅ SMTP/IMAP connect function
+function connectSMTPIMAP() {
+    const smtp_email = prompt("Enter your email address:");
+    const smtp_password = prompt("Enter your App Password (from your email provider):");
+    const smtp_host = prompt("Enter your SMTP server (e.g., smtp.gmail.com):");
+    const imap_host = prompt("Enter your IMAP server (e.g., imap.gmail.com):");
 
-    if (!email || !appPassword) {
-        alert("Both fields are required.");
+    if (!smtp_email || !smtp_password || !smtp_host || !imap_host) {
+        alert("❌ All fields are required.");
         return;
     }
 
-    fetch('/connect-smtp', {
+    fetch('https://replyzeai.onrender.com/connect-smtp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, app_password: appPassword })
+        body: JSON.stringify({ smtp_email, smtp_password, smtp_host, imap_host })
     })
     .then(res => res.json())
     .then(data => {
-        if (data.error) {
-            alert("❌ " + data.error);
-        } else {
+        if (data.status === 'success') {
             alert("✅ SMTP/IMAP connected successfully.");
+        } else {
+            alert("❌ " + (data.message || "Unknown error"));
         }
     })
-    .catch(err => alert("❌ Connection failed. " + err));
+    .catch(err => alert("❌ Connection failed. " + err.message));
 }
     </script>
 </body>
