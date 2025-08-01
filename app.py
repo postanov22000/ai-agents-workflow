@@ -321,8 +321,6 @@ def dashboard_home():
         generate_leases=generate_leases,
     )
 #----------------------------------------------------------------------
-from flask import request, jsonify
-from fimap import connect_smtp_imap
 @app.route("/connect-smtp", methods=["POST"])
 def route_connect_smtp():
     try:
