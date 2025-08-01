@@ -26,3 +26,5 @@ Flask-Cors==3.0.10
 
 redis
 rq
+
+cryptography
