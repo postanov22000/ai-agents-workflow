@@ -325,6 +325,8 @@ def route_connect_smtp():
     Expects JSON:
       { "user_id": "...", "smtp_email": "...", "app_password": "..." }
     """
+    from flask import request, jsonify
+    from fimap import connect_smtp_imap
     data = request.get_json()
     user_id = data["user_id"]
     smtp_email = data["smtp_email"]
