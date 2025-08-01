@@ -16,8 +16,8 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 import google.auth.transport.requests as grequests
 
-from fimap import (
-    connect_smtp_imap,    # saves & encrypts creds to Supabase
+from fimap import connect_smtp as connect_smtp_imap   # saves & encrypts creds to Supabase
+from fimap import (    
     send_email_smtp,
     fetch_emails_imap
 )
