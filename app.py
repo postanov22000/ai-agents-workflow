@@ -16,6 +16,14 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 import google.auth.transport.requests as grequests
 
+from fimap import (
+    connect_smtp_imap,    # saves & encrypts creds to Supabase
+    send_email_smtp,
+    fetch_emails_imap
+)
+
+from cryptography.fernet import Fernet
+
 # bring in your Blueprints
 from transaction_autopilot import bp as autopilot_bp
 from public import public_bp
@@ -34,10 +42,24 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 SUPABASE_SERVICE: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 # Edge Function base URL *without* trailing slash or endpoint
 EDGE_BASE_URL = os.environ.get("EDGE_BASE_URL", "").rstrip("/")
-
+ENCRYPTION_KEY = os.environ["ENCRYPTION_KEY"].encode()  # 32-url-safe-base64 bytes
+fernet = Fernet(ENCRYPTION_KEY)
 # Retry configuration for calling the Edge Function
 MAX_RETRIES = 5
 RETRY_BACKOFF_BASE = 2
+
+#----------------------------------------------------------------------------
+def get_smtp_creds(user_id: str):
+    """Return decrypted (email, app_password) or (None, None)."""
+    resp = supabase.from_("profiles").select("smtp_email, smtp_password").eq("id", user_id).single().execute()
+    if resp.error or not resp.data:
+        return None, None
+    enc_pwd = resp.data["smtp_password"].encode()
+    try:
+        pwd = fernet.decrypt(enc_pwd).decode()
+    except Exception:
+        return None, None
+    return resp.data["smtp_email"], pwd
 
 # ---------------------------------------------------------------------------
 def call_edge(endpoint_path: str, payload: dict) -> bool:
@@ -296,7 +318,61 @@ def dashboard_home():
         show_reconnect=show_reconnect,
         generate_leases=generate_leases,
     )
+#----------------------------------------------------------------------
+@app.route("/connect-smtp", methods=["POST"])
+def route_connect_smtp():
+    """
+    Expects JSON:
+      { "user_id": "...", "smtp_email": "...", "app_password": "..." }
+    """
+    data = request.get_json()
+    user_id = data["user_id"]
+    smtp_email = data["smtp_email"]
+    app_password = data["app_password"]
 
+    # encrypt & store
+    token = fernet.encrypt(app_password.encode()).decode()
+    # upsert into profiles
+    resp = supabase.from_("profiles").upsert({
+        "id": user_id,
+        "smtp_email": smtp_email,
+        "smtp_password": token
+    }, on_conflict="id").execute()
+
+    if resp.error:
+        return jsonify({"error": resp.error.message}), 500
+
+    return jsonify({"status": "ok"}), 200
+
+@app.route("/send", methods=["POST"])
+def send_email():
+    data = request.get_json()
+    user_id = data["user_id"]
+    to = data["to"]
+    subject = data["subject"]
+    body = data["body"]
+
+    smtp_email, app_password = get_smtp_creds(user_id)
+    if smtp_email and app_password:
+        # Use SMTP fallback
+        send_email_smtp(smtp_email, app_password, to, subject, body)
+        return jsonify({"method": "smtp", "status": "sent"}), 200
+
+    # else: your existing Gmail API flow
+    return send_via_gmail_api(data)
+
+@app.route("/fetch", methods=["GET"])
+def fetch_mail():
+    user_id = request.args.get("user_id")
+    smtp_email, app_password = get_smtp_creds(user_id)
+    if smtp_email and app_password:
+        messages = fetch_emails_imap(smtp_email, app_password)
+        return jsonify({"method": "imap", "messages": messages}), 200
+
+    # else: your existing Gmail-API‐based fetch
+    return fetch_via_gmail_api(user_id)
+
+#-----------------------------------------------------------------------
 @app.route("/connect_gmail")
 def connect_gmail():
     """
