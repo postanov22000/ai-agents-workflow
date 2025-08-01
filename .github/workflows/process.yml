@@ -37,6 +37,8 @@ jobs:
           python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" > key.txt
           # expose it to subsequent steps
           echo "ENCRYPTION_KEY=$(<key.txt)" >> $GITHUB_ENV
+          # DEBUG ONLY: expose to log
+          echo "🔑 DEBUG KEY: $ENCRYPTION_KEY"
 
       - name: Run Gmail Poller
         id: poll-result
