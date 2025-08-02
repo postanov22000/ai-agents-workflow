@@ -1,5 +1,3 @@
-# poll_imap_smtp.py
-
 import os
 import logging
 from supabase import create_client, Client
@@ -11,38 +9,36 @@ from cryptography.fernet import Fernet
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("imap_poller")
 
-# Supabase setup (same as before)…
+# Supabase setup
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-# ── Polling function ────────────────────────────────────────────────────────
 def poll_imap():
     """
     1) Find all users who have SMTP/IMAP creds
     2) Fetch unread messages via IMAP
     3) Insert new ones into `emails`
     """
-    # 1) filter out profiles with no smtp_email
     rows = (
         supabase
         .table("profiles")
         .select("id, smtp_email, smtp_enc_password, imap_host")
-        .neq("smtp_email", None)          # ← use .neq, not .not_
+        .neq("smtp_email", None)
         .execute()
         .data
         or []
     )
 
-    # build your fernet cipher once
     key    = os.environ["ENCRYPTION_KEY"].encode()
     cipher = Fernet(key)
 
     for row in rows:
-        user_id = row["id"]
-        email   = row["smtp_email"]
-        imap_host = row.get("imap_host", "imap.gmail.com")  # fallback if missing
-        # decrypt exactly what you upserted
+        user_id   = row["id"]
+        email     = row["smtp_email"]
+        imap_host = row.get("imap_host", "imap.gmail.com")
+
+        # decrypt
         try:
             pwd = cipher.decrypt(row["smtp_enc_password"].encode()).decode()
         except Exception as e:
@@ -52,15 +48,19 @@ def poll_imap():
         logger.info(f"Polling IMAP for {email} (user_id={user_id})")
 
         try:
-            messages = fetch_emails_imap(email, pwd, host=imap_host)
-        except Exception as e:
-            # log full stack so we can see what's really going on
+            # <-- here’s the fix: use imap_host keyword
+            messages = fetch_emails_imap(
+                email,
+                pwd,
+                folder="INBOX",
+                imap_host=imap_host
+            )
+        except Exception:
             logger.exception(f"IMAP fetch failed for {email}@{imap_host}")
             continue
 
         for msg in messages:
             gmail_id = msg.get("id")
-            # skip duplicates
             exists = (
                 supabase
                 .table("emails")
@@ -72,7 +72,6 @@ def poll_imap():
             if exists:
                 continue
 
-            # insert into your emails table
             supabase.table("emails").insert({
                 "user_id":          user_id,
                 "sender_email":     msg.get("from", ""),
@@ -89,14 +88,16 @@ def poll_imap():
 def send_ready_via_smtp():
     """
     1) Find all emails marked `ready_to_send`
-    2) Load that user’s SMTP creds
-    3) Deliver each via send_email_smtp()
-    4) Mark them sent in the DB
+    2) Deliver each via send_email_smtp()
+    3) Mark them sent in the DB
     """
     ready = supabase.table("emails") \
                     .select("id, user_id, sender_email, processed_content") \
                     .eq("status", "ready_to_send") \
                     .execute().data or []
+
+    key    = os.environ["ENCRYPTION_KEY"].encode()
+    cipher = Fernet(key)
 
     for rec in ready:
         em_id = rec["id"]
@@ -104,20 +105,19 @@ def send_ready_via_smtp():
         to    = rec["sender_email"]
         body  = rec["processed_content"]
 
-        # load creds again
         prof = supabase.table("profiles") \
-                       .select("smtp_email, smtp_enc_password") \
+                       .select("smtp_email, smtp_enc_password, smtp_host") \
                        .eq("id", uid).single().execute().data
         if not prof:
             logger.error(f"No SMTP creds for user {uid}, skipping {em_id}")
             continue
 
-        email = prof["smtp_email"]
-        pwd   = Fernet(os.environ["ENCRYPTION_KEY"].encode()) \
-                  .decrypt(prof["smtp_enc_password"].encode()).decode()
+        sender    = prof["smtp_email"]
+        app_pass  = cipher.decrypt(prof["smtp_enc_password"].encode()).decode()
+        smtp_host = prof.get("smtp_host", "smtp.gmail.com")
 
         try:
-            send_email_smtp(email, pwd, to, f"Re: your message", body)
+            send_email_smtp(sender, app_pass, to, f"Re: your message", body, smtp_host=smtp_host)
             supabase.table("emails") \
                     .update({
                         "status":  "sent",
@@ -137,4 +137,3 @@ def send_ready_via_smtp():
 if __name__ == "__main__":
     poll_imap()
     send_ready_via_smtp()
-    logging.basicConfig(level=logging.INFO)
