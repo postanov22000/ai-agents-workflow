@@ -545,6 +545,8 @@
     .then(data => {
       if (data.status === "ok") {
         alert("✅ SMTP/IMAP connected!");
+  // then redirect into your app
+  window.location.href = `/complete_profile?user_id=${USER_ID}`;
       } else {
         alert("❌ " + (data.message || JSON.stringify(data)));
       }
