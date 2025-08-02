@@ -27,7 +27,7 @@ def poll_imap():
     rows = (
         supabase
         .table("profiles")
-        .select("id, smtp_email, smtp_enc_password")
+        .select("id, smtp_email, smtp_enc_password, imap_host")
         .neq("smtp_email", None)          # ← use .neq, not .not_
         .execute()
         .data
@@ -41,7 +41,7 @@ def poll_imap():
     for row in rows:
         user_id = row["id"]
         email   = row["smtp_email"]
-
+        imap_host = row.get("imap_host", "imap.gmail.com")  # fallback if missing
         # decrypt exactly what you upserted
         try:
             pwd = cipher.decrypt(row["smtp_enc_password"].encode()).decode()
@@ -52,9 +52,10 @@ def poll_imap():
         logger.info(f"Polling IMAP for {email} (user_id={user_id})")
 
         try:
-            messages = fetch_emails_imap(email, pwd)
+            messages = fetch_emails_imap(email, pwd, host=imap_host)
         except Exception as e:
-            logger.error(f"IMAP fetch failed for {email}: {e}")
+            # log full stack so we can see what's really going on
+            logger.exception(f"IMAP fetch failed for {email}@{imap_host}")
             continue
 
         for msg in messages:
