@@ -61,9 +61,9 @@ def fetch_emails_imap(email_address: str, encrypted_app_password: str, folder: s
 def _get_body(msg):
     if msg.is_multipart():
         for part in msg.walk():
-            if part.get_content_type() == 'text/plain':
-                return part.get_payload(decode=True).decode()
-    return msg.get_payload(decode=True).decode()
+            if part.get_content_type() == 'text/plain' and not part.get("Content-Disposition"):
+                return part.get_payload(decode=True).decode(errors="ignore")
+    return msg.get_payload(decode=True).decode(errors="ignore")
 
 # ----------------------------------------------------------------------------
 # Routes
@@ -134,7 +134,7 @@ def fetch():
         mails = fetch_emails_imap(
             profile['smtp_email'],
             profile['smtp_enc_password'],
-            profile.get('smtp_folder', 'INBOX'),
+            folder=profile.get('smtp_folder', 'INBOX'),
             imap_host=profile.get('imap_host', 'imap.gmail.com')
         )
     else:
