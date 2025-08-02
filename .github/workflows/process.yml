@@ -12,10 +12,10 @@ permissions:
   contents: read
 
 jobs:
-  poll-gmail:
+  poll-mail:
     runs-on: ubuntu-latest
     outputs:
-      status: ${{ steps.poll-result.outputs.status }}
+      status: ${{ steps.poll-gmail.outputs.status }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -35,10 +35,9 @@ jobs:
         run: |
           KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
           echo "ENCRYPTION_KEY=$KEY" >> $GITHUB_ENV
-          
 
       - name: Run Gmail Poller
-        id: poll-result
+        id: poll-gmail
         env:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -47,19 +46,29 @@ jobs:
           ENCRYPTION_KEY:            ${{ env.ENCRYPTION_KEY }}
         run: |
           python poll_gmail.py
-          echo "status=success" >> $GITHUB_OUTPUT
+          echo "status=gmail" >> $GITHUB_OUTPUT
+
+      - name: Run IMAP/SMTP Poller
+        id: poll-imap
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ENCRYPTION_KEY:            ${{ env.ENCRYPTION_KEY }}
+        run: |
+          python poll_imap_smtp.py
+          echo "status=imap" >> $GITHUB_OUTPUT
 
   trigger-processing:
-    needs: poll-gmail
+    needs: poll-mail
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Main Processing Endpoint on Render
         run: |
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
             "https://replyzeai.onrender.com/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
-          echo "HTTP status: $RESPONSE"
-          if [[ "$RESPONSE" != "200" && "$RESPONSE" != "204" && "$RESPONSE" != "429" ]]; then
-            echo "::error::Processing failed with status: $RESPONSE"
+          echo "HTTP status: $HTTP"
+          if [[ "$HTTP" != "200" && "$HTTP" != "204" && "$HTTP" != "429" ]]; then
+            echo "::error::Processing failed with status: $HTTP"
             exit 1
           fi
 
