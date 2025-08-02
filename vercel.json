@@ -1,5 +1,7 @@
 {
+  "cleanUrls": true,
   "rewrites": [
+    // 1) Dynamic (Flask) routes:
     {
       "source": "/signin",
       "destination": "https://replyzeai.onrender.com/signin"
@@ -17,13 +19,18 @@
       "destination": "https://replyzeai.onrender.com/connect_gmail"
     },
     {
+      "source": "/dashboard",
+      "destination": "https://replyzeai.onrender.com/dashboard"
+    },
+
+    // 2) Then static fall-through:
+    {
       "source": "/",
       "destination": "/PUBLIC/index.html"
     },
     {
       "source": "/(.*)",
-      "destination": "/PUBLIC/$1.html"
+      "destination": "/PUBLIC/$1"
     }
-  ],
-  "cleanUrls": true
+  ]
 }
