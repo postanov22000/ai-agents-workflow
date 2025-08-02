@@ -5,6 +5,7 @@ import logging
 from supabase import create_client, Client
 from fimap import fetch_emails_imap, send_email_smtp
 from datetime import datetime
+from cryptography.fernet import Fernet 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("imap_poller")
