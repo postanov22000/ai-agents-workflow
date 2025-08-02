@@ -1,22 +1,9 @@
 {
   "cleanUrls": true,
   "rewrites": [
-    
-    {
-      "source": "/signin",
-      "destination": "https://replyzeai.onrender.com/signin"
-    },
-    {
-      "source": "/signin.html",
-      "destination": "https://replyzeai.onrender.com/signin"
-    },
-    {
-      "source": "/connect-smtp",
-      "destination": "https://replyzeai.onrender.com/connect-smtp"
-    },
-    {
-      "source": "/connect_gmail",
-      "destination": "https://replyzeai.onrender.com/connect_gmail"
-    },
+    { "source": "/signin",       "destination": "https://replyzeai.onrender.com/signin" },
+    { "source": "/connect-smtp", "destination": "https://replyzeai.onrender.com/connect-smtp" },
+    { "source": "/connect_gmail","destination": "https://replyzeai.onrender.com/connect_gmail" },
+    { "source": "/(.*)",         "destination": "https://replyzeai.onrender.com/$1" }
   ]
 }
