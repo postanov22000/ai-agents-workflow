@@ -7,65 +7,57 @@ from fimap import fetch_emails_imap, send_email_smtp
 from datetime import datetime
 from cryptography.fernet import Fernet 
 
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("imap_poller")
 
-# Supabase setup
-SUPABASE_URL              = os.environ["SUPABASE_URL"]
-SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-supabase: Client          = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+# Supabase setup (same as before)…
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 def poll_imap():
-    """
-    1) Find all users who have SMTP/IMAP creds
-    2) Fetch unread messages via IMAP
-    3) Insert new ones into `emails`
-    """
-    # 1) Grab only profiles with both smtp_email and encrypted password set
-    rows = (
-        supabase.table("profiles")
-                .select("id, smtp_email, smtp_enc_password")
-                .neq("smtp_email", None)
-                .neq("smtp_enc_password", None)
-                .execute()
-                .data
-        or []
-    )
+    rows = supabase.table("profiles") \
+                   .select("id, smtp_email, smtp_enc_password") \
+                   .not_("smtp_email", "is", None) \
+                   .execute().data or []
 
     for row in rows:
         user_id = row["id"]
         email   = row["smtp_email"]
 
-        # decrypt password exactly as you do in app.py
+        # decrypt password
+        from cryptography.fernet import Fernet
         key = os.environ["ENCRYPTION_KEY"].encode()
         f   = Fernet(key)
-        pwd = f.decrypt(row["smtp_enc_password"].encode()).decode()
+        try:
+            pwd = f.decrypt(row["smtp_enc_password"].encode()).decode()
+        except Exception as e:
+            logger.error(f"Failed to decrypt password for {email}: {e}", exc_info=True)
+            continue
 
         logger.info(f"Polling IMAP for {email} (user_id={user_id})")
         try:
             messages = fetch_emails_imap(email, pwd)
         except Exception as e:
-            logger.error(f"IMAP fetch failed for {email}: {e}")
+            # Log full exception and traceback
+            logger.error(f"IMAP fetch failed for {email}: {e}", exc_info=True)
             continue
 
         for msg in messages:
-            # assume msg is a dict with "id", "from", "subject", "body"
-            msg_id = msg.get("id")
-            if not msg_id:
+            gmail_id = msg.get("id")
+            if not gmail_id:
+                logger.warning(f"Skipping IMAP message with no ID for {email}")
                 continue
 
-            # 2) skip duplicates by gmail_id
-            exists = (
-                supabase.table("emails")
-                        .select("id")
-                        .eq("gmail_id", msg_id)
-                        .execute()
-                        .data
-            )
+            # Skip duplicates
+            exists = supabase.table("emails") \
+                             .select("id") \
+                             .eq("gmail_id", gmail_id) \
+                             .execute().data
             if exists:
                 continue
 
-            # 3) insert new email record
             supabase.table("emails").insert({
                 "user_id":          user_id,
                 "sender_email":     msg.get("from", ""),
@@ -73,11 +65,10 @@ def poll_imap():
                 "subject":          msg.get("subject", "(no subject)"),
                 "original_content": msg.get("body", ""),
                 "status":           "processing",
-                "gmail_id":         msg_id,
+                "gmail_id":         gmail_id,
                 "created_at":       datetime.utcnow().isoformat()
             }).execute()
-
-            logger.info(f"Inserted IMAP email {msg_id} for user {user_id}")
+            logger.info(f"Inserted IMAP email {gmail_id} for user {user_id}")
 
 def send_ready_via_smtp():
     """
