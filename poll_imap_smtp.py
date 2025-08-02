@@ -16,31 +16,40 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
+# ── Polling function ────────────────────────────────────────────────────────
 def poll_imap():
-    rows = supabase.table("profiles") \
-                   .select("id, smtp_email, smtp_enc_password") \
-                   .not_("smtp_email", "is", None) \
-                   .execute().data or []
+    """
+    1) Find all users who have SMTP/IMAP creds
+    2) Fetch unread messages via IMAP
+    3) Insert new ones into `emails`
+    """
+    rows = (
+        supabase
+          .table("profiles")
+          .select("id, smtp_email, smtp_enc_password")
+          .neq("smtp_email", None)
+          .execute()
+          .data
+        or []
+    )
 
     for row in rows:
         user_id = row["id"]
         email   = row["smtp_email"]
 
-        # decrypt password
-        from cryptography.fernet import Fernet
+        # Decrypt the stored password
         key = os.environ["ENCRYPTION_KEY"].encode()
         f   = Fernet(key)
         try:
             pwd = f.decrypt(row["smtp_enc_password"].encode()).decode()
         except Exception as e:
-            logger.error(f"Failed to decrypt password for {email}: {e}", exc_info=True)
+            logger.error(f"Failed to decrypt IMAP password for {email}: {e}", exc_info=True)
             continue
 
         logger.info(f"Polling IMAP for {email} (user_id={user_id})")
         try:
             messages = fetch_emails_imap(email, pwd)
         except Exception as e:
-            # Log full exception and traceback
             logger.error(f"IMAP fetch failed for {email}: {e}", exc_info=True)
             continue
 
@@ -51,13 +60,18 @@ def poll_imap():
                 continue
 
             # Skip duplicates
-            exists = supabase.table("emails") \
-                             .select("id") \
-                             .eq("gmail_id", gmail_id) \
-                             .execute().data
+            exists = (
+                supabase
+                  .table("emails")
+                  .select("id")
+                  .eq("gmail_id", gmail_id)
+                  .execute()
+                  .data
+            )
             if exists:
                 continue
 
+            # Insert into supabase
             supabase.table("emails").insert({
                 "user_id":          user_id,
                 "sender_email":     msg.get("from", ""),
@@ -69,6 +83,7 @@ def poll_imap():
                 "created_at":       datetime.utcnow().isoformat()
             }).execute()
             logger.info(f"Inserted IMAP email {gmail_id} for user {user_id}")
+
 
 def send_ready_via_smtp():
     """
