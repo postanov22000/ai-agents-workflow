@@ -3,8 +3,9 @@ import json
 import imaplib
 import smtplib
 import email
+import base64
 from email.mime.text import MIMEText
-from flask import Flask, request, session, redirect, url_for, jsonify
+from flask import Flask, request, session, jsonify
 from supabase import create_client, Client
 from cryptography.fernet import Fernet
 from google.oauth2.credentials import Credentials
@@ -15,7 +16,7 @@ from googleapiclient.discovery import build
 # ----------------------------------------------------------------------------
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY")
-encryption_key = os.environ.get("ENCRYPTION_KEY")  # 32 url-safe base64
+encryption_key = os.environ.get("ENCRYPTION_KEY")
 cipher = Fernet(encryption_key)
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -25,21 +26,21 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 # ----------------------------------------------------------------------------
 # Helpers: IMAP/SMTP
 # ----------------------------------------------------------------------------
-def send_email_smtp(sender_email: str, encrypted_app_password: str, recipient: str, subject: str, body: str):
+def send_email_smtp(sender_email: str, encrypted_app_password: str, recipient: str, subject: str, body: str, smtp_host: str = "smtp.gmail.com"):
     app_password = cipher.decrypt(encrypted_app_password.encode()).decode()
     msg = MIMEText(body)
     msg["Subject"] = subject
     msg["From"] = sender_email
     msg["To"] = recipient
 
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+    with smtplib.SMTP_SSL(smtp_host, 465) as server:
         server.login(sender_email, app_password)
         server.sendmail(sender_email, [recipient], msg.as_string())
 
 
-def fetch_emails_imap(email_address: str, encrypted_app_password: str, folder: str = "INBOX"):
+def fetch_emails_imap(email_address: str, encrypted_app_password: str, folder: str = "INBOX", imap_host: str = "imap.gmail.com"):
     app_password = cipher.decrypt(encrypted_app_password.encode()).decode()
-    with imaplib.IMAP4_SSL("imap.gmail.com", 993) as mail:
+    with imaplib.IMAP4_SSL(imap_host, 993) as mail:
         mail.login(email_address, app_password)
         mail.select(folder)
         status, data = mail.search(None, 'UNSEEN')
@@ -65,59 +66,54 @@ def _get_body(msg):
     return msg.get_payload(decode=True).decode()
 
 # ----------------------------------------------------------------------------
-# Routes: SMTP/IMAP Connect
+# Routes
 # ----------------------------------------------------------------------------
 @app.route('/connect-smtp', methods=['POST'])
 def connect_smtp():
     data = request.json
     email_address = data.get('email')
     app_password = data.get('app_password')
+    smtp_host = data.get('smtp_host', 'smtp.gmail.com')
+    imap_host = data.get('imap_host', 'imap.gmail.com')
     folder = data.get('folder', 'INBOX')
 
     if not email_address or not app_password:
         return jsonify({'error': 'Email and app_password required'}), 400
 
-    # Encrypt app password
     encrypted_pw = cipher.encrypt(app_password.encode()).decode()
-
     user_id = session.get('user_id')
     if not user_id:
         return jsonify({'error': 'Not authenticated'}), 401
 
-    # Upsert credentials in Supabase
     record = {
         'id': user_id,
         'smtp_email': email_address,
         'smtp_enc_password': encrypted_pw,
+        'smtp_host': smtp_host,
+        'imap_host': imap_host,
         'smtp_folder': folder
     }
-    res = supabase.table('profiles').upsert(record).execute()
-
+    supabase.table('profiles').upsert(record).execute()
     return jsonify({'message': 'SMTP/IMAP credentials saved'}), 200
 
-# ----------------------------------------------------------------------------
-# Example: Sending via fallback
-# ----------------------------------------------------------------------------
 @app.route('/send', methods=['POST'])
 def send():
     data = request.json
     to = data.get('to')
     subject = data.get('subject')
     body = data.get('body')
-
     user_id = session.get('user_id')
-    # Fetch user profile
+
     profile = supabase.table('profiles').select('*').eq('id', user_id).single().execute().data
 
     if profile.get('smtp_email') and profile.get('smtp_enc_password'):
-        # Use SMTP
         send_email_smtp(
             profile['smtp_email'],
             profile['smtp_enc_password'],
-            to, subject, body
+            to, subject, body,
+            smtp_host=profile.get('smtp_host', 'smtp.gmail.com')
         )
     else:
-        # Fallback to Gmail API
         creds_data = supabase.table('tokens').select('*').eq('user_id', user_id).single().execute().data
         creds = Credentials.from_authorized_user_info(json.loads(creds_data['credentials']))
         service = build('gmail', 'v1', credentials=creds)
@@ -129,9 +125,6 @@ def send():
 
     return jsonify({'message': 'Sent'}), 200
 
-# ----------------------------------------------------------------------------
-# Example: Fetching via fallback
-# ----------------------------------------------------------------------------
 @app.route('/fetch', methods=['GET'])
 def fetch():
     user_id = session.get('user_id')
@@ -139,10 +132,12 @@ def fetch():
 
     if profile.get('smtp_email') and profile.get('smtp_enc_password'):
         mails = fetch_emails_imap(
-            profile['smtp_email'], profile['smtp_enc_password'], profile.get('smtp_folder', 'INBOX')
+            profile['smtp_email'],
+            profile['smtp_enc_password'],
+            profile.get('smtp_folder', 'INBOX'),
+            imap_host=profile.get('imap_host', 'imap.gmail.com')
         )
     else:
-        # Use Gmail API
         creds_data = supabase.table('tokens').select('*').eq('user_id', user_id).single().execute().data
         creds = Credentials.from_authorized_user_info(json.loads(creds_data['credentials']))
         service = build('gmail', 'v1', credentials=creds)
@@ -150,7 +145,6 @@ def fetch():
         mails = []
         for m in result.get('messages', []):
             msg = service.users().messages().get(userId='me', id=m['id'], format='full').execute()
-            # extract headers & body (left as exercise)
             mails.append(msg)
 
     return jsonify({'emails': mails}), 200
