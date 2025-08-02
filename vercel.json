@@ -1,12 +1,13 @@
 {
+  "cleanUrls": true,
   "rewrites": [
-    
+   
     {
       "source": "/signin",
       "destination": "https://replyzeai.onrender.com/signin"
     },
     {
-      "source": "/signin/:rest*",               
+      "source": "/signin/:rest*",      
       "destination": "https://replyzeai.onrender.com/signin"
     },
     {
@@ -18,7 +19,7 @@
       "destination": "https://replyzeai.onrender.com/connect_gmail"
     },
 
-    
+
     {
       "source": "/",
       "destination": "/PUBLIC/index.html"
@@ -27,6 +28,5 @@
       "source": "/(.*)",
       "destination": "/PUBLIC/$1.html"
     }
-  ],
-  "cleanUrls": true
+  ]
 }
