@@ -1,5 +1,4 @@
 {
-  "cleanUrls": true,
   "rewrites": [
     
     {
@@ -7,7 +6,7 @@
       "destination": "https://replyzeai.onrender.com/signin"
     },
     {
-      "source": "/signin.html",
+      "source": "/signin/:rest*",               
       "destination": "https://replyzeai.onrender.com/signin"
     },
     {
@@ -18,10 +17,6 @@
       "source": "/connect_gmail",
       "destination": "https://replyzeai.onrender.com/connect_gmail"
     },
-    {
-      "source": "/dashboard",
-      "destination": "https://replyzeai.onrender.com/dashboard"
-    },
 
     
     {
@@ -30,7 +25,8 @@
     },
     {
       "source": "/(.*)",
-      "destination": "/PUBLIC/$1"
+      "destination": "/PUBLIC/$1.html"
     }
-  ]
+  ],
+  "cleanUrls": true
 }
