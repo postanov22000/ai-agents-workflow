@@ -30,11 +30,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Generate ENCRYPTION_KEY
-        id: gen_key
-        run: |
-          KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
-          echo "ENCRYPTION_KEY=$KEY" >> $GITHUB_ENV
 
       - name: Run Gmail Poller
         id: poll-gmail
@@ -49,11 +44,11 @@ jobs:
           echo "status=gmail" >> $GITHUB_OUTPUT
 
       - name: Run IMAP/SMTP Poller
-        id: poll-imap
+        id: run-imap
         env:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          ENCRYPTION_KEY:            ${{ env.ENCRYPTION_KEY }}
+          ENCRYPTION_KEY:            ${{ secrets.ENCRYPTION_KEY }}
         run: |
           python poll_imap_smtp.py
           echo "status=imap" >> $GITHUB_OUTPUT
