@@ -518,43 +518,46 @@
 
         // Backend root & current user
     const BACKEND = "https://replyzeai.onrender.com";
-    const USER_ID = "{{ user_id }}";
+    
 
-    // SMTP/IMAP connector
     function connectSMTPIMAP() {
-      const smtp_email    = prompt("Enter your email address:");
-      const smtp_password = prompt("Enter your App Password:");
-      const smtp_host     = prompt("Enter your SMTP server (e.g. smtp.gmail.com):");
-      const imap_host     = prompt("Enter your IMAP server (e.g. imap.gmail.com):");
+  // grab the real user_id from the hidden input
+  const USER_ID = document.getElementById("user-id").value;
+  const smtp_email    = prompt("Enter your email address:");
+  const smtp_password = prompt("Enter your App Password:");
+  const smtp_host     = prompt("Enter your SMTP server (e.g. smtp.gmail.com):");
+  const imap_host     = prompt("Enter your IMAP server (e.g. imap.gmail.com):");
 
-      if (!smtp_email || !smtp_password || !smtp_host || !imap_host || !USER_ID) {
-        return alert("All fields + user_id are required.");
-      }
+  if (!smtp_email || !smtp_password || !smtp_host || !imap_host || !USER_ID) {
+    return alert("All fields + user_id are required.");
+  }
 
-      fetch(`${BACKEND}/connect-smtp`, {
-        method:  "POST",
-        headers: { "Content-Type":"application/json" },
-        body:    JSON.stringify({ 
-                   user_id: USER_ID,
-                   smtp_email, smtp_password, smtp_host, imap_host
-                })
-      })
-      .then(r => r.json())
-      .then(data => {
-        if (data.status === "ok") {
-          alert("✅ SMTP/IMAP connected!");
-        } else {
-          alert("❌ " + (data.error || data.message));
-        }
-      })
-      .catch(e => alert("❌ Connection failed: " + e.message));
+  fetch(`${BACKEND}/connect-smtp`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ 
+      user_id:     USER_ID,
+      smtp_email,
+      smtp_password,
+      smtp_host,
+      imap_host
+    })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.status === "ok") {
+      alert("✅ SMTP/IMAP connected!");
+    } else {
+      alert("❌ " + (data.message || JSON.stringify(data)));
     }
+  })
+  .catch(e => alert("❌ Connection failed: " + e.message));
+}
 
-    // Hook up the button once DOM is ready
     document.addEventListener("DOMContentLoaded", () => {
-      const btn = document.getElementById("connect-smtp-btn");
-      if (btn) btn.addEventListener("click", connectSMTPIMAP);
-    });
+  const btn = document.getElementById("connect-smtp-btn");
+  if (btn) btn.addEventListener("click", connectSMTPIMAP);
+});
   </script>
 </body>
 </html>
