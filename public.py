@@ -113,3 +113,10 @@ def demo():
         "purchase_Price": 350000
     }
     return render_template("demo.html", **demo_data)
+
+@bp.route("/<path:page>")
+def catch_all(page):
+    if page == "signin":
+        # let the main app handle this
+        abort(404)
+    return render_template(f"{page}.html")
