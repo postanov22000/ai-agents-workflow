@@ -331,35 +331,42 @@ def dashboard_home():
 def route_connect_smtp():
     try:
         data = request.get_json(force=True)
-        # 1) required fields
+        # pull out all five required fields
+        user_id      = data.get("user_id")
+        smtp_email   = data.get("smtp_email")
+        smtp_password= data.get("smtp_password")
+        smtp_host    = data.get("smtp_host")
+        imap_host    = data.get("imap_host")
+
+        # validate
         missing = [k for k in ("user_id","smtp_email","smtp_password","smtp_host","imap_host") if not data.get(k)]
         if missing:
             return jsonify({
-                "status":  "error",
+                "status": "error",
                 "message": f"Missing fields: {', '.join(missing)}"
             }), 400
 
-        # 2) encrypt the password
-        token = fernet.encrypt(data["smtp_password"].encode()).decode()
-
-        # 3) upsert into Supabase
-        resp = supabase.from_("profiles").upsert({
-            "id":                data["user_id"],
-            "smtp_email":        data["smtp_email"],
+        # encrypt & upsert
+        token = fernet.encrypt(smtp_password.encode()).decode()
+        resp = supabase.table("profiles").upsert({
+            "id":                user_id,
+            "smtp_email":        smtp_email,
             "smtp_enc_password": token,
             "smtp_folder":       "INBOX"
         }, on_conflict="id").execute()
 
-        # 4) check Supabase‐side error
-        if resp.error:
-            raise Exception(resp.error.message)
+        # **THIS** is the fix — supabase-py’s APIResponse has no `.error`
+        if not resp or getattr(resp, "status_code", 0) >= 400:
+            # pull any returned text out for debugging
+            err = getattr(resp, "text", repr(resp))
+            raise Exception(f"Supabase upsert failed: {err}")
 
-        # 5) all good
-        return jsonify({"status":"ok"}), 200
+        return jsonify({"status": "ok"}), 200
 
     except Exception as e:
         app.logger.error("connect-smtp error", exc_info=True)
-        return jsonify({"status":"error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 
 #------------------------------------------ 
