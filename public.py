@@ -114,7 +114,7 @@ def demo():
     }
     return render_template("demo.html", **demo_data)
 
-@bp.route("/<path:page>")
+@public_bp.route("/<path:page>")
 def catch_all(page):
     if page == "signin":
         # let the main app handle this
