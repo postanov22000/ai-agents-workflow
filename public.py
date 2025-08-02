@@ -116,7 +116,8 @@ def demo():
 
 @public_bp.route("/<path:page>")
 def catch_all(page):
-    if page == "signin":
-        # let the main app handle this
+    # don’t try to render static assets
+    if page in ("signin", "favicon.ico"):
         abort(404)
     return render_template(f"{page}.html")
+
