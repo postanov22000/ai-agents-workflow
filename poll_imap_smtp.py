@@ -20,18 +20,24 @@ def poll_imap():
     2) Fetch unread messages via IMAP
     3) Insert new ones into `emails`
     """
-    rows = supabase.table("profiles") \
-                   .select("id, smtp_email, smtp_enc_password") \
-                   .not_("smtp_email", "is", None) \
-                   .execute().data or []
+    # 1) Grab only profiles with both smtp_email and encrypted password set
+    rows = (
+        supabase.table("profiles")
+                .select("id, smtp_email, smtp_enc_password")
+                .neq("smtp_email", None)
+                .neq("smtp_enc_password", None)
+                .execute()
+                .data
+        or []
+    )
 
     for row in rows:
         user_id = row["id"]
         email   = row["smtp_email"]
-        # decrypt password server-side exactly as in your app.py
-        from cryptography.fernet import Fernet
+
+        # decrypt password exactly as you do in app.py
         key = os.environ["ENCRYPTION_KEY"].encode()
-        f  = Fernet(key)
+        f   = Fernet(key)
         pwd = f.decrypt(row["smtp_enc_password"].encode()).decode()
 
         logger.info(f"Polling IMAP for {email} (user_id={user_id})")
@@ -42,27 +48,35 @@ def poll_imap():
             continue
 
         for msg in messages:
-            # msg should include .id, .from_, .subject, .body, etc.
-            gmail_id = msg.get("id")  # or use msg.message_id
-            # skip dupes
-            exists = supabase.table("emails") \
-                             .select("id") \
-                             .eq("gmail_id", gmail_id) \
-                             .execute().data
+            # assume msg is a dict with "id", "from", "subject", "body"
+            msg_id = msg.get("id")
+            if not msg_id:
+                continue
+
+            # 2) skip duplicates by gmail_id
+            exists = (
+                supabase.table("emails")
+                        .select("id")
+                        .eq("gmail_id", msg_id)
+                        .execute()
+                        .data
+            )
             if exists:
                 continue
 
+            # 3) insert new email record
             supabase.table("emails").insert({
                 "user_id":          user_id,
-                "sender_email":     msg["from"],
+                "sender_email":     msg.get("from", ""),
                 "recipient_email":  email,
                 "subject":          msg.get("subject", "(no subject)"),
                 "original_content": msg.get("body", ""),
                 "status":           "processing",
-                "gmail_id":         gmail_id,
+                "gmail_id":         msg_id,
                 "created_at":       datetime.utcnow().isoformat()
             }).execute()
-            logger.info(f"Inserted IMAP email {gmail_id} for user {user_id}")
+
+            logger.info(f"Inserted IMAP email {msg_id} for user {user_id}")
 
 def send_ready_via_smtp():
     """
