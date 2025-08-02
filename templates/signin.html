@@ -412,7 +412,7 @@
             <div class="form-group">
   <label for="email">Your gmail account</label>
   <input type="hidden" id="user-id" value="{{ user_id }}" />
-                
+  <input id="email" type="email" placeholder="you@example.com" />              
 </div>
 
             
@@ -516,48 +516,63 @@
             emailInput.style.boxShadow = 'none';
         });
 
-        // Backend root & current user
-    const BACKEND = "https://replyzeai.onrender.com";
-    
+        
+  const BACKEND = "https://replyzeai.onrender.com";
 
-    function connectSMTPIMAP() {
-  // grab the real user_id from the hidden input
-  const USER_ID = document.getElementById("user-id").value;
-  const smtp_email    = prompt("Enter your email address:");
-  const smtp_password = prompt("Enter your App Password:");
-  const smtp_host     = prompt("Enter your SMTP server (e.g. smtp.gmail.com):");
-  const imap_host     = prompt("Enter your IMAP server (e.g. imap.gmail.com):");
+  function connectSMTPIMAP() {
+    const USER_ID      = document.getElementById("user-id")?.value;
+    const smtp_email   = prompt("Enter your email address:");
+    const smtp_pass    = prompt("Enter your App Password:");
+    const smtp_host    = prompt("Enter your SMTP server (e.g. smtp.gmail.com):");
+    const imap_host    = prompt("Enter your IMAP server (e.g. imap.gmail.com):");
 
-  if (!smtp_email || !smtp_password || !smtp_host || !imap_host || !USER_ID) {
-    return alert("All fields + user_id are required.");
+    if (!USER_ID || !smtp_email || !smtp_pass || !smtp_host || !imap_host) {
+      return alert("❌ All fields + user_id are required.");
+    }
+
+    fetch(`${BACKEND}/connect-smtp`, {
+      method:  "POST",
+      headers: { "Content-Type":"application/json" },
+      body: JSON.stringify({ 
+        user_id: USER_ID,
+        smtp_email,
+        smtp_password: smtp_pass,
+        smtp_host,
+        imap_host
+      })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.status === "ok") {
+        alert("✅ SMTP/IMAP connected!");
+      } else {
+        alert("❌ " + (data.message || JSON.stringify(data)));
+      }
+    })
+    .catch(e => alert("❌ Connection failed: " + e.message));
   }
 
-  fetch(`${BACKEND}/connect-smtp`, {
-    method:  "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ 
-      user_id:     USER_ID,
-      smtp_email,
-      smtp_password,
-      smtp_host,
-      imap_host
-    })
-  })
-  .then(r => r.json())
-  .then(data => {
-    if (data.status === "ok") {
-      alert("✅ SMTP/IMAP connected!");
-    } else {
-      alert("❌ " + (data.message || JSON.stringify(data)));
+  document.addEventListener("DOMContentLoaded", () => {
+    // 1) Wire up the SMTP/IMAP button
+    const smtpBtn = document.getElementById("connect-smtp-btn");
+    if (smtpBtn) {
+      smtpBtn.addEventListener("click", connectSMTPIMAP);
     }
-  })
-  .catch(e => alert("❌ Connection failed: " + e.message));
-}
 
-    document.addEventListener("DOMContentLoaded", () => {
-  const btn = document.getElementById("connect-smtp-btn");
-  if (btn) btn.addEventListener("click", connectSMTPIMAP);
-});
-  </script>
+    // 2) (Optional) guard your email input focus/blur
+    const emailInput = document.getElementById("email");
+    if (emailInput) {
+      emailInput.addEventListener("focus", () => {
+        emailInput.style.transform = "translateZ(15px)";
+        emailInput.style.boxShadow = "0 0 25px rgba(100, 255, 218, 0.3)";
+      });
+      emailInput.addEventListener("blur", () => {
+        emailInput.style.transform = "none";
+        emailInput.style.boxShadow = "none";
+      });
+    }
+  });
+</script>
+
 </body>
 </html>
