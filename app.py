@@ -330,29 +330,25 @@ def dashboard_home():
 @app.route("/connect-smtp", methods=["POST"])
 def route_connect_smtp():
     try:
-        data = request.get_json(force=True)  # force to parse JSON
-        user_id      = data.get("user_id")
-        smtp_email   = data.get("smtp_email")
-        smtp_password= data.get("smtp_password")
-        smtp_host    = data.get("smtp_host")
-        imap_host    = data.get("imap_host")
-
-        # Validate
+        data = request.get_json(force=True)
         missing = [k for k in ("user_id","smtp_email","smtp_password","smtp_host","imap_host") if not data.get(k)]
         if missing:
             return jsonify({"status":"error", "message": f"Missing fields: {', '.join(missing)}"}), 400
 
-        # Encrypt & store
-        token = fernet.encrypt(smtp_password.encode()).decode()
-        resp = supabase.from_("profiles").upsert({
-            "id": user_id,
-            "smtp_email": smtp_email,
+        token = fernet.encrypt(data["smtp_password"].encode()).decode()
+
+        resp = supabase.table("profiles").upsert({
+            "id":              data["user_id"],
+            "smtp_email":      data["smtp_email"],
             "smtp_enc_password": token,
-            "smtp_folder": "INBOX"
+            "smtp_folder":     "INBOX"
         }, on_conflict="id").execute()
 
-        if resp.error:
-            raise Exception(resp.error.message)
+        # NEW: check HTTP status, not resp.error
+        if resp.status_code >= 300:
+            # `resp.data` may contain an error message
+            msg = getattr(resp, "data", {}).get("message") or resp.status_code
+            raise Exception(f"Supabase upsert failed: {msg}")
 
         return jsonify({"status":"ok"}), 200
 
@@ -360,8 +356,6 @@ def route_connect_smtp():
         app.logger.error("connect-smtp error", exc_info=True)
         return jsonify({"status":"error", "message": str(e)}), 500
 
-
-    return jsonify({"status": "ok"}), 200
 #------------------------------------------ 
 
 
