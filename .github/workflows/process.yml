@@ -38,7 +38,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GOOGLE_CLIENT_ID:          ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET:      ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          ENCRYPTION_KEY:            ${{ env.ENCRYPTION_KEY }}
+          ENCRYPTION_KEY:            ${{ secrets.ENCRYPTION_KEY }}
         run: |
           python poll_gmail.py
           echo "status=gmail" >> $GITHUB_OUTPUT
