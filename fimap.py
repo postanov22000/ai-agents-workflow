@@ -17,12 +17,12 @@ from googleapiclient.discovery import build
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY")
 
-# Primary (new) key
-NEW_KEY = os.environ["ENCRYPTION_KEY"].encode()
+# New (primary) encryption key
+NEW_KEY    = os.environ["ENCRYPTION_KEY"].encode()
 NEW_CIPHER = Fernet(NEW_KEY)
 
-# Optional fallback (old) key; if you set this in your ENV ahead of rolling
-OLD_KEY = os.environ.get("OLD_ENCRYPTION_KEY")
+# Optional old key for rotation
+OLD_KEY    = os.environ.get("OLD_ENCRYPTION_KEY")
 OLD_CIPHER = Fernet(OLD_KEY.encode()) if OLD_KEY else None
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
@@ -32,31 +32,32 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 # ----------------------------------------------------------------------------
 # Utilities
 # ----------------------------------------------------------------------------
-def decrypt_password(token: str) -> str:
+def reencrypt_profile(user_id: str, raw_password: str):
+    """Rotate this user’s password into the NEW_KEY."""
+    encrypted = NEW_CIPHER.encrypt(raw_password.encode()).decode()
+    supabase.table("profiles") \
+            .update({"smtp_enc_password": encrypted}) \
+            .eq("id", user_id) \
+            .execute()
+
+def decrypt_password(token: str, user_id: str) -> str:
     """
-    Try to decrypt with NEW_CIPHER; if that fails and we have OLD_CIPHER, try it
-    (and if it works, re-encrypt under NEW_KEY).
+    Try to decrypt with NEW_CIPHER; if that fails and OLD_CIPHER exists,
+    decrypt with OLD_CIPHER then re-encrypt under the new key.
     """
     data = token.encode()
-    # first, try new key
+    # 1) Try new key
     try:
         return NEW_CIPHER.decrypt(data).decode()
     except Exception:
         if not OLD_CIPHER:
             raise
-    # fallback
-    pwd = OLD_CIPHER.decrypt(data).decode()
-    # re-encrypt under new key in Supabase for future runs
-    # we need to find the profile row and update it
-    # extract user_id from context? We’ll assume caller will do a manual re-upsert
-    return pwd
 
-def reencrypt_profile(user_id: str, raw_password: str):
-    """Safely upsert the freshly encrypted password under the new key."""
-    encrypted = NEW_CIPHER.encrypt(raw_password.encode()).decode()
-    supabase.table("profiles").update({
-        "smtp_enc_password": encrypted
-    }).eq("id", user_id).execute()
+    # 2) Fallback to old key
+    raw = OLD_CIPHER.decrypt(data).decode()
+    # Rotate into the new key for next time
+    reencrypt_profile(user_id, raw)
+    return raw
 
 # ----------------------------------------------------------------------------
 # Helpers: IMAP/SMTP
@@ -67,156 +68,156 @@ def send_email_smtp(sender_email: str,
                     subject: str,
                     body: str,
                     smtp_host: str = "smtp.gmail.com"):
-    # decrypt (with fallback)
-    pwd = decrypt_password(encrypted_app_password)
+    # Determine user_id from session for decryption context
+    user_id = session.get("user_id")
+    pwd = decrypt_password(encrypted_app_password, user_id)
     msg = MIMEText(body)
     msg["Subject"] = subject
-    msg["From"] = sender_email
-    msg["To"] = recipient
+    msg["From"]    = sender_email
+    msg["To"]      = recipient
 
     with smtplib.SMTP_SSL(smtp_host, 465) as server:
         server.login(sender_email, pwd)
         server.sendmail(sender_email, [recipient], msg.as_string())
 
+def _get_body(msg):
+    if msg.is_multipart():
+        for part in msg.walk():
+            if part.get_content_type() == "text/plain" and not part.get("Content-Disposition"):
+                return part.get_payload(decode=True).decode(errors="ignore")
+    return msg.get_payload(decode=True).decode(errors="ignore")
+
 def fetch_emails_imap(email_address: str,
                       encrypted_app_password: str,
                       folder: str = "INBOX",
                       imap_host: str = "imap.gmail.com"):
-    # decrypt (with fallback)
-    pwd = decrypt_password(encrypted_app_password)
+    user_id = session.get("user_id")
+    pwd = decrypt_password(encrypted_app_password, user_id)
+
     with imaplib.IMAP4_SSL(imap_host, 993) as mail:
         mail.login(email_address, pwd)
         mail.select(folder)
-        status, data = mail.search(None, 'UNSEEN')
+        status, data = mail.search(None, "UNSEEN")
         messages = []
         for num in data[0].split():
-            _, msg_data = mail.fetch(num, '(RFC822)')
-            msg = email.message_from_bytes(msg_data[0][1])
-            body = _get_body(msg)
+            _, msg_data = mail.fetch(num, "(RFC822)")
+            msg         = email.message_from_bytes(msg_data[0][1])
+            body        = _get_body(msg)
             messages.append({
-                'from':    msg.get("From"),
-                'subject': msg.get("Subject"),
-                'body':    body,
-                'id':      num.decode()
+                "from":    msg.get("From"),
+                "subject": msg.get("Subject"),
+                "body":    body,
+                "id":      num.decode()
             })
         return messages
-
-def _get_body(msg):
-    if msg.is_multipart():
-        for part in msg.walk():
-            if part.get_content_type() == 'text/plain' and not part.get("Content-Disposition"):
-                return part.get_payload(decode=True).decode(errors="ignore")
-    return msg.get_payload(decode=True).decode(errors="ignore")
 
 # ----------------------------------------------------------------------------
 # Routes
 # ----------------------------------------------------------------------------
-@app.route('/connect-smtp', methods=['POST'])
+@app.route("/connect-smtp", methods=["POST"])
 def connect_smtp():
-    """
-    Stores (or re-stores) SMTP/IMAP creds and host config under the NEW_KEY.
-    """
-    data = request.json or {}
-    email_addr = data.get('email')
-    app_password = data.get('app_password')
-    smtp_host = data.get('smtp_host', 'smtp.gmail.com')
-    imap_host = data.get('imap_host', 'imap.gmail.com')
-    folder    = data.get('folder', 'INBOX')
+    data         = request.json or {}
+    email_addr   = data.get("email")
+    app_password = data.get("app_password")
+    smtp_host    = data.get("smtp_host", "smtp.gmail.com")
+    imap_host    = data.get("imap_host", "imap.gmail.com")
+    folder       = data.get("folder", "INBOX")
 
     if not email_addr or not app_password:
-        return jsonify({'error': 'email & app_password required'}), 400
-
-    user_id = session.get('user_id')
+        return jsonify({"error": "email & app_password required"}), 400
+    user_id = session.get("user_id")
     if not user_id:
-        return jsonify({'error': 'not authenticated'}), 401
+        return jsonify({"error": "not authenticated"}), 401
 
-    # encrypt under NEW_KEY
-    enc = NEW_CIPHER.encrypt(app_password.encode()).decode()
-
-    supabase.table('profiles').upsert({
-        'id':                   user_id,
-        'smtp_email':           email_addr,
-        'smtp_enc_password':    enc,
-        'smtp_host':            smtp_host,
-        'imap_host':            imap_host,
-        'smtp_folder':          folder
+    encrypted_pw = NEW_CIPHER.encrypt(app_password.encode()).decode()
+    supabase.table("profiles").upsert({
+        "id":                 user_id,
+        "smtp_email":         email_addr,
+        "smtp_enc_password":  encrypted_pw,
+        "smtp_host":          smtp_host,
+        "imap_host":          imap_host,
+        "smtp_folder":        folder
     }).execute()
 
-    return jsonify({'message': 'SMTP/IMAP credentials saved'}), 200
+    return jsonify({"message": "SMTP/IMAP credentials saved"}), 200
 
-@app.route('/send', methods=['POST'])
+@app.route("/send", methods=["POST"])
 def send_via_fallback():
-    """
-    Sends either via SMTP fallback or Gmail API.
-    """
-    data = request.json or {}
-    to      = data.get('to')
-    subject = data.get('subject')
-    body    = data.get('body')
-    user_id = session.get('user_id')
+    data     = request.json or {}
+    to       = data.get("to")
+    subject  = data.get("subject")
+    body     = data.get("body")
+    user_id  = session.get("user_id")
 
-    profile = supabase.table('profiles') \
-                      .select('smtp_email,smtp_enc_password,smtp_host') \
-                      .eq('id', user_id).single().execute().data or {}
+    profile = (supabase.table("profiles")
+                      .select("smtp_email,smtp_enc_password,smtp_host")
+                      .eq("id", user_id)
+                      .single()
+                      .execute()
+                      .data) or {}
 
-    if profile.get('smtp_email') and profile.get('smtp_enc_password'):
+    if profile.get("smtp_email") and profile.get("smtp_enc_password"):
         send_email_smtp(
-            profile['smtp_email'],
-            profile['smtp_enc_password'],
-            to,
-            subject,
-            body,
-            smtp_host=profile.get('smtp_host', 'smtp.gmail.com')
+            profile["smtp_email"],
+            profile["smtp_enc_password"],
+            to, subject, body,
+            smtp_host=profile.get("smtp_host", "smtp.gmail.com")
         )
-        return jsonify({'message': 'Sent via SMTP'}), 200
+        return jsonify({"message": "Sent via SMTP"}), 200
 
-    # else Gmail API
-    creds_data = supabase.table('tokens') \
-                         .select('credentials') \
-                         .eq('user_id', user_id).single().execute().data or {}
-    creds = Credentials.from_authorized_user_info(json.loads(creds_data['credentials']))
-    service = build('gmail', 'v1', credentials=creds)
-    msg = MIMEText(body)
-    msg['to'] = to
-    msg['subject'] = subject
-    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
-    service.users().messages().send(userId='me', body={'raw': raw}).execute()
-    return jsonify({'message': 'Sent via Gmail API'}), 200
+    # Fallback to Gmail API
+    creds_data = (supabase.table("tokens")
+                         .select("credentials")
+                         .eq("user_id", user_id)
+                         .single()
+                         .execute()
+                         .data) or {}
+    creds = Credentials.from_authorized_user_info(json.loads(creds_data["credentials"]))
+    service = build("gmail", "v1", credentials=creds)
+    msg     = MIMEText(body)
+    msg["to"]      = to
+    msg["subject"] = subject
+    raw   = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    service.users().messages().send(userId="me", body={"raw": raw}).execute()
+    return jsonify({"message": "Sent via Gmail API"}), 200
 
-@app.route('/fetch', methods=['GET'])
+@app.route("/fetch", methods=["GET"])
 def fetch_via_fallback():
-    """
-    Fetches either via IMAP fallback or Gmail API.
-    """
-    user_id = session.get('user_id')
-    profile = supabase.table('profiles') \
-                      .select('smtp_email,smtp_enc_password,smtp_folder,imap_host') \
-                      .eq('id', user_id).single().execute().data or {}
+    user_id = session.get("user_id")
+    profile = (supabase.table("profiles")
+                      .select("smtp_email,smtp_enc_password,smtp_folder,imap_host")
+                      .eq("id", user_id)
+                      .single()
+                      .execute()
+                      .data) or {}
 
-    if profile.get('smtp_email') and profile.get('smtp_enc_password'):
+    if profile.get("smtp_email") and profile.get("smtp_enc_password"):
         mails = fetch_emails_imap(
-            profile['smtp_email'],
-            profile['smtp_enc_password'],
-            folder   = profile.get('smtp_folder', 'INBOX'),
-            imap_host= profile.get('imap_host',    'imap.gmail.com')
+            profile["smtp_email"],
+            profile["smtp_enc_password"],
+            folder   = profile.get("smtp_folder", "INBOX"),
+            imap_host= profile.get("imap_host",    "imap.gmail.com")
         )
-        return jsonify({'emails': mails}), 200
+        return jsonify({"emails": mails}), 200
 
-    # else Gmail API
-    creds_data = supabase.table('tokens') \
-                         .select('credentials') \
-                         .eq('user_id', user_id).single().execute().data or {}
-    creds = Credentials.from_authorized_user_info(json.loads(creds_data['credentials']))
-    service = build('gmail', 'v1', credentials=creds)
-    res = service.users().messages().list(userId='me', q='is:unread').execute()
-    msgs = []
-    for m in res.get('messages', []):
-        full = service.users().messages().get(userId='me', id=m['id'], format='full').execute()
+    # Else Gmail API
+    creds_data = (supabase.table("tokens")
+                         .select("credentials")
+                         .eq("user_id", user_id)
+                         .single()
+                         .execute()
+                         .data) or {}
+    creds = Credentials.from_authorized_user_info(json.loads(creds_data["credentials"]))
+    service = build("gmail", "v1", credentials=creds)
+    res     = service.users().messages().list(userId="me", q="is:unread").execute()
+    msgs    = []
+    for m in res.get("messages", []):
+        full = service.users().messages().get(userId="me", id=m["id"], format="full").execute()
         msgs.append(full)
-    return jsonify({'emails': msgs}), 200
+    return jsonify({"emails": msgs}), 200
 
 # ----------------------------------------------------------------------------
-# Run
+# Run (for local testing)
 # ----------------------------------------------------------------------------
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
