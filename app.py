@@ -223,31 +223,51 @@ def dashboard_billing():
 def dashboard_settings():
     user_id = _require_user()
 
-    # ─── Handle Profile POST ────────────────────────────────
+    # Handle POST requests
     if request.method == "POST":
-        new_display_name = request.form.get("display_name", "").strip()
-        new_signature    = request.form.get("signature", "").strip()
-        supabase.table("profiles").update({
-            "display_name": new_display_name,
-            "signature":    new_signature
-        }).eq("id", user_id).execute()
+        section = request.form.get("section")
+        if section == "profile":
+            new_display_name = escape(request.form.get("display_name", "").strip())
+            new_signature = escape(request.form.get("signature", "").strip())
+            supabase.table("profiles").update({
+                "display_name": new_display_name,
+                "signature": new_signature
+            }).eq("id", user_id).execute()
+            
+        elif section == "security":
+            two_factor = request.form.get("two_factor") == "on"
+            email_notifications = request.form.get("email_notifications") == "on"
+            sms_alerts = request.form.get("sms_alerts") == "on"
+            supabase.table("profiles").update({
+                "two_factor": two_factor,
+                "email_notifications": email_notifications,
+                "sms_alerts": sms_alerts
+            }).eq("id", user_id).execute()
 
-    # ─── Fetch profile & flags ──────────────────────────────
+    # Fetch profile with SMTP status
     profile_resp = supabase.table("profiles") \
-                           .select("display_name, signature, ai_enabled") \
-                           .eq("id", user_id) \
-                           .single() \
-                           .execute()
-    profile = profile_resp.data or {"display_name":"", "signature":"", "ai_enabled": False}
+        .select("display_name, signature, ai_enabled, two_factor, email_notifications, sms_alerts, smtp_email") \
+        .eq("id", user_id) \
+        .single() \
+        .execute()
+    profile = profile_resp.data or {
+        "display_name": "",
+        "signature": "",
+        "ai_enabled": False,
+        "two_factor": False,
+        "email_notifications": False,
+        "sms_alerts": False,
+        "smtp_email": None
+    }
 
-    # ▶ Determine whether the saved Gmail creds are expired (so we can show “Reconnect”)
+    # Check Gmail token expiration for reconnect button
     show_reconnect = False
     try:
         toks = supabase.table("gmail_tokens") \
-                       .select("credentials") \
-                       .eq("user_id", user_id) \
-                       .single() \
-                       .execute().data
+            .select("credentials") \
+            .eq("user_id", user_id) \
+            .single() \
+            .execute().data
         if toks:
             creds_payload = toks["credentials"]
             creds = Credentials(
@@ -262,7 +282,6 @@ def dashboard_settings():
     except Exception:
         app.logger.warning(f"settings: could not check Gmail token for {user_id}")
 
-    # ▶ Render, passing show_reconnect and ai_enabled into the template
     return render_template(
         "partials/settings.html",
         profile=profile,
@@ -270,6 +289,22 @@ def dashboard_settings():
         show_reconnect=show_reconnect
     )
 
+# New routes for SMTP management
+@app.route("/connect_smtp_form", methods=["GET"])
+def connect_smtp_form():
+    user_id = request.args.get("user_id")
+    return render_template("partials/connect_smtp_form.html", user_id=user_id)
+
+@app.route("/disconnect_smtp", methods=["POST"])
+def disconnect_smtp():
+    user_id = request.form.get("user_id")
+    supabase.table("profiles").update({
+        "smtp_email": None,
+        "smtp_enc_password": None,
+        "smtp_host": None,
+        "imap_host": None
+    }).eq("id", user_id).execute()
+    return redirect(f"/dashboard/settings?user_id={user_id}")
 
 @app.route("/dashboard/home")
 def dashboard_home():
