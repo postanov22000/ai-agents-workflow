@@ -183,7 +183,26 @@ def dashboard():
         # 4) (Optional) set revenue & change if you ever have real data
         # revenue = your_calc()
         # revenue_change = your_calc_change()
+    # 4) Count "kits generated" for this user
+# (Assuming you flag each transaction row with kit_generated=True)
+    kit_rows = (
+        supabase
+        .table("transactions")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("kit_generated", True)
+        .execute()
+        .data
+        or []
+    )
+    kits_generated = len(kit_rows)
 
+    # 5) Compute extra estimated time saved
+    # e.g. you save ~15 minutes per generated kit
+    PER_KIT_SAVE_MINUTES = 15
+    estimated_saved = kits_generated * PER_KIT_SAVE_MINUTES
+
+  
     # Render with safe, numeric defaults
     return render_template(
         "dashboard.html",
