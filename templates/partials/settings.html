@@ -95,13 +95,13 @@
         </div>
         <div class="integration-details">
           <h4>Gmail (OAuth)</h4>
-          <div class="integration-status {{ 'status-connected' if profile.ai_enabled else '' }}">
-            <i class="fas {{ 'fa-check-circle' if profile.ai_enabled else 'fa-times-circle' }}"></i>
-            {{ 'Connected' if profile.ai_enabled else 'Not Connected' }}
+          <div class="integration-status {{ 'status-connected' if gmail_connected and not show_reconnect else 'status-expired' if gmail_connected and show_reconnect else '' }}">
+            <i class="fas {{ 'fa-check-circle' if gmail_connected and not show_reconnect else 'fa-exclamation-triangle' if gmail_connected and show_reconnect else 'fa-times-circle' }}"></i>
+            {{ 'Connected' if gmail_connected and not show_reconnect else 'Expired' if gmail_connected and show_reconnect else 'Not Connected' }}
           </div>
         </div>
         <div class="integration-actions">
-          {% if profile.ai_enabled %}
+          {% if gmail_connected %}
             <form method="POST" 
                   action="/disconnect_gmail" 
                   style="display:inline"
@@ -310,6 +310,15 @@
 
   input:disabled + .slider:before {
     background-color: #aaa;
+  }
+
+  /* Status styles */
+  .status-expired {
+    color: #ff9800;
+  }
+  
+  .status-expired i {
+    color: #ff9800;
   }
 </style>
 
