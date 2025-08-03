@@ -895,7 +895,14 @@ def trigger_process():
                     .eq("id", em_id).execute()
 
 
-
+          # After you’ve processed everything:
+    summary = {
+        "processed": all_processed,
+        "sent":      sent,
+        "drafted":   drafted,
+        "failed":    failed
+    }
+    return jsonify(summary), 200
 
 @app.route("/transaction/<txn_id>/ready", methods=["POST"])
 def mark_ready(txn_id):
