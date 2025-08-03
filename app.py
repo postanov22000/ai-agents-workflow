@@ -508,9 +508,15 @@ def connect_gmail():
 @app.route("/oauth2callback")
 def oauth2callback():
     """
-    Handles OAuth2 callback from Google.
+    Handles OAuth2 callback from Google with state parameter for user_id.
     """
     try:
+        # Extract state parameter containing user_id
+        user_id = request.args.get("state")
+        if not user_id:
+            app.logger.error("OAuth2 callback missing state parameter")
+            return "<h1>Authentication Failed</h1><p>Missing state parameter</p>", 400
+        
         flow = Flow.from_client_config(
             {
                 "web": {
@@ -527,7 +533,8 @@ def oauth2callback():
                 "https://www.googleapis.com/auth/userinfo.email",
                 "https://www.googleapis.com/auth/gmail.compose",
                 "openid"
-            ]
+            ],
+            state=user_id  # Pass state through to maintain context
         )
         flow.redirect_uri = os.environ["REDIRECT_URI"]
         flow.fetch_token(authorization_response=request.url)
@@ -544,33 +551,13 @@ def oauth2callback():
         if not email:
             raise ValueError("No email found in Google ID token")
 
-        # Find or create Auth user in Supabase
-        auth_url = f"{SUPABASE_URL}/auth/v1/admin/users"
-        headers = {
-            "apikey": SUPABASE_SERVICE_ROLE_KEY,
-            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"
-        }
-        resp = requests.get(auth_url, headers=headers, params={"email": email})
-        if resp.status_code != 200:
-            raise Exception(f"Supabase Admin API error: {resp.status_code} {resp.text}")
-
-        users = resp.json().get("users", [])
-        matching = [u for u in users if u["email"] == email]
-        if not matching:
-            raise Exception("User not found in Supabase Auth")
-        user_id = matching[0]["id"]
-
-        # Ensure profiles row
+        # Verify user exists in our system
         profile_resp = supabase.table("profiles").select("id").eq("id", user_id).execute()
         if not profile_resp.data:
-            supabase.table("profiles").insert({
-                "id": user_id,
-                "email": email,
-                "full_name": full_name,
-                "ai_enabled": True
-            }).execute()
+            app.logger.warning(f"User {user_id} not found in profiles table")
+            return f"<h1>Authentication Failed</h1><p>User profile not found</p>", 404
 
-        # Upsert gmail_tokens
+        # Upsert gmail_tokens with the user_id from state
         creds_payload = {
             "user_id": user_id,
             "user_email": email,
@@ -585,12 +572,19 @@ def oauth2callback():
         }
         supabase.table("gmail_tokens").upsert(creds_payload).execute()
 
-        return redirect(f"/complete_profile?user_id={user_id}")
+        # Update profile with new email if needed
+        supabase.table("profiles").update({
+            "email": email,
+            "full_name": full_name,
+            "ai_enabled": True
+        }).eq("id", user_id).execute()
+
+        return redirect(f"/dashboard?user_id={user_id}")
 
     except Exception as e:
         app.logger.error(f"OAuth2 Callback Error: {str(e)}", exc_info=True)
         return f"<h1>Authentication Failed</h1><p>{str(e)}</p>", 500
-
+      
 @app.route("/complete_profile", methods=["GET", "POST"])
 def complete_profile():
     user_id = request.args.get("user_id")
