@@ -43,12 +43,16 @@
       </div>
     </div>
 
+    <!-- Kits Generated (replaces Monthly Revenue) -->
     <div class="metric-card">
-      <i class="fas fa-dollar-sign metric-icon"></i>
-      <h3>Monthly Revenue</h3>
-      <div class="metric-value" id="revenue">${{ "{:,.0f}".format(revenue|default(45230)) }}</div>
-      <div class="trend up"><i class="fas fa-arrow-up"></i>
-        <span>{{ revenue_change|default(12) }}% from last month</span>
+      <i class="fas fa-box metric-icon"></i>
+      <h3>Kits Generated</h3>
+      <div class="metric-value" id="kits-generated">
+        {{ kits_generated }}
+      </div>
+      <div class="trend up">
+        <i class="fas fa-check-circle"></i>
+        <span>{{ kits_generated }} this session</span>
       </div>
     </div>
   </div>
