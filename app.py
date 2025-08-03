@@ -248,8 +248,10 @@ def dashboard_settings():
         "smtp_email": None
     }
 
-    # ▶ Determine whether the saved Gmail creds are expired
+    # ▶ Determine Gmail connection status
+    gmail_connected = False
     show_reconnect = False
+    
     try:
         toks = supabase.table("gmail_tokens") \
                        .select("credentials") \
@@ -257,6 +259,7 @@ def dashboard_settings():
                        .single() \
                        .execute().data
         if toks:
+            gmail_connected = True
             creds_payload = toks["credentials"]
             creds = Credentials(
                 token=creds_payload["token"],
@@ -275,6 +278,7 @@ def dashboard_settings():
         "partials/settings.html",
         profile=profile,
         user_id=user_id,
+        gmail_connected=gmail_connected,
         show_reconnect=show_reconnect
     )
 # New routes for SMTP management
