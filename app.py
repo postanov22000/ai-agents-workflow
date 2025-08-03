@@ -454,7 +454,11 @@ def reconnect_gmail():
 @app.route("/connect-smtp", methods=["POST"])
 def route_connect_smtp():
     try:
-        data = request.get_json(force=True)
+        #data = request.get_json(force=True)
+        if request.is_json:
+            data = request.get_json()
+        else:
+            data = request.form.to_dict()
         # pull out all five required fields
         user_id      = data.get("user_id")
         smtp_email   = data.get("smtp_email")
