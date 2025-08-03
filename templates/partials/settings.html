@@ -95,17 +95,27 @@
         </div>
         <div class="integration-actions">
           {% if profile.ai_enabled %}
-          <form method="POST" action="/disconnect_gmail" style="display:inline">
-            <input type="hidden" name="user_id" value="{{ user_id }}">
-            <button class="btn btn-danger btn-sm">
-              <i class="fas fa-unlink"></i> Disconnect
-            </button>
-          </form>
-          {% else %}
-          <a href="/connect_gmail?user_id={{ user_id }}" class="btn btn-primary btn-sm">
-            <i class="fas fa-link"></i> Connect
-          </a>
-          {% endif %}
+     <form method="POST" action="/disconnect_gmail" style="display:inline">
+       <input type="hidden" name="user_id" value="{{ user_id }}">
+       <button class="btn btn-danger btn-sm">
+         <i class="fas fa-unlink"></i> Disconnect
+       </button>
+     </form>
+   {% else %}
+     <a href="/connect_gmail?user_id={{ user_id }}" class="btn btn-primary btn-sm">
+       <i class="fas fa-link"></i> Connect
+     </a>
+   {% endif %}
+ 
+   {# If we need to force a fresh OAuth flow #}
+   {% if show_reconnect %}
+     <form action="/connect_gmail" method="GET" style="display:inline; margin-left:8px;">
+       <input type="hidden" name="user_id" value="{{ user_id }}">
+       <button class="btn btn-primary btn-sm">
+         <i class="fas fa-link"></i> Reconnect
+       </button>
+     </form>
+   {% endif %}
         </div>
       </div>
 
