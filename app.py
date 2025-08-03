@@ -370,12 +370,16 @@ def dashboard_home():
 #----------------------------------------------------------------------
 @app.route("/reconnect_gmail")
 def reconnect_gmail():
+    """Handles both initial connection and reconnection to Gmail"""
     user_id = request.args.get("user_id")
-    # Create the OAuth flow
+    if not user_id:
+        return "Missing user ID", 400
+
     flow = Flow.from_client_config(
         {
             "web": {
                 "client_id": os.environ["GOOGLE_CLIENT_ID"],
+ 
                 "client_secret": os.environ["GOOGLE_CLIENT_SECRET"],
                 "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                 "token_uri": "https://oauth2.googleapis.com/token",
@@ -395,7 +399,7 @@ def reconnect_gmail():
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
-        state=user_id  # Pass user_id as state
+        state=user_id
     )
     return redirect(authorization_url)
   
@@ -507,9 +511,7 @@ def connect_gmail():
 
 @app.route("/oauth2callback")
 def oauth2callback():
-    """
-    Handles OAuth2 callback from Google with state parameter for user_id.
-    """
+    """Handles OAuth2 callback from Google"""
     try:
         # Extract state parameter containing user_id
         user_id = request.args.get("state")
@@ -534,30 +536,23 @@ def oauth2callback():
                 "https://www.googleapis.com/auth/gmail.compose",
                 "openid"
             ],
-            state=user_id  # Pass state through to maintain context
+            state=user_id
         )
         flow.redirect_uri = os.environ["REDIRECT_URI"]
         flow.fetch_token(authorization_response=request.url)
         credentials = flow.credentials
 
+        # Verify ID token
         id_info = id_token.verify_oauth2_token(
             credentials.id_token,
             grequests.Request(),
             os.environ["GOOGLE_CLIENT_ID"]
         )
         email = id_info.get("email")
-        full_name = id_info.get("name") or email.split("@")[0]
-
         if not email:
             raise ValueError("No email found in Google ID token")
 
-        # Verify user exists in our system
-        profile_resp = supabase.table("profiles").select("id").eq("id", user_id).execute()
-        if not profile_resp.data:
-            app.logger.warning(f"User {user_id} not found in profiles table")
-            return f"<h1>Authentication Failed</h1><p>User profile not found</p>", 404
-
-        # Upsert gmail_tokens with the user_id from state
+        # Upsert gmail tokens
         creds_payload = {
             "user_id": user_id,
             "user_email": email,
@@ -572,7 +567,8 @@ def oauth2callback():
         }
         supabase.table("gmail_tokens").upsert(creds_payload).execute()
 
-        # Update profile with new email if needed
+        # Update user profile
+        full_name = id_info.get("name") or email.split("@")[0]
         supabase.table("profiles").update({
             "email": email,
             "full_name": full_name,
