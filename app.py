@@ -120,7 +120,7 @@ def home():
 def dashboard():
     user_id = request.args.get("user_id", "").strip()
 
-    # --- GUEST DEFAULTS ---
+    # ── GUEST DEFAULTS ──
     name            = "Guest"
     ai_enabled      = False
     generate_leases = False
@@ -130,14 +130,20 @@ def dashboard():
     revenue         = 0
     revenue_change  = 0
 
+    # Ensure these always exist for the template
+    kits_generated = 0
+    estimated_saved = 0
+
     if user_id:
         # 1) Load profile
         try:
-            resp = (supabase.table("profiles")
-                            .select("full_name, ai_enabled, generate_leases")
-                            .eq("id", user_id)
-                            .single()
-                            .execute())
+            resp = (
+                supabase.table("profiles")
+                         .select("full_name, ai_enabled, generate_leases")
+                         .eq("id", user_id)
+                         .single()
+                         .execute()
+            )
             if resp.data:
                 name            = resp.data["full_name"]
                 ai_enabled      = resp.data["ai_enabled"]
@@ -147,25 +153,31 @@ def dashboard():
 
         # 2) Count today's emails
         try:
-            today     = date.today().isoformat()
-            rows      = (supabase.table("emails")
-                                .select("sent_at")
-                                .eq("user_id", user_id)
-                                .eq("status", "sent")
-                                .execute()
-                                .data or [])
-            emails_sent = sum(1 for e in rows if e.get("sent_at", "").startswith(today))
+            today = date.today().isoformat()
+            rows  = (
+                supabase.table("emails")
+                        .select("sent_at")
+                        .eq("user_id", user_id)
+                        .eq("status", "sent")
+                        .execute()
+                        .data
+                or []
+            )
+            emails_sent = sum(1 for e in rows if e.get("sent_at","").startswith(today))
             time_saved  = emails_sent * 5.5
         except Exception:
             app.logger.warning(f"dashboard: failed to count emails for {user_id}")
 
         # 3) Gmail reconnect flag
         try:
-            toks = (supabase.table("gmail_tokens")
-                           .select("credentials")
-                           .eq("user_id", user_id)
-                           .execute()
-                           .data or [])
+            toks = (
+                supabase.table("gmail_tokens")
+                         .select("credentials")
+                         .eq("user_id", user_id)
+                         .execute()
+                         .data
+                or []
+            )
             if toks:
                 cd = toks[0]["credentials"]
                 creds = Credentials(
@@ -176,34 +188,27 @@ def dashboard():
                     client_secret=cd["client_secret"],
                     scopes=cd["scopes"],
                 )
-                show_reconnect = bool(creds.expired)
+                show_reconnect = creds.expired
         except Exception:
             app.logger.warning(f"dashboard: failed to check Gmail token for {user_id}")
 
-        # 4) (Optional) set revenue & change if you ever have real data
-        # revenue = your_calc()
-        # revenue_change = your_calc_change()
-    # 4) Count "kits generated" for this user
-# (Assuming you flag each transaction row with kit_generated=True)
-    kit_rows = (
-        supabase
-        .table("transactions")
-        .select("id")
-        .eq("user_id", user_id)
-        .eq("kit_generated", True)
-        .execute()
-        .data
-        or []
-    )
-    kits_generated = len(kit_rows)
+        # 4) Count "kits generated" for this user
+        kit_rows = (
+            supabase.table("transactions")
+                     .select("id")
+                     .eq("user_id", user_id)
+                     .eq("kit_generated", True)
+                     .execute()
+                     .data
+            or []
+        )
+        kits_generated = len(kit_rows)
 
-    # 5) Compute extra estimated time saved
-    # e.g. you save ~15 minutes per generated kit
-    PER_KIT_SAVE_MINUTES = 15
-    estimated_saved = kits_generated * PER_KIT_SAVE_MINUTES
+        # 5) Compute extra estimated time saved (e.g. 15 min per kit)
+        PER_KIT_SAVE_MINUTES = 15
+        estimated_saved = kits_generated * PER_KIT_SAVE_MINUTES
 
-  
-    # Render with safe, numeric defaults
+    # ── Render dashboard ──
     return render_template(
         "dashboard.html",
         user_id=user_id,
@@ -212,8 +217,8 @@ def dashboard():
         generate_leases=generate_leases,
         emails_sent=emails_sent,
         time_saved=time_saved,
-        estimated_saved=estimated_saved,  # new computed value
-        kits_generated=kits_generated,      # new computed value 
+        estimated_saved=estimated_saved,
+        kits_generated=kits_generated,
         show_reconnect=show_reconnect,
         revenue=revenue,
         revenue_change=revenue_change
