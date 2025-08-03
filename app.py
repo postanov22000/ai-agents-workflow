@@ -368,6 +368,37 @@ def dashboard_home():
         generate_leases=generate_leases,
     )
 #----------------------------------------------------------------------
+@app.route("/reconnect_gmail")
+def reconnect_gmail():
+    user_id = request.args.get("user_id")
+    # Create the OAuth flow
+    flow = Flow.from_client_config(
+        {
+            "web": {
+                "client_id": os.environ["GOOGLE_CLIENT_ID"],
+                "client_secret": os.environ["GOOGLE_CLIENT_SECRET"],
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [os.environ["REDIRECT_URI"]]
+            }
+        },
+        scopes=[
+            "https://www.googleapis.com/auth/gmail.send",
+            "https://www.googleapis.com/auth/gmail.readonly",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "https://www.googleapis.com/auth/gmail.compose",
+            "openid"
+        ]
+    )
+    flow.redirect_uri = os.environ["REDIRECT_URI"]
+    authorization_url, _ = flow.authorization_url(
+        access_type="offline",
+        include_granted_scopes="true",
+        prompt="consent",
+        state=user_id  # Pass user_id as state
+    )
+    return redirect(authorization_url)
+  
 @app.route("/connect-smtp", methods=["POST"])
 def route_connect_smtp():
     try:
