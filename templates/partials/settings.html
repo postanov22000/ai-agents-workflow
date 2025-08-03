@@ -90,13 +90,13 @@
       <h2><i class="fas fa-plug"></i> Integrations</h2>
     </div>
     <div class="integration-grid">
-      <!-- Gmail Integration -->
+      <!-- Gmail OAuth Integration -->
       <div class="integration-card">
         <div class="integration-icon">
           <i class="fab fa-google"></i>
         </div>
         <div class="integration-details">
-          <h4>Gmail</h4>
+          <h4>Gmail (OAuth)</h4>
           <div class="integration-status {{ 'status-connected' if profile.ai_enabled else '' }}">
             <i class="fas {{ 'fa-check-circle' if profile.ai_enabled else 'fa-times-circle' }}"></i>
             {{ 'Connected' if profile.ai_enabled else 'Not Connected' }}
@@ -135,3 +135,116 @@
           {% endif %}
         </div>
       </div>
+
+      <!-- SMTP/IMAP Integration -->
+      <div class="integration-card">
+        <div class="integration-icon">
+          <i class="fas fa-envelope"></i>
+        </div>
+        <div class="integration-details">
+          <h4>SMTP/IMAP</h4>
+          <div class="integration-status {{ 'status-connected' if profile.smtp_email else '' }}">
+            <i class="fas {{ 'fa-check-circle' if profile.smtp_email else 'fa-times-circle' }}"></i>
+            {{ 'Connected' if profile.smtp_email else 'Not Connected' }}
+          </div>
+        </div>
+        <div class="integration-actions">
+          {% if profile.smtp_email %}
+            <form method="POST" 
+                  action="/disconnect_smtp" 
+                  style="display:inline"
+                  hx-post="/disconnect_smtp"
+                  hx-target=".settings-section"
+                  hx-swap="outerHTML">
+              <input type="hidden" name="user_id" value="{{ user_id }}">
+              <button type="submit" class="btn btn-danger btn-sm">
+                <i class="fas fa-unlink"></i> Disconnect
+              </button>
+            </form>
+          {% else %}
+            <button class="btn btn-primary btn-sm"
+                    hx-get="/connect_smtp_form?user_id={{ user_id }}"
+                    hx-target="body"
+                    hx-swap="beforeend">
+              <i class="fas fa-link"></i> Connect
+            </button>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Other integrations placeholders -->
+      <div class="integration-card">
+        <div class="integration-icon">
+          <i class="fas fa-calendar-alt"></i>
+        </div>
+        <div class="integration-details">
+          <h4>Google Calendar</h4>
+          <div class="integration-status status-not-connected">
+            <i class="fas fa-times-circle"></i> Not Connected
+          </div>
+        </div>
+        <div class="integration-actions">
+          <button class="btn btn-secondary btn-sm">
+            <i class="fas fa-link"></i> Connect
+          </button>
+        </div>
+      </div>
+
+      <div class="integration-card">
+        <div class="integration-icon">
+          <i class="fas fa-database"></i>
+        </div>
+        <div class="integration-details">
+          <h4>CRM Integration</h4>
+          <div class="integration-status status-not-connected">
+            <i class="fas fa-times-circle"></i> Not Connected
+          </div>
+        </div>
+        <div class="integration-actions">
+          <button class="btn btn-secondary btn-sm">
+            <i class="fas fa-link"></i> Connect
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Danger Zone -->
+  <div class="settings-card danger-zone">
+    <div class="section-header">
+      <h2><i class="fas fa-exclamation-triangle"></i> Danger Zone</h2>
+    </div>
+    <div class="danger-content">
+      <p>These actions are irreversible. Please proceed with caution.</p>
+      <div class="danger-actions">
+        <button class="btn btn-danger">
+          <i class="fas fa-file-export"></i> Export All Data
+        </button>
+        <button class="btn btn-danger">
+          <i class="fas fa-trash-alt"></i> Delete Account
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Toggle switch interactions
+  document.querySelectorAll('.toggle-switch input').forEach(switchEl => {
+    switchEl.addEventListener('change', function() {
+      const label = this.closest('.toggle-label');
+      label.querySelector('span').textContent = this.checked ? 'Enabled' : 'Disabled';
+    });
+  });
+
+  // Confirm dangerous actions
+  document.querySelectorAll('.danger-zone .btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.preventDefault();
+      const action = this.textContent.trim();
+      if (confirm(`Are you sure you want to ${action}? This cannot be undone.`)) {
+        alert(`Action "${action}" confirmed.`);
+      }
+    });
+  });
+</script>
