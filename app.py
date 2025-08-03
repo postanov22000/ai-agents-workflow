@@ -223,35 +223,51 @@ def dashboard_billing():
 def dashboard_settings():
     user_id = _require_user()
 
+    # ─── Handle Profile POST ────────────────────────────────
     if request.method == "POST":
-        # Only handling profile section here; you can extend for security/integrations
         new_display_name = request.form.get("display_name", "").strip()
         new_signature    = request.form.get("signature", "").strip()
+        supabase.table("profiles").update({
+            "display_name": new_display_name,
+            "signature":    new_signature
+        }).eq("id", user_id).execute()
 
-        # Persist updates
-        supabase.table("profiles") \
-                .update({
-                    "display_name": new_display_name,
-                    "signature":    new_signature
-                }) \
-                .eq("id", user_id) \
-                .execute()
+    # ─── Fetch profile & flags ──────────────────────────────
+    profile_resp = supabase.table("profiles") \
+                           .select("display_name, signature, ai_enabled") \
+                           .eq("id", user_id) \
+                           .single() \
+                           .execute()
+    profile = profile_resp.data or {"display_name":"", "signature":"", "ai_enabled": False}
 
-    # On both GET and after POST, re‑fetch the latest profile
-    profile = (
-        supabase
-        .table("profiles")
-        .select("display_name, signature, ai_enabled")
-        .eq("id", user_id)
-        .single()
-        .execute()
-        .data
-    )
+    # ▶ Determine whether the saved Gmail creds are expired (so we can show “Reconnect”)
+    show_reconnect = False
+    try:
+        toks = supabase.table("gmail_tokens") \
+                       .select("credentials") \
+                       .eq("user_id", user_id) \
+                       .single() \
+                       .execute().data
+        if toks:
+            creds_payload = toks["credentials"]
+            creds = Credentials(
+                token=creds_payload["token"],
+                refresh_token=creds_payload["refresh_token"],
+                token_uri=creds_payload["token_uri"],
+                client_id=creds_payload["client_id"],
+                client_secret=creds_payload["client_secret"],
+                scopes=creds_payload["scopes"],
+            )
+            show_reconnect = creds.expired
+    except Exception:
+        app.logger.warning(f"settings: could not check Gmail token for {user_id}")
 
+    # ▶ Render, passing show_reconnect and ai_enabled into the template
     return render_template(
         "partials/settings.html",
         profile=profile,
-        user_id=user_id
+        user_id=user_id,
+        show_reconnect=show_reconnect
     )
 
 
