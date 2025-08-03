@@ -145,7 +145,13 @@
       </div>
     </div>
   </div>
-
+{% if show_reconnect %}
+        <form action="/connect_gmail" method="GET">
+          <button class="btn btn-primary">
+            <i class="fas fa-link"></i> Reconnect Gmail
+          </button>
+        </form>
+        {% endif %}
   <!-- Danger Zone -->
   <div class="settings-card danger-zone">
     <div class="section-header">
