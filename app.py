@@ -193,6 +193,8 @@ def dashboard():
         generate_leases=generate_leases,
         emails_sent=emails_sent,
         time_saved=time_saved,
+        estimated_saved=estimated_saved,  # new computed value
+        kits_generated=kits_generated,      # new computed value 
         show_reconnect=show_reconnect,
         revenue=revenue,
         revenue_change=revenue_change
@@ -356,6 +358,24 @@ def dashboard_home():
             show_reconnect = creds.expired
         except Exception:
             pass
+    # ── 4) Count "kits generated" for this user ─────────────────────────
+     # (Assuming you flag each transaction row with kit_generated=True)
+     kit_rows = (
+         supabase
+           .table("transactions")
+           .select("id")
+           .eq("user_id", user_id)
+           .eq("kit_generated", True)
+           .execute()
+           .data
+         or []
+     )
+     kits_generated = len(kit_rows)
+ 
+     # ── 5) Compute extra estimated time saved ───────────────────────────
+     # e.g. you save ~15 minutes per generated kit
+     PER_KIT_SAVE_MINUTES = 15
+     estimated_saved = kits_generated * PER_KIT_SAVE_MINUTES
 
     return render_template(
         "partials/home.html",
@@ -363,6 +383,8 @@ def dashboard_home():
         user_id=user_id,
         emails_sent=emails_sent_today,
         time_saved=time_saved,
+        estimated_saved=estimated_saved,  # new computed value
+        kits_generated=kits_generated,      # new computed value
         ai_enabled=ai_enabled,
         show_reconnect=show_reconnect,
         generate_leases=generate_leases,
