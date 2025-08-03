@@ -1,0 +1,46 @@
+<div class="modal-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;justify-content:center;align-items:center;z-index:1000;">
+  <div class="modal-content" style="background:#112240;padding:2rem;border-radius:8px;max-width:500px;width:100%;border:1px solid #64ffda;">
+    <h3 style="color:#64ffda;margin-bottom:1.5rem;">Connect SMTP/IMAP</h3>
+    <form method="POST" 
+          action="/connect-smtp" 
+          hx-post="/connect-smtp"
+          hx-target=".modal-overlay"
+          hx-swap="outerHTML">
+      <input type="hidden" name="user_id" value="{{ user_id }}">
+      
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label style="display:block;margin-bottom:0.5rem;color:#8892b0;">SMTP Email</label>
+        <input type="email" name="smtp_email" required style="width:100%;padding:0.5rem;background:rgba(255,255,255,0.1);border:1px solid #64ffda;border-radius:4px;color:white;">
+      </div>
+      
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label style="display:block;margin-bottom:0.5rem;color:#8892b0;">SMTP Password/App Password</label>
+        <input type="password" name="smtp_password" required style="width:100%;padding:0.5rem;background:rgba(255,255,255,0.1);border:1px solid #64ffda;border-radius:4px;color:white;">
+      </div>
+      
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label style="display:block;margin-bottom:0.5rem;color:#8892b0;">SMTP Host</label>
+        <input type="text" name="smtp_host" value="smtp.gmail.com" required style="width:100%;padding:0.5rem;background:rgba(255,255,255,0.1);border:1px solid #64ffda;border-radius:4px;color:white;">
+      </div>
+      
+      <div class="form-group" style="margin-bottom:1.5rem;">
+        <label style="display:block;margin-bottom:0.5rem;color:#8892b0;">IMAP Host</label>
+        <input type="text" name="imap_host" value="imap.gmail.com" required style="width:100%;padding:0.5rem;background:rgba(255,255,255,0.1);border:1px solid #64ffda;border-radius:4px;color:white;">
+      </div>
+      
+      <div style="display:flex;justify-content:flex-end;gap:0.5rem;">
+        <button type="button" 
+                style="padding:0.5rem 1rem;background:transparent;border:1px solid #f72585;color:#f72585;border-radius:4px;"
+                hx-get="/dashboard/settings?user_id={{ user_id }}"
+                hx-target=".modal-overlay"
+                hx-swap="outerHTML">
+          Cancel
+        </button>
+        <button type="submit" 
+                style="padding:0.5rem 1rem;background:#64ffda;color:#0a192f;border:none;border-radius:4px;">
+          Connect
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
