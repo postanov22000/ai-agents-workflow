@@ -8,7 +8,7 @@ from email.mime.text import MIMEText
 from cryptography.fernet import Fernet
 
 # ── load your one-and-only key from ENV ───────────────────────────────────────
-FERNET_KEY = os.environ["ENCRYPTION_KEY"].encode()   # must match how you encrypted them originally
+FERNET_KEY = os.environ["ENCRYPTION_KEY"].encode()   # must match how you encrypted them originally 
 cipher      = Fernet(FERNET_KEY)
 
 # ── SMTP send helper ─────────────────────────────────────────────────────────
