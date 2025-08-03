@@ -39,22 +39,17 @@
     </form>
   </div>
 
-  <!-- Security Settings -->
+  <!-- Security Settings (Placeholder) -->
   <div class="settings-card">
     <div class="section-header">
-      <h2><i class="fas fa-lock"></i> Security</h2>
+      <h2><i class="fas fa-lock"></i> Security <small>(Coming Soon)</small></h2>
     </div>
-    <form method="POST" 
-          action="/dashboard/settings?user_id={{ user_id }}"
-          hx-post="/dashboard/settings?user_id={{ user_id }}"
-          hx-target=".settings-section"
-          hx-swap="outerHTML">
-      <input type="hidden" name="section" value="security">
+    <div class="placeholder-feature">
       <div class="toggle-group">
         <label class="toggle-label">
           <span>Two-Factor Authentication</span>
           <label class="toggle-switch">
-            <input type="checkbox" name="two_factor" {{ 'checked' if profile.two_factor else '' }}>
+            <input type="checkbox" disabled>
             <span class="slider"></span>
           </label>
         </label>
@@ -64,7 +59,7 @@
         <label class="toggle-label">
           <span>Email Notifications</span>
           <label class="toggle-switch">
-            <input type="checkbox" name="email_notifications" {{ 'checked' if profile.email_notifications else '' }}>
+            <input type="checkbox" disabled>
             <span class="slider"></span>
           </label>
         </label>
@@ -73,15 +68,18 @@
         <label class="toggle-label">
           <span>SMS Alerts</span>
           <label class="toggle-switch">
-            <input type="checkbox" name="sms_alerts" {{ 'checked' if profile.sms_alerts else '' }}>
+            <input type="checkbox" disabled>
             <span class="slider"></span>
           </label>
         </label>
       </div>
-      <button type="submit" class="btn btn-secondary">
+      <button class="btn btn-secondary" disabled>
         <i class="fas fa-save"></i> Save Security Settings
       </button>
-    </form>
+      <p class="placeholder-note">
+        <i class="fas fa-info-circle"></i> Security features are coming in a future update!
+      </p>
+    </div>
   </div>
 
   <!-- Integrations -->
@@ -184,7 +182,7 @@
           </div>
         </div>
         <div class="integration-actions">
-          <button class="btn btn-secondary btn-sm">
+          <button class="btn btn-secondary btn-sm" disabled>
             <i class="fas fa-link"></i> Connect
           </button>
         </div>
@@ -201,7 +199,7 @@
           </div>
         </div>
         <div class="integration-actions">
-          <button class="btn btn-secondary btn-sm">
+          <button class="btn btn-secondary btn-sm" disabled>
             <i class="fas fa-link"></i> Connect
           </button>
         </div>
@@ -217,10 +215,10 @@
     <div class="danger-content">
       <p>These actions are irreversible. Please proceed with caution.</p>
       <div class="danger-actions">
-        <button class="btn btn-danger">
+        <button class="btn btn-danger" disabled>
           <i class="fas fa-file-export"></i> Export All Data
         </button>
-        <button class="btn btn-danger">
+        <button class="btn btn-danger" disabled>
           <i class="fas fa-trash-alt"></i> Delete Account
         </button>
       </div>
@@ -228,9 +226,96 @@
   </div>
 </div>
 
+<style>
+  /* Placeholder feature styles */
+  .placeholder-feature {
+    opacity: 0.7;
+    position: relative;
+  }
+
+  .placeholder-feature:before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
+    cursor: not-allowed;
+  }
+
+  .placeholder-note {
+    margin-top: 15px;
+    padding: 10px;
+    background: rgba(100, 255, 218, 0.1);
+    border-left: 3px solid #64ffda;
+    color: #64ffda;
+    font-size: 0.9rem;
+  }
+
+  .placeholder-note i {
+    margin-right: 5px;
+  }
+
+  /* Toggle switch styles */
+  .toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+  }
+
+  .toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 24px;
+  }
+
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+  }
+
+  input:checked + .slider {
+    background: #64ffda;
+  }
+
+  input:checked + .slider:before {
+    transform: translateX(26px);
+  }
+
+  input:disabled + .slider {
+    background-color: #555;
+    cursor: not-allowed;
+  }
+
+  input:disabled + .slider:before {
+    background-color: #aaa;
+  }
+</style>
+
 <script>
   // Toggle switch interactions
-  document.querySelectorAll('.toggle-switch input').forEach(switchEl => {
+  document.querySelectorAll('.toggle-switch input:not(:disabled)').forEach(switchEl => {
     switchEl.addEventListener('change', function() {
       const label = this.closest('.toggle-label');
       label.querySelector('span').textContent = this.checked ? 'Enabled' : 'Disabled';
@@ -238,7 +323,7 @@
   });
 
   // Confirm dangerous actions
-  document.querySelectorAll('.danger-zone .btn').forEach(btn => {
+  document.querySelectorAll('.danger-zone .btn:not(:disabled)').forEach(btn => {
     btn.addEventListener('click', function(e) {
       e.preventDefault();
       const action = this.textContent.trim();
