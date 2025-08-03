@@ -786,51 +786,82 @@ def trigger_process():
                 .data or []
     )
 
-    # ── 6) Send or Draft via Gmail, enforcing 20/day cap ──
+    # ── 6) Send via SMTP fallback or Gmail API, enforcing 20/day cap ──
     for rec in ready:
-        em_id = rec["id"]
-        uid   = rec["user_id"]
+        em_id     = rec["id"]
+        uid       = rec["user_id"]
+        to_addr   = rec["sender_email"]
+        lease_flag= supabase.table("profiles")\
+                             .select("generate_leases")\
+                             .eq("id", uid).single().execute().data.get("generate_leases", False)
+        # Build the HTML reply
+        body_html= (rec["processed_content"] or "").replace("\n", "<br>")
+        prof_sig = supabase.table("profiles")\
+                           .select("display_name, signature")\
+                           .eq("id", uid).single().execute().data or {}
+        if prof_sig.get("display_name"):
+            body_html = body_html.replace("[Your Name]", prof_sig["display_name"])
+        full_html = f"<html><body><p>{body_html}</p>{prof_sig.get('signature','')}</body></html>"
 
-        # If user already hit their 20‑email/day limit, mark as error
+        # 20-email/day limit
         if emails_sent_today.get(uid, 0) >= 20:
             failed.append(em_id)
             supabase.table("emails")\
-                    .update({
-                        "status": "error",
-                        "error_message": "Daily email limit of 20 reached"
-                    })\
+                    .update({"status":"error","error_message":"Daily email limit reached"})\
                     .eq("id", em_id).execute()
             continue
 
-        to_addr   = rec["sender_email"]
-        html_body = (rec["processed_content"] or "").replace("\n", "<br>")
-
+        # 1) Try SMTP fallback
         prof = supabase.table("profiles")\
-                       .select("display_name, signature, generate_leases")\
+                       .select("smtp_email,smtp_enc_password,smtp_host")\
                        .eq("id", uid).single().execute().data or {}
-        display, sig, lease_flag = prof.get("display_name",""), prof.get("signature",""), prof.get("generate_leases", False)
-        if display:
-            html_body = html_body.replace("[Your Name]", display)
-        full_html = f"<html><body><p>{html_body}</p>{sig}</body></html>"
 
+        if prof.get("smtp_email") and prof.get("smtp_enc_password"):
+            smtp_email = prof["smtp_email"]
+            smtp_pass  = fernet.decrypt(prof["smtp_enc_password"].encode()).decode()
+            smtp_host  = prof.get("smtp_host", "smtp.gmail.com")
+
+            try:
+                send_email_smtp(
+                    smtp_email,
+                    smtp_pass,
+                    to_addr,
+                    "Lease Agreement Draft" if lease_flag else "Re: Your Email",
+                    full_html,
+                    smtp_host=smtp_host
+                )
+                sent.append(em_id)
+            except Exception as e:
+                failed.append(em_id)
+                supabase.table("emails")\
+                        .update({"status":"error","error_message":str(e)})\
+                        .eq("id", em_id).execute()
+            else:
+                supabase.table("emails")\
+                        .update({"status":"sent","sent_at":datetime.utcnow().isoformat()})\
+                        .eq("id", em_id).execute()
+                emails_sent_today[uid] = emails_sent_today.get(uid,0) + 1
+            continue
+
+        # 2) Fallback to Gmail API
         tok = supabase.table("gmail_tokens")\
                       .select("credentials")\
                       .eq("user_id", uid).limit(1).execute().data or []
         if not tok:
             failed.append(em_id)
             supabase.table("emails")\
-                    .update({"status":"error","error_message":"No Gmail token"})\
+                    .update({"status":"error","error_message":"No SMTP creds or Gmail token"})\
                     .eq("id", em_id).execute()
             continue
 
-        cd = tok[0]["credentials"]
+        creds_data = tok[0]["credentials"]
         creds = Credentials(
-            token=cd["token"],
-            refresh_token=cd["refresh_token"],
-            token_uri=cd["token_uri"],
-            client_id=cd["client_id"],
-            client_secret=cd["client_secret"],
-            scopes=cd["scopes"],
+            token=creds_data["token"],
+            refresh_token=creds_data["refresh_token"],
+            token_uri=creds_data["token_uri"],
+            client_id=creds_data["client_id"],
+            client_secret=creds_data["client_secret"],
+            scopes=creds_data["scopes"]
         )
         if creds.expired and creds.refresh_token:
             creds.refresh(GoogleRequest())
@@ -846,20 +877,16 @@ def trigger_process():
             if lease_flag:
                 svc.users().drafts().create(userId="me", body={"message":{"raw":raw}}).execute()
                 drafted.append(em_id)
+                status_to = "drafted"
             else:
                 svc.users().messages().send(userId="me", body={"raw":raw}).execute()
                 sent.append(em_id)
+                status_to = "sent"
 
-            # Mark sent and record timestamp
             supabase.table("emails")\
-                    .update({
-                        "status": "drafted" if lease_flag else "sent",
-                        "sent_at": datetime.utcnow().isoformat()
-                    })\
+                    .update({"status":status_to,"sent_at":datetime.utcnow().isoformat()})\
                     .eq("id", em_id).execute()
-
-            # Increment this user’s daily counter
-            emails_sent_today[uid] = emails_sent_today.get(uid, 0) + 1
+            emails_sent_today[uid] = emails_sent_today.get(uid,0) + 1
 
         except Exception as e:
             failed.append(em_id)
@@ -867,13 +894,6 @@ def trigger_process():
                     .update({"status":"error","error_message":str(e)})\
                     .eq("id", em_id).execute()
 
-    summary = {
-        "processed": all_processed,
-        "sent":      sent,
-        "drafted":   drafted,
-        "failed":    failed
-    }
-    return jsonify(summary), 200
 
 
 
