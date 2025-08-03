@@ -7,7 +7,12 @@
     <div class="section-header">
       <h2><i class="fas fa-user"></i> Profile Information</h2>
     </div>
-    <form class="settings-form" method="POST" action="/dashboard/settings?user_id={{ user_id }}">
+    <form class="settings-form" 
+          method="POST" 
+          action="/dashboard/settings?user_id={{ user_id }}"
+          hx-post="/dashboard/settings?user_id={{ user_id }}"
+          hx-target=".settings-section"
+          hx-swap="outerHTML">
       <input type="hidden" name="section" value="profile">
       <div class="form-group">
         <label for="displayName">Display Name</label>
@@ -16,7 +21,7 @@
           id="displayName"
           name="display_name"
           class="form-control"
-          value="{{ profile.display_name or '' }}"
+          value="{{ profile.display_name or '' | e }}"
         >
       </div>
       <div class="form-group">
@@ -26,7 +31,7 @@
           name="signature"
           class="form-control"
           rows="4"
-        >{{ profile.signature or '' }}</textarea>
+        >{{ profile.signature or '' | e }}</textarea>
       </div>
       <button type="submit" class="btn btn-primary">
         <i class="fas fa-save"></i> Update Profile
@@ -39,7 +44,11 @@
     <div class="section-header">
       <h2><i class="fas fa-lock"></i> Security</h2>
     </div>
-    <form method="POST" action="/dashboard/settings?user_id={{ user_id }}">
+    <form method="POST" 
+          action="/dashboard/settings?user_id={{ user_id }}"
+          hx-post="/dashboard/settings?user_id={{ user_id }}"
+          hx-target=".settings-section"
+          hx-swap="outerHTML">
       <input type="hidden" name="section" value="security">
       <div class="toggle-group">
         <label class="toggle-label">
@@ -95,102 +104,34 @@
         </div>
         <div class="integration-actions">
           {% if profile.ai_enabled %}
-            <form method="POST" action="/disconnect_gmail" style="display:inline">
+            <form method="POST" 
+                  action="/disconnect_gmail" 
+                  style="display:inline"
+                  hx-post="/disconnect_gmail"
+                  hx-target=".settings-section"
+                  hx-swap="outerHTML">
               <input type="hidden" name="user_id" value="{{ user_id }}">
-              <button class="btn btn-danger btn-sm">
+              <button type="submit" class="btn btn-danger btn-sm">
                 <i class="fas fa-unlink"></i> Disconnect
               </button>
             </form>
+            {% if show_reconnect %}
+              <a href="/connect_gmail?user_id={{ user_id }}" 
+                 class="btn btn-primary btn-sm"
+                 hx-get="/connect_gmail?user_id={{ user_id }}"
+                 hx-target="body"
+                 hx-swap="beforeend">
+                <i class="fas fa-sync-alt"></i> Reconnect
+              </a>
+            {% endif %}
           {% else %}
-            <a href="/connect_gmail?user_id={{ user_id }}" class="btn btn-primary btn-sm">
+            <a href="/connect_gmail?user_id={{ user_id }}" 
+               class="btn btn-primary btn-sm"
+               hx-get="/connect_gmail?user_id={{ user_id }}"
+               hx-target="body"
+               hx-swap="beforeend">
               <i class="fas fa-link"></i> Connect
             </a>
           {% endif %}
-
-          {# Show 'Reconnect' when a fresh OAuth flow is required #}
-          {% if show_reconnect %}
-            <form action="/connect_gmail" method="GET" style="display:inline; margin-left:8px;">
-              <input type="hidden" name="user_id" value="{{ user_id }}">
-              <button class="btn btn-primary btn-sm">
-                <i class="fas fa-sync-alt"></i> Reconnect
-              </button>
-            </form>
-          {% endif %}
         </div>
       </div>
-
-      <!-- Other integrations placeholders -->
-      <div class="integration-card">
-        <div class="integration-icon">
-          <i class="fas fa-calendar-alt"></i>
-        </div>
-        <div class="integration-details">
-          <h4>Google Calendar</h4>
-          <div class="integration-status status-not-connected">
-            <i class="fas fa-times-circle"></i> Not Connected
-          </div>
-        </div>
-        <div class="integration-actions">
-          <button class="btn btn-secondary btn-sm">
-            <i class="fas fa-link"></i> Connect
-          </button>
-        </div>
-      </div>
-
-      <div class="integration-card">
-        <div class="integration-icon">
-          <i class="fas fa-database"></i>
-        </div>
-        <div class="integration-details">
-          <h4>CRM Integration</h4>
-          <div class="integration-status status-not-connected">
-            <i class="fas fa-times-circle"></i> Not Connected
-          </div>
-        </div>
-        <div class="integration-actions">
-          <button class="btn btn-secondary btn-sm">
-            <i class="fas fa-link"></i> Connect
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-  <!-- Danger Zone -->
-  <div class="settings-card danger-zone">
-    <div class="section-header">
-      <h2><i class="fas fa-exclamation-triangle"></i> Danger Zone</h2>
-    </div>
-    <div class="danger-content">
-      <p>These actions are irreversible. Please proceed with caution.</p>
-      <div class="danger-actions">
-        <button class="btn btn-danger">
-          <i class="fas fa-file-export"></i> Export All Data
-        </button>
-        <button class="btn btn-danger">
-          <i class="fas fa-trash-alt"></i> Delete Account
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-  // Toggle switch interactions
-  document.querySelectorAll('.toggle-switch input').forEach(switchEl => {
-    switchEl.addEventListener('change', function() {
-      const label = this.closest('.toggle-label');
-      label.querySelector('span').textContent = this.checked ? 'Enabled' : 'Disabled';
-    });
-  });
-
-  // Confirm dangerous actions
-  document.querySelectorAll('.danger-zone .btn').forEach(btn => {
-    btn.addEventListener('click', function(e) {
-      e.preventDefault();
-      const action = this.textContent.trim();
-      if (confirm(`Are you sure you want to ${action}? This cannot be undone.`)) {
-        alert(`Action "${action}" confirmed.`);
-      }
-    });
-  });
-</script>
