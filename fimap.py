@@ -29,7 +29,9 @@ def send_email_smtp(
         pwd = password_or_token
         print(f"[fimap] using plaintext password for {sender_email}")
 
-    msg = MIMEText(body)
+    is_html = "<" in body and ">" in body
+    subtype = "html" if is_html else "plain"
+    msg = MIMEText(body, subtype)
     msg["Subject"] = subject
     msg["From"]    = sender_email
     msg["To"]      = recipient
