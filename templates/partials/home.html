@@ -95,11 +95,19 @@
   </div>
 
   <script>
-    // Progress-bar and value animations on swap
-    const emails = {{ emails_sent }};
-    document.getElementById('email-progress').style.width = `${(emails/20)*100}%`;
-    animateValue('emails-sent', 0, emails, 800);
-    animateValue('time-saved', 0, {{ time_saved }}, 800);
-    animateValue('revenue', 0, {{ revenue|default(45230) }}, 800);
+    
+    function safeAnimate(id, end, duration) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    animateValue(id, 0, end, duration);
+  }
+
+  const emails = {{ emails_sent }};
+  const estimated = {{ estimated_saved }};
+  const kits    = {{ kits_generated }};
+  document.getElementById('email-progress').style.width = `${(emails/20)*100}%`;
+  safeAnimate('emails-sent', emails,  800);
+  safeAnimate('time-saved',  emails*5.5 + estimated, 800);
+  safeAnimate('kits-generated', kits, 800);
   </script>
 </div>
