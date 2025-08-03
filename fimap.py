@@ -1,5 +1,3 @@
-# fimap.py
-
 import os
 import imaplib
 import smtplib
@@ -8,13 +6,12 @@ from email.mime.text import MIMEText
 from cryptography.fernet import Fernet, InvalidToken
 
 # ── load your one-and-only key from ENV ───────────────────────────────────────
-FERNET_KEY = os.environ["ENCRYPTION_KEY"].encode()   # must match how you encrypted them originally
-cipher      = Fernet(FERNET_KEY)
+FERNET_KEY = os.environ["ENCRYPTION_KEY"].encode()
+cipher     = Fernet(FERNET_KEY)
 
-# ── SMTP send helper ─────────────────────────────────────────────────────────
 def send_email_smtp(
     sender_email: str,
-    password_or_token: str,     # can be raw password or fernet token
+    password_or_token: str,
     recipient: str,
     subject: str,
     body: str,
@@ -22,45 +19,42 @@ def send_email_smtp(
     smtp_port: int = 465
 ):
     """
-    Send via SMTP SSL.  If `password_or_token` decrypts with Fernet, use that;
+    If `password_or_token` is a valid Fernet token, decrypt it;
     otherwise assume it's already the raw app password.
     """
-    pwd = None
     try:
         pwd = cipher.decrypt(password_or_token.encode()).decode()
-        # if this succeeds, we just decrypted an encrypted password
+        print(f"[fimap] decrypted token for {sender_email}")
     except (InvalidToken, ValueError):
-        # not a valid token → assume it's already the plaintext password
         pwd = password_or_token
+        print(f"[fimap] using plaintext password for {sender_email}")
 
     msg = MIMEText(body)
     msg["Subject"] = subject
     msg["From"]    = sender_email
     msg["To"]      = recipient
 
-    server = smtplib.SMTP_SSL(smtp_host, smtp_port)
-    try:
+    with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
         server.login(sender_email, pwd)
         server.sendmail(sender_email, [recipient], msg.as_string())
-    finally:
-        server.quit()
+    print(f"[fimap] SMTP send succeeded for {sender_email} → {recipient}")
 
-# ── IMAP fetch helper ────────────────────────────────────────────────────────
 def fetch_emails_imap(
     email_address: str,
-    password_or_token: str,     # can be raw password or fernet token
+    password_or_token: str,
     folder: str = "INBOX",
     imap_host: str = "imap.gmail.com",
     imap_port: int = 993
 ):
     """
-    Connects via IMAP SSL, returns unread messages.  Same decrypt logic.
+    Returns a list of unread messages dicts.  Same decrypt logic.
     """
-    pwd = None
     try:
         pwd = cipher.decrypt(password_or_token.encode()).decode()
+        print(f"[fimap] decrypted token for IMAP {email_address}")
     except (InvalidToken, ValueError):
         pwd = password_or_token
+        print(f"[fimap] using plaintext password for IMAP {email_address}")
 
     mail = imaplib.IMAP4_SSL(imap_host, imap_port)
     try:
@@ -71,18 +65,17 @@ def fetch_emails_imap(
         for num in data[0].split():
             _, msg_data = mail.fetch(num, '(RFC822)')
             msg = email.message_from_bytes(msg_data[0][1])
-            body = _get_body(msg)
             messages.append({
                 "from":    msg.get("From"),
                 "subject": msg.get("Subject"),
-                "body":    body,
+                "body":    _get_body(msg),
                 "id":      num.decode()
             })
+        print(f"[fimap] fetched {len(messages)} messages for {email_address}")
         return messages
     finally:
         mail.logout()
 
-# ── extract plaintext body ─────────────────────────────────────────────────
 def _get_body(msg):
     if msg.is_multipart():
         for part in msg.walk():
