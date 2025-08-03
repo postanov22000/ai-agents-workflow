@@ -223,51 +223,39 @@ def dashboard_billing():
 def dashboard_settings():
     user_id = _require_user()
 
-    # Handle POST requests
+    # ─── Handle Profile POST ────────────────────────────────
     if request.method == "POST":
         section = request.form.get("section")
         if section == "profile":
-            new_display_name = escape(request.form.get("display_name", "").strip())
-            new_signature = escape(request.form.get("signature", "").strip())
+            new_display_name = request.form.get("display_name", "").strip()
+            new_signature = request.form.get("signature", "").strip()
             supabase.table("profiles").update({
                 "display_name": new_display_name,
                 "signature": new_signature
             }).eq("id", user_id).execute()
-            
-        elif section == "security":
-            two_factor = request.form.get("two_factor") == "on"
-            email_notifications = request.form.get("email_notifications") == "on"
-            sms_alerts = request.form.get("sms_alerts") == "on"
-            supabase.table("profiles").update({
-                "two_factor": two_factor,
-                "email_notifications": email_notifications,
-                "sms_alerts": sms_alerts
-            }).eq("id", user_id).execute()
 
-    # Fetch profile with SMTP status
+    # ─── Fetch profile & flags ──────────────────────────────
     profile_resp = supabase.table("profiles") \
-        .select("display_name, signature, ai_enabled, two_factor, email_notifications, sms_alerts, smtp_email") \
-        .eq("id", user_id) \
-        .single() \
-        .execute()
+                           .select("display_name, signature, ai_enabled, smtp_email") \
+                           .eq("id", user_id) \
+                           .single() \
+                           .execute()
+    
     profile = profile_resp.data or {
         "display_name": "",
         "signature": "",
         "ai_enabled": False,
-        "two_factor": False,
-        "email_notifications": False,
-        "sms_alerts": False,
         "smtp_email": None
     }
 
-    # Check Gmail token expiration for reconnect button
+    # ▶ Determine whether the saved Gmail creds are expired
     show_reconnect = False
     try:
         toks = supabase.table("gmail_tokens") \
-            .select("credentials") \
-            .eq("user_id", user_id) \
-            .single() \
-            .execute().data
+                       .select("credentials") \
+                       .eq("user_id", user_id) \
+                       .single() \
+                       .execute().data
         if toks:
             creds_payload = toks["credentials"]
             creds = Credentials(
@@ -282,13 +270,13 @@ def dashboard_settings():
     except Exception:
         app.logger.warning(f"settings: could not check Gmail token for {user_id}")
 
+    # ▶ Render template
     return render_template(
         "partials/settings.html",
         profile=profile,
         user_id=user_id,
         show_reconnect=show_reconnect
     )
-
 # New routes for SMTP management
 @app.route("/connect_smtp_form", methods=["GET"])
 def connect_smtp_form():
