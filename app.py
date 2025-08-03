@@ -360,7 +360,7 @@ def dashboard_home():
             pass
     # ── 4) Count "kits generated" for this user ─────────────────────────
      # (Assuming you flag each transaction row with kit_generated=True)
-     kit_rows = (
+    kit_rows = (
          supabase
            .table("transactions")
            .select("id")
