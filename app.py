@@ -786,18 +786,19 @@ def trigger_process():
                 .data or []
     )
 
-    # ── 6) Send via SMTP fallback or Gmail API, enforcing 20/day cap ──
+        # ── 6) Send via SMTP fallback or Gmail API, enforcing 20/day cap ──
     for rec in ready:
         em_id     = rec["id"]
         uid       = rec["user_id"]
         to_addr   = rec["sender_email"]
-        lease_flag= supabase.table("profiles")\
-                             .select("generate_leases")\
+
+        # load personalization flags & build HTML
+        lease_flag = supabase.table("profiles") \
+                             .select("generate_leases") \
                              .eq("id", uid).single().execute().data.get("generate_leases", False)
-        # Build the HTML reply
-        body_html= (rec["processed_content"] or "").replace("\n", "<br>")
-        prof_sig = supabase.table("profiles")\
-                           .select("display_name, signature")\
+        body_html = (rec.get("processed_content") or "").replace("\n", "<br>")
+        prof_sig = supabase.table("profiles") \
+                           .select("display_name, signature") \
                            .eq("id", uid).single().execute().data or {}
         if prof_sig.get("display_name"):
             body_html = body_html.replace("[Your Name]", prof_sig["display_name"])
@@ -805,22 +806,22 @@ def trigger_process():
 
         # 20-email/day limit
         if emails_sent_today.get(uid, 0) >= 20:
+            app.logger.info(f"User {uid} reached daily limit, marking {em_id} error")
+            supabase.table("emails").update({
+                "status": "error",
+                "error_message": "Daily email limit reached"
+            }).eq("id", em_id).execute()
             failed.append(em_id)
-            supabase.table("emails")\
-                    .update({"status":"error","error_message":"Daily email limit reached"})\
-                    .eq("id", em_id).execute()
             continue
 
-        # 1) Try SMTP fallback
-        prof = supabase.table("profiles")\
-                       .select("smtp_email,smtp_enc_password,smtp_host")\
+        # 1) SMTP fallback
+        prof = supabase.table("profiles") \
+                       .select("smtp_email,smtp_enc_password,smtp_host") \
                        .eq("id", uid).single().execute().data or {}
-
         if prof.get("smtp_email") and prof.get("smtp_enc_password"):
             smtp_email = prof["smtp_email"]
             smtp_pass  = fernet.decrypt(prof["smtp_enc_password"].encode()).decode()
             smtp_host  = prof.get("smtp_host", "smtp.gmail.com")
-
             try:
                 send_email_smtp(
                     smtp_email,
@@ -830,44 +831,43 @@ def trigger_process():
                     full_html,
                     smtp_host=smtp_host
                 )
+                supabase.table("emails").update({
+                    "status":  "sent",
+                    "sent_at": datetime.utcnow().isoformat()
+                }).eq("id", em_id).execute()
+                emails_sent_today[uid] = emails_sent_today.get(uid, 0) + 1
                 sent.append(em_id)
+                app.logger.info(f"SMTP send succeeded for email {em_id} (user {uid})")
             except Exception as e:
+                app.logger.error(f"SMTP send failed for email {em_id} (user {uid})", exc_info=True)
+                supabase.table("emails").update({
+                    "status":        "error",
+                    "error_message": str(e)
+                }).eq("id", em_id).execute()
                 failed.append(em_id)
-                supabase.table("emails")\
-                        .update({"status":"error","error_message":str(e)})\
-                        .eq("id", em_id).execute()
-            else:
-                supabase.table("emails")\
-                        .update({"status":"sent","sent_at":datetime.utcnow().isoformat()})\
-                        .eq("id", em_id).execute()
-                emails_sent_today[uid] = emails_sent_today.get(uid,0) + 1
-            continue
+            continue  # next `rec`
 
-        # 2) Fallback to Gmail API
-        tok = supabase.table("gmail_tokens")\
-                      .select("credentials")\
-                      .eq("user_id", uid).limit(1).execute().data or []
-        if not tok:
-            failed.append(em_id)
-            supabase.table("emails")\
-                    .update({"status":"error","error_message":"No SMTP creds or Gmail token"})\
-                    .eq("id", em_id).execute()
-            continue
-
-        creds_data = tok[0]["credentials"]
-        creds = Credentials(
-            token=creds_data["token"],
-            refresh_token=creds_data["refresh_token"],
-            token_uri=creds_data["token_uri"],
-            client_id=creds_data["client_id"],
-            client_secret=creds_data["client_secret"],
-            scopes=creds_data["scopes"]
-        )
-        if creds.expired and creds.refresh_token:
-            creds.refresh(GoogleRequest())
-        svc = build("gmail", "v1", credentials=creds, cache_discovery=False)
-
+        # 2) Gmail API fallback
         try:
+            tok = supabase.table("gmail_tokens") \
+                          .select("credentials") \
+                          .eq("user_id", uid).single().execute().data
+            if not tok:
+                raise ValueError("No Gmail token found")
+
+            cd = tok["credentials"]
+            creds = Credentials(
+                token=cd["token"],
+                refresh_token=cd["refresh_token"],
+                token_uri=cd["token_uri"],
+                client_id=cd["client_id"],
+                client_secret=cd["client_secret"],
+                scopes=cd["scopes"],
+            )
+            if creds.expired and creds.refresh_token:
+                creds.refresh(GoogleRequest())
+
+            svc = build("gmail", "v1", credentials=creds, cache_discovery=False)
             msg = MIMEText(full_html, "html")
             msg["to"]      = to_addr
             msg["from"]    = "me"
@@ -875,27 +875,30 @@ def trigger_process():
             raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
             if lease_flag:
-                svc.users().drafts().create(userId="me", body={"message":{"raw":raw}}).execute()
-                drafted.append(em_id)
+                svc.users().drafts().create(userId="me", body={"message": {"raw": raw}}).execute()
                 status_to = "drafted"
+                drafted.append(em_id)
             else:
-                svc.users().messages().send(userId="me", body={"raw":raw}).execute()
-                sent.append(em_id)
+                svc.users().messages().send(userId="me", body={"raw": raw}).execute()
                 status_to = "sent"
+                sent.append(em_id)
 
-            supabase.table("emails")\
-                    .update({"status":status_to,"sent_at":datetime.utcnow().isoformat()})\
-                    .eq("id", em_id).execute()
-            emails_sent_today[uid] = emails_sent_today.get(uid,0) + 1
+            supabase.table("emails").update({
+                "status":  status_to,
+                "sent_at": datetime.utcnow().isoformat()
+            }).eq("id", em_id).execute()
+            emails_sent_today[uid] = emails_sent_today.get(uid, 0) + 1
+            app.logger.info(f"Gmail API send succeeded for email {em_id} (user {uid})")
 
         except Exception as e:
+            app.logger.error(f"Gmail API send failed for email {em_id} (user {uid})", exc_info=True)
+            supabase.table("emails").update({
+                "status":        "error",
+                "error_message": str(e)
+            }).eq("id", em_id).execute()
             failed.append(em_id)
-            supabase.table("emails")\
-                    .update({"status":"error","error_message":str(e)})\
-                    .eq("id", em_id).execute()
 
-
-          # After you’ve processed everything:
+    # ── Summary response ──
     summary = {
         "processed": all_processed,
         "sent":      sent,
@@ -903,6 +906,7 @@ def trigger_process():
         "failed":    failed
     }
     return jsonify(summary), 200
+
 
 @app.route("/transaction/<txn_id>/ready", methods=["POST"])
 def mark_ready(txn_id):
