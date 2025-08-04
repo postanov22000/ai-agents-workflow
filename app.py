@@ -461,7 +461,7 @@ def route_connect_smtp():
         smtp_host = request.form.get("smtp_host")
         imap_host = request.form.get("imap_host")
 
-        # Debugging - log ALL form data
+        # Debug - log all received form data
         app.logger.info(f"Received form data: {dict(request.form)}")
 
         # Validate required fields
@@ -471,15 +471,17 @@ def route_connect_smtp():
         if not smtp_password: missing.append("smtp_password")
         if not smtp_host: missing.append("smtp_host")
         if not imap_host: missing.append("imap_host")
-        
+
         if missing:
             return jsonify({
                 "status": "error",
                 "message": f"Missing fields: {', '.join(missing)}"
             }), 400
 
-        # Encrypt and store
+        # Encrypt the SMTP password
         token = fernet.encrypt(smtp_password.encode()).decode()
+
+        # Upsert into Supabase
         resp = supabase.table("profiles").upsert({
             "id": user_id,
             "smtp_email": smtp_email,
@@ -488,9 +490,9 @@ def route_connect_smtp():
             "imap_host": imap_host
         }, on_conflict="id").execute()
 
-        # Proper Supabase response check
-        if resp.data is None or resp.error:
-            app.logger.error(f"Supabase error: {resp.error}")
+        # Check for empty or failed response
+        if not resp.data:
+            app.logger.error(f"Supabase upsert failed: {resp}")
             return jsonify({
                 "status": "error",
                 "message": "Failed to save credentials to database"
@@ -504,6 +506,7 @@ def route_connect_smtp():
             "status": "error", 
             "message": "Internal server error"
         }), 500
+
 
 
 #------------------------------------------ 
