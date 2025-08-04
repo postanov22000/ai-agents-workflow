@@ -149,7 +149,7 @@
                     });
 
                     if (error) throw error;
-                    window.location.href = 'signin.html';
+                    window.location.href = 'signin.html?user_id=${userId}';
                 } catch (error) {
                     if (error.message.includes('Email not confirmed')) {
                         errorMessage.innerHTML = `
