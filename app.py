@@ -3,7 +3,7 @@ import time
 import base64
 import requests
 
-from flask import abort, Flask, render_template, request, redirect, jsonify
+from flask import abort, Flask, render_template, request, redirect, jsonify, make_response, url_for
 from datetime import date, datetime, timezone
 from email.mime.text import MIMEText
 
@@ -498,7 +498,10 @@ def route_connect_smtp():
                 "message": "Failed to save credentials to database"
             }), 500
 
-        return jsonify({"status": "ok"}), 200
+        # --- 5) On success, send HX-Redirect so HTMX navigates for us ---
+        hxr = make_response("", 204)
+        hxr.headers["HX-Redirect"] = url_for("complete_profile", user_id=user_id)
+        return hxr
 
     except Exception as e:
         app.logger.error("connect-smtp error", exc_info=True)
