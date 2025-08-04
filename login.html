@@ -123,7 +123,7 @@
     <script>
   document.addEventListener('DOMContentLoaded', () => {
     const supabaseUrl = 'https://skxzfkudduqrubtgtodp.supabase.co';
-    const supabaseKey = 'YOUR_ANON_KEY_HERE';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODAwNzMsImV4cCI6MjA2MTE1NjA3M30.Wj3V5-swysAz8xAbA4lKmo-NNu_mv1UW_X4BgFNq0ag';
     const sb = supabase.createClient(supabaseUrl, supabaseKey);
 
     const loginForm        = document.getElementById('login-form');
@@ -153,7 +153,7 @@
         const userId = data.user.id;
 
         // 3) Navigate to your /signin endpoint with the real ID
-        window.location.href = `/signin?user_id=${userId}`;
+        window.location.href = '/signin?user_id=' + userId;
       } catch (err) {
         // If their email isn’t confirmed yet:
         if (err.message.includes('Email not confirmed')) {
