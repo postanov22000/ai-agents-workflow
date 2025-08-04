@@ -1,11 +1,17 @@
 <div class="modal-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;justify-content:center;align-items:center;z-index:1000;">
   <div class="modal-content" style="background:#112240;padding:2rem;border-radius:8px;max-width:500px;width:100%;border:1px solid #64ffda;">
     <h3 style="color:#64ffda;margin-bottom:1.5rem;">Connect SMTP/IMAP</h3>
+    
+    <!-- Error display container -->
+    <div id="error-container" style="color: #ff6b6b; margin-bottom: 1rem; display: none;"></div>
+    
     <form method="POST" 
           action="/connect-smtp" 
           hx-post="/connect-smtp"
           hx-target=".modal-overlay"
-          hx-swap="outerHTML">
+          hx-swap="outerHTML"
+          enctype="application/x-www-form-urlencoded">  <!-- CRITICAL FIX -->
+          
       <input type="hidden" name="user_id" value="{{ user_id }}">
       
       <div class="form-group" style="margin-bottom:1rem;">
@@ -44,3 +50,27 @@
     </form>
   </div>
 </div>
+
+<script>
+  document.addEventListener('htmx:afterRequest', function(event) {
+    if (event.detail.path === '/connect-smtp') {
+      const errorContainer = document.getElementById('error-container');
+      if (event.detail.failed) {
+        try {
+          const response = JSON.parse(event.detail.xhr.responseText);
+          errorContainer.textContent = response.message;
+          errorContainer.style.display = 'block';
+        } catch (e) {
+          errorContainer.textContent = 'Error: ' + event.detail.xhr.statusText;
+          errorContainer.style.display = 'block';
+        }
+      } else if (event.detail.xhr.status === 200) {
+        // Success - close modal after 1 second
+        errorContainer.style.display = 'none';
+        setTimeout(() => {
+          document.querySelector('.modal-overlay').remove();
+        }, 1000);
+      }
+    }
+  });
+</script>
