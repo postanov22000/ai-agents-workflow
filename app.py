@@ -454,47 +454,56 @@ def reconnect_gmail():
 @app.route("/connect-smtp", methods=["POST"])
 def route_connect_smtp():
     try:
-        #data = request.get_json(force=True)
-        if request.is_json:
-            data = request.get_json()
-        else:
-            data = request.form.to_dict()
-        # pull out all five required fields
-        user_id      = data.get("user_id")
-        smtp_email   = data.get("smtp_email")
-        smtp_password= data.get("smtp_password")
-        smtp_host    = data.get("smtp_host")
-        imap_host    = data.get("imap_host")
+        # Get form data
+        user_id = request.form.get("user_id")
+        smtp_email = request.form.get("smtp_email")
+        smtp_password = request.form.get("smtp_password")
+        smtp_host = request.form.get("smtp_host")
+        imap_host = request.form.get("imap_host")
 
-        # validate
-        missing = [k for k in ("user_id","smtp_email","smtp_password","smtp_host","imap_host") if not data.get(k)]
+        # Debugging - log ALL form data
+        app.logger.info(f"Received form data: {dict(request.form)}")
+
+        # Validate required fields
+        missing = []
+        if not user_id: missing.append("user_id")
+        if not smtp_email: missing.append("smtp_email")
+        if not smtp_password: missing.append("smtp_password")
+        if not smtp_host: missing.append("smtp_host")
+        if not imap_host: missing.append("imap_host")
+        
         if missing:
             return jsonify({
                 "status": "error",
                 "message": f"Missing fields: {', '.join(missing)}"
             }), 400
 
-        # encrypt & upsert
+        # Encrypt and store
         token = fernet.encrypt(smtp_password.encode()).decode()
         resp = supabase.table("profiles").upsert({
-            "id":                user_id,
-            "smtp_email":        smtp_email,
+            "id": user_id,
+            "smtp_email": smtp_email,
             "smtp_enc_password": token,
-            "smtp_folder":       "INBOX"
+            "smtp_host": smtp_host,
+            "imap_host": imap_host
         }, on_conflict="id").execute()
 
-        # **THIS** is the fix — supabase-py’s APIResponse has no `.error`
-        if not resp or getattr(resp, "status_code", 0) >= 400:
-            # pull any returned text out for debugging
-            err = getattr(resp, "text", repr(resp))
-            raise Exception(f"Supabase upsert failed: {err}")
+        # Proper Supabase response check
+        if resp.data is None or resp.error:
+            app.logger.error(f"Supabase error: {resp.error}")
+            return jsonify({
+                "status": "error",
+                "message": "Failed to save credentials to database"
+            }), 500
 
         return jsonify({"status": "ok"}), 200
 
     except Exception as e:
         app.logger.error("connect-smtp error", exc_info=True)
-        return jsonify({"status": "error", "message": str(e)}), 500
-
+        return jsonify({
+            "status": "error", 
+            "message": "Internal server error"
+        }), 500
 
 
 #------------------------------------------ 
