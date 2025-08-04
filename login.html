@@ -126,12 +126,12 @@
     const supabaseKey = 'YOUR_ANON_KEY_HERE';
     const sb = supabase.createClient(supabaseUrl, supabaseKey);
 
-    const loginForm      = document.getElementById('login-form');
-    const errorMessage   = document.getElementById('error-message');
-    const successMessage = document.getElementById('success-message');
+    const loginForm        = document.getElementById('login-form');
+    const errorMessage     = document.getElementById('error-message');
+    const successMessage   = document.getElementById('success-message');
     const resetPasswordLink = document.getElementById('reset-password');
 
-    // If they just confirmed email, show a note
+    // Show “email confirmed” if ?confirmed=true is in the URL
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has('confirmed')) {
       successMessage.textContent = 'Email confirmed successfully! You can now log in.';
@@ -141,39 +141,40 @@
       e.preventDefault();
       errorMessage.textContent = '';
 
-      const email    = document.getElementById('email').value;
+      const email    = document.getElementById('email').value.trim();
       const password = document.getElementById('password').value;
 
       try {
-        // Attempt sign in
+        // 1) Sign in
         const { data, error } = await sb.auth.signInWithPassword({ email, password });
         if (error) throw error;
 
-        // Grab the real user ID
+        // 2) Pull out the real user ID
         const userId = data.user.id;
 
-        // Navigate to your signin-onboarding page with the actual user ID
+        // 3) Navigate to your /signin endpoint with the real ID
         window.location.href = `/signin?user_id=${userId}`;
       } catch (err) {
-        // If email not confirmed, offer to resend
+        // If their email isn’t confirmed yet:
         if (err.message.includes('Email not confirmed')) {
           errorMessage.innerHTML = `
             Email not verified. 
             <a href="#" id="resend-confirmation">Resend confirmation email</a>
           `;
           document.getElementById('resend-confirmation')
-                  .addEventListener('click', async (e2) => {
-            e2.preventDefault();
-            const { error: resendErr } = await sb.auth.resend({
-              type: 'signup',
-              email
+            .addEventListener('click', async (e2) => {
+              e2.preventDefault();
+              const { error: resendErr } = await sb.auth.resend({
+                type: 'signup',
+                email
+              });
+              alert(resendErr 
+                ? 'Error: ' + resendErr.message 
+                : 'Confirmation email resent! Check your inbox.'
+              );
             });
-            alert(resendErr 
-                  ? `Error: ${resendErr.message}` 
-                  : 'Confirmation email resent! Check your inbox.');
-          });
         } else {
-          // Other errors
+          // Any other error:
           errorMessage.textContent = err.message;
         }
       }
@@ -195,7 +196,7 @@
       }
     });
   });
-</script> 
+</script>
 
 
 </body>
