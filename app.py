@@ -947,7 +947,7 @@ def trigger_process():
     # ── 5) Re‑fetch ready_to_send rows ──
     ready = (
         supabase.table("emails")
-                .select("id, user_id, sender_email, processed_content")
+                .select("id, user_id, sender_email, processed_content, subject")
                 .eq("status", "ready_to_send")
                 .execute()
                 .data or []
@@ -958,6 +958,8 @@ def trigger_process():
         em_id     = rec["id"]
         uid       = rec["user_id"]
         to_addr   = rec["sender_email"]
+        subject   = rec.get("subject", "Your Email")  # Get the original subject or default
+
 
         # load personalization flags & build HTML
         lease_flag = supabase.table("profiles") \
@@ -994,7 +996,7 @@ def trigger_process():
                     smtp_email,
                     smtp_pass,
                     to_addr,
-                    "Lease Agreement Draft" if lease_flag else "Re: Your Email",
+                    "Lease Agreement Draft" if lease_flag else f"RE: {rec.get('subject', 'Your Email')}",  # Modified subject,
                     full_html,
                     smtp_host=smtp_host
                 )
@@ -1038,7 +1040,7 @@ def trigger_process():
             msg = MIMEText(full_html, "html")
             msg["to"]      = to_addr
             msg["from"]    = "me"
-            msg["subject"] = "Lease Agreement Draft" if lease_flag else "Re: Your Email"
+            msg["subject"] = "Lease Agreement Draft" if lease_flag else f"RE: {rec.get('subject', 'Your Email')}"  # Modified subject
             raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
             if lease_flag:
