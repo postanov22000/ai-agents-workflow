@@ -914,7 +914,7 @@ input:checked + .slider:before {
 }
 
         /*the email modal */
-/* Add this to your existing styles */
+/* Replace any existing modal styles with this */
 #email-modal-placeholder {
   position: fixed;
   top: 0;
@@ -923,11 +923,15 @@ input:checked + .slider:before {
   bottom: 0;
   z-index: 1000;
   background: rgba(10, 25, 47, 0.95);
-  display: flex;
+  display: none; /* Hidden by default */
   align-items: flex-start;
   justify-content: center;
   padding: 40px;
   overflow-y: auto;
+}
+
+#email-modal-placeholder.active {
+  display: flex; /* Only show when active */
 }
 
 #email-modal-placeholder .chart-container {
@@ -938,6 +942,7 @@ input:checked + .slider:before {
   max-width: 800px;
   width: 100%;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  animation: fadeIn 0.3s ease;
 }
         
     </style>
@@ -1231,13 +1236,21 @@ input:checked + .slider:before {
     }
   });
 </script>
-    <script>
-// Add this to your existing scripts in dashboard.html
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') {
-    document.getElementById('email-modal-placeholder').innerHTML = '';
-  }
-});    
-    </script>
+<script>
+  // Handle modal display
+  document.body.addEventListener('htmx:afterSwap', function(evt) {
+    if (evt.detail.target.id === 'email-modal-placeholder') {
+      document.getElementById('email-modal-placeholder').classList.add('active');
+    }
+  });
+
+  // Close modal with Escape key
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('email-modal-placeholder').classList.contains('active')) {
+      document.getElementById('email-modal-placeholder').classList.remove('active');
+      document.getElementById('email-modal-placeholder').innerHTML = '';
+    }
+  });
+</script>
 </body>
 </html> 
