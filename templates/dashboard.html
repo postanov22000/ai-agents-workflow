@@ -943,6 +943,15 @@ input:checked + .slider:before {
 >
   <i class="fas fa-plus"></i> New Transaction
 </div>
+<!-- Responded Emails nav -->
+<div
+  class="nav-item"
+  hx-get="/dashboard/responded_emails?user_id={{ user_id }}"
+  hx-target=".main-content"
+  hx-swap="innerHTML"
+>
+  <i class="fas fa-reply-all"></i> Responded Emails
+</div>
 
   
 
@@ -968,6 +977,8 @@ input:checked + .slider:before {
 
 </div>
 
+<!-- HTMX modal container (target for full email view) -->
+<div id="email-modal-placeholder"></div>
 
         <!-- Main Content -->
         <div class="main-content"
