@@ -913,6 +913,32 @@ input:checked + .slider:before {
   flex-wrap: wrap;
 }
 
+        /*the email modal */
+/* Add this to your existing styles */
+#email-modal-placeholder {
+  position: fixed;
+  top: 0;
+  left: 280px; /* Same as sidebar width */
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  background: rgba(10, 25, 47, 0.95);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px;
+  overflow-y: auto;
+}
+
+#email-modal-placeholder .chart-container {
+  background: rgba(16, 36, 64, 0.95);
+  border: 1px solid rgba(100, 255, 218, 0.3);
+  border-radius: 12px;
+  padding: 25px;
+  max-width: 800px;
+  width: 100%;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
         
     </style>
 </head>
@@ -1205,5 +1231,13 @@ input:checked + .slider:before {
     }
   });
 </script>
+    <script>
+// Add this to your existing scripts in dashboard.html
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    document.getElementById('email-modal-placeholder').innerHTML = '';
+  }
+});    
+    </script>
 </body>
 </html> 
