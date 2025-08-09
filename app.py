@@ -228,6 +228,42 @@ def dashboard():
 def dashboard_new_transaction():
     user_id = request.args.get("user_id") or abort(401)
     return render_template("partials/new_transaction.html", user_id=user_id)
+  
+@app.route("/dashboard/responded_emails")
+def dashboard_responded_emails():
+    user_id = request.args.get("user_id") or abort(401)
+    # Select emails for this user that were sent/drafted and that have an original_content field
+    try:
+        emails = (
+            supabase.table("emails")
+                    .select("id, sender_email, subject, original_content, status, sent_at")
+                    .eq("user_id", user_id)
+                    .in_("status", ["sent","drafted"])   # treat drafted as 'responded' if you want
+                    .order("sent_at", desc=True)
+                    .execute()
+                    .data
+            or []
+        )
+    except Exception:
+        app.logger.exception("failed to load responded emails")
+        emails = []
+
+    return render_template("partials/responded_emails.html", emails=emails, user_id=user_id)
+
+
+@app.route("/dashboard/email/<email_id>")
+def dashboard_email_view(email_id):
+    """Return a small partial showing full original_content — HTMX call for modal."""
+    try:
+        rec = supabase.table("emails").select("*").eq("id", email_id).single().execute().data
+    except Exception:
+        rec = None
+
+    if not rec:
+        return "<div class='chart-container'>Email not found.</div>", 404
+
+    return render_template("partials/email_modal.html", email=rec)
+
 
 @app.route("/dashboard/analytics")
 def dashboard_analytics():
