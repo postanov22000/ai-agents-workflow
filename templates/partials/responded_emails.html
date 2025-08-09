@@ -1,0 +1,53 @@
+<div>
+  <h1>Responded Emails</h1>
+  <p style="color:#ccc; margin-bottom:12px;">Showing emails with responses (original incoming content shown).</p>
+
+  <div class="chart-container">
+    {% if emails %}
+      <table class="transaction-table">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>From</th>
+            <th>Subject</th>
+            <th>Original content (preview)</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in emails %}
+            <tr>
+              <td>{{ (e.sent_at or "")[:19] }}</td>
+              <td>{{ e.sender_email or "—" }}</td>
+              <td>{{ e.subject or "No subject" }}</td>
+              <td>
+                {% set preview = (e.original_content or "") %}
+                {{ preview[:160] }}{% if preview|length > 160 %}…{% endif %}
+              </td>
+              <td>
+                <span class="deal-status {% if e.status == 'sent' %}status-closed{% elif e.status == 'drafted' %}status-pending{% else %}status-lost{% endif %}">
+                  {{ e.status }}
+                </span>
+              </td>
+              <td>
+                <button
+                  class="btn btn-secondary btn-sm"
+                  hx-get="/dashboard/email/{{ e.id }}"
+                  hx-target="#email-modal-placeholder"
+                  hx-swap="innerHTML"
+                >
+                  View
+                </button>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="invoice-card">
+        <p>No responded emails found.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
