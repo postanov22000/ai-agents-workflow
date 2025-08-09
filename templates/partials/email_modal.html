@@ -1,5 +1,5 @@
-<div style="position:relative; margin-bottom:20px;">
-  <div class="chart-container" id="email-full-view">
+<div style="position:fixed; top:0; left:280px; right:0; bottom:0; background:rgba(10, 25, 47, 0.9); z-index:1000; padding:20px; overflow-y:auto;">
+  <div class="chart-container" id="email-full-view" style="max-width:800px; margin:0 auto;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
       <div>
         <strong>From:</strong> {{ email.sender_email or "—" }}<br>
