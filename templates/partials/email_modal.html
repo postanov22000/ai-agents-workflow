@@ -1,28 +1,35 @@
-<div style="position:fixed; top:0; left:280px; right:0; bottom:0; background:rgba(10, 25, 47, 0.9); z-index:1000; padding:20px; overflow-y:auto;">
-  <div class="chart-container" id="email-full-view" style="max-width:800px; margin:0 auto;">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-      <div>
-        <strong>From:</strong> {{ email.sender_email or "—" }}<br>
-        <strong>Subject:</strong> {{ email.subject or "—" }}<br>
-        <small style="color:#8892b0;">Sent at: {{ (email.sent_at or "")[:19] }}</small>
-      </div>
-      <div>
-        <button class="btn btn-sm btn-secondary" onclick="document.getElementById('email-modal-placeholder').innerHTML = '';">
-          Close
-        </button>
-      </div>
+<div class="chart-container" id="email-full-view">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+    <div>
+      <strong>From:</strong> {{ email.sender_email or "—" }}<br>
+      <strong>Subject:</strong> {{ email.subject or "—" }}<br>
+      <small style="color:#8892b0;">Sent at: {{ (email.sent_at or "")[:19] }}</small>
     </div>
-
-    <div style="background: rgba(255,255,255,0.03); padding:16px; border-radius:8px; line-height:1.6; white-space:pre-wrap;">
-      {{ email.original_content or "(no original content)" }}
+    <div>
+      <button class="btn btn-sm btn-secondary" onclick="closeModal()">
+        Close
+      </button>
     </div>
-
-    {% if email.processed_content %}
-      <hr style="margin:16px 0; border-color: rgba(100,255,218,0.08);" />
-      <h4 style="color:#64ffda;">AI Response / Processed Content</h4>
-      <div style="background: rgba(255,255,255,0.02); padding:12px; border-radius:6px; white-space:pre-wrap;">
-        {{ email.processed_content }}
-      </div>
-    {% endif %}
   </div>
+
+  <div style="background: rgba(255,255,255,0.03); padding:16px; border-radius:8px; line-height:1.6; white-space:pre-wrap;">
+    {{ email.original_content or "(no original content)" }}
+  </div>
+
+  {% if email.processed_content %}
+    <hr style="margin:16px 0; border-color: rgba(100,255,218,0.08);" />
+    <h4 style="color:#64ffda;">AI Response / Processed Content</h4>
+    <div style="background: rgba(255,255,255,0.02); padding:12px; border-radius:6px; white-space:pre-wrap;">
+      {{ email.processed_content }}
+    </div>
+  {% endif %}
 </div>
+
+<script>
+  function closeModal() {
+    document.getElementById('email-modal-placeholder').classList.remove('active');
+    document.getElementById('email-modal-placeholder').innerHTML = '';
+  }
+  // Show the modal
+  document.getElementById('email-modal-placeholder').classList.add('active');
+</script>
