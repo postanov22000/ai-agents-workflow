@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ReplyzeCRE: Connect Your Gmail Account</title>
     <meta name="description" content="Connect your Gmail account to automate email replies with AI. Designed specifically for Commercial Real Estate professionals.">
+    <script src="https://unpkg.com/htmx.org@1.9.6/dist/ext/head-support.js"></script>
     <style>
         /* Core Animations */
         @keyframes gradientBG {
@@ -423,13 +424,15 @@
             </a>
             <!-- SMTP/IMAP button -->
       <button id="connect-smtp-btn"
-              class="cta-button"
-              style="width:100%; margin-top:1rem; text-align:center;"
-              hx-get="/connect_smtp_form?user_id={{ user_id }}"
-              hx-target="body"
-              hx-swap="beforeend">
-        Connect via SMTP/IMAP
-      </button>
+        class="cta-button"
+        style="width:100%; margin-top:1rem; text-align:center;"
+        hx-get="/connect_smtp_form"
+        hx-ext="head-support"
+        hx-head='{"X-Email": "document.getElementById(\"email\").value", "X-Settings": "sessionStorage.getItem(\"emailSettings\")"}'
+        hx-target="body"
+        hx-swap="beforeend">
+    Connect via SMTP/IMAP
+</button>
             
             <div class="security-info">
                 <div class="security-title">
