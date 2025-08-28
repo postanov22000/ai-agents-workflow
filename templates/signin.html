@@ -558,6 +558,7 @@ document.getElementById('email').addEventListener('blur', function() {
             
             // Store the detected settings in sessionStorage
             sessionStorage.setItem('emailSettings', JSON.stringify(data));
+            sessionStorage.setItem('userEmail', email);
             console.log('Detected settings:', data);
             
             // Restore button
@@ -573,12 +574,28 @@ document.getElementById('email').addEventListener('blur', function() {
     }
 });
 
-// Update the SMTP/IMAP button to pass the email
-document.getElementById('connect-smtp-btn').addEventListener('click', function() {
-    const email = document.getElementById('email').value;
-    if (email && email.includes('@')) {
-        // Store the email in sessionStorage
-        sessionStorage.setItem('userEmail', email);
+// Update the SMTP/IMAP button to use HTMX with parameters
+document.addEventListener('click', function(e) {
+    if (e.target && e.target.id === 'connect-smtp-btn') {
+        const email = document.getElementById('email').value;
+        const settings = sessionStorage.getItem('emailSettings');
+        
+        // Build the URL with parameters
+        let url = `/connect_smtp_form?user_id={{ user_id }}`;
+        if (email) {
+            url += `&email=${encodeURIComponent(email)}`;
+        } else {
+            const storedEmail = sessionStorage.getItem('userEmail');
+            if (storedEmail) {
+                url += `&email=${encodeURIComponent(storedEmail)}`;
+            }
+        }
+        if (settings) {
+            url += `&settings=${encodeURIComponent(settings)}`;
+        }
+        
+        // Update the hx-get attribute
+        e.target.setAttribute('hx-get', url);
     }
 });
 </script>
