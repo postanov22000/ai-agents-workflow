@@ -574,29 +574,27 @@ document.getElementById('email').addEventListener('blur', function() {
     }
 });
 
-// Update the SMTP/IMAP button to use HTMX with parameters
-document.addEventListener('click', function(e) {
-    if (e.target && e.target.id === 'connect-smtp-btn') {
-        const email = document.getElementById('email').value;
-        const settings = sessionStorage.getItem('emailSettings');
-        
-        // Build the URL with parameters
-        let url = `/connect_smtp_form?user_id={{ user_id }}`;
-        if (email) {
-            url += `&email=${encodeURIComponent(email)}`;
-        } else {
-            const storedEmail = sessionStorage.getItem('userEmail');
-            if (storedEmail) {
-                url += `&email=${encodeURIComponent(storedEmail)}`;
-            }
-        }
-        if (settings) {
-            url += `&settings=${encodeURIComponent(settings)}`;
-        }
-        
-        // Update the hx-get attribute
-        e.target.setAttribute('hx-get', url);
+// Update the SMTP/IMAP button to use the detected settings
+document.getElementById('connect-smtp-btn').addEventListener('click', function(e) {
+    const email = document.getElementById('email').value;
+    const storedEmail = sessionStorage.getItem('userEmail');
+    const settings = sessionStorage.getItem('emailSettings');
+    
+    // Use the email from input or from storage
+    const finalEmail = email || storedEmail;
+    
+    // Build the URL with parameters
+    let url = `/connect_smtp_form?user_id={{ user_id }}`;
+    if (finalEmail) {
+        url += `&email=${encodeURIComponent(finalEmail)}`;
     }
+    if (settings) {
+        url += `&settings=${encodeURIComponent(settings)}`;
+    }
+    
+    // Update the hx-get attribute
+    this.setAttribute('hx-get', url);
+    console.log('Updated URL:', url);
 });
 </script>
 </body>
