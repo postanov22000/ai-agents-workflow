@@ -77,45 +77,23 @@
     }
   });
 </script>
-<!-- Add this script to your connect_smtp_form.html  -->
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const emailInput = document.querySelector('input[name="smtp_email"]');
-    const smtpHostInput = document.querySelector('input[name="smtp_host"]');
-    const imapHostInput = document.querySelector('input[name="imap_host"]');
+<!-- Add this script to your connect_smtp_form.html  -->
+// Update the SMTP/IMAP button to pass the email and settings
+document.getElementById('connect-smtp-btn').addEventListener('click', function() {
+    const email = document.getElementById('email').value;
+    const settings = sessionStorage.getItem('emailSettings');
     
-    emailInput.addEventListener('blur', function() {
-        const email = this.value;
-        if (email && email.includes('@')) {
-            // Show loading state
-            smtpHostInput.placeholder = "Detecting settings...";
-            imapHostInput.placeholder = "Detecting settings...";
-            
-            // Detect settings
-            fetch('/detect_email_settings', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: 'email=' + encodeURIComponent(email)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    smtpHostInput.placeholder = "smtp.gmail.com";
-                    imapHostInput.placeholder = "imap.gmail.com";
-                    return;
-                }
-                
-                // Prefill the detected settings
-                if (data.smtp_host) smtpHostInput.value = data.smtp_host;
-                if (data.imap_host) imapHostInput.value = data.imap_host;
-            })
-            .catch(error => {
-                smtpHostInput.placeholder = "smtp.gmail.com";
-                imapHostInput.placeholder = "imap.gmail.com";
-            });
-        }
-    });
+    // Build the URL with parameters
+    let url = `/connect_smtp_form?user_id={{ user_id }}`;
+    if (email) {
+        url += `&email=${encodeURIComponent(email)}`;
+    }
+    if (settings) {
+        url += `&settings=${encodeURIComponent(settings)}`;
+    }
+    
+    // Update the hx-get attribute
+    this.setAttribute('hx-get', url);
 });
 </script>
