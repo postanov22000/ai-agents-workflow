@@ -16,9 +16,12 @@
       
       <div class="form-group" style="margin-bottom:1rem;">
         <label style="display:block;margin-bottom:0.5rem;color:#8892b0;">SMTP Email</label>
-        <input type="email" name="smtp_email" required style="width:100%;padding:0.5rem;background:rgba(255,255,255,0.1);border:1px solid #64ffda;border-radius:4px;color:white;">
+        <input type="email" name="smtp_email" value="{{ email }}" required style="width:100%;padding:0.5rem;background:rgba(255,255,255,0.1);border:1px solid #64ffda;border-radius:4px;color:white;">
       </div>
-      
+      <!-- () -->
+      <!-- Update the form fields to use the passed values -->
+
+      <!-- () -->
       <div class="form-group" style="margin-bottom:1rem;">
         <label style="display:block;margin-bottom:0.5rem;color:#8892b0;">SMTP Password/App Password</label>
         <input type="password" name="smtp_password" required style="width:100%;padding:0.5rem;background:rgba(255,255,255,0.1);border:1px solid #64ffda;border-radius:4px;color:white;">
@@ -26,12 +29,12 @@
       
       <div class="form-group" style="margin-bottom:1rem;">
         <label style="display:block;margin-bottom:0.5rem;color:#8892b0;">SMTP Host</label>
-        <input type="text" name="smtp_host" value="smtp.gmail.com" required style="width:100%;padding:0.5rem;background:rgba(255,255,255,0.1);border:1px solid #64ffda;border-radius:4px;color:white;">
+        <input type="text" name="smtp_host" value="{{ smtp_host }}" required style="width:100%;padding:0.5rem;background:rgba(255,255,255,0.1);border:1px solid #64ffda;border-radius:4px;color:white;">
       </div>
       
       <div class="form-group" style="margin-bottom:1.5rem;">
         <label style="display:block;margin-bottom:0.5rem;color:#8892b0;">IMAP Host</label>
-        <input type="text" name="imap_host" value="imap.gmail.com" required style="width:100%;padding:0.5rem;background:rgba(255,255,255,0.1);border:1px solid #64ffda;border-radius:4px;color:white;">
+        <input type="text" name="imap_host" value="{{ imap_host }}" required style="width:100%;padding:0.5rem;background:rgba(255,255,255,0.1);border:1px solid #64ffda;border-radius:4px;color:white;">
       </div>
       
       <div style="display:flex;justify-content:flex-end;gap:0.5rem;">
