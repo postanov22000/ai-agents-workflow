@@ -423,15 +423,13 @@
             </a>
             <!-- SMTP/IMAP button -->
       <button id="connect-smtp-btn"
-        class="cta-button"
-        style="width:100%; margin-top:1rem; text-align:center;"
-        hx-get="/connect_smtp_form"
-        hx-ext="head-support"
-        hx-head='{"X-Email": "document.getElementById(\"email\").value", "X-Settings": "sessionStorage.getItem(\"emailSettings\")"}'
-        hx-target="body"
-        hx-swap="beforeend">
-    Connect via SMTP/IMAP
-</button>
+              class="cta-button"
+              style="width:100%; margin-top:1rem; text-align:center;"
+              hx-get="/connect_smtp_form?user_id={{ user_id }}"
+              hx-target="body"
+              hx-swap="beforeend">
+        Connect via SMTP/IMAP
+      </button>
             
             <div class="security-info">
                 <div class="security-title">
