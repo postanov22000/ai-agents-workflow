@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Verification Required</title>
+    <style>
+        /* Pop-up Overlay */
+        .popup-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 25, 47, 0.98);
+            backdrop-filter: blur(8px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            opacity: 0;
+            animation: fadeIn 0.4s ease forwards;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        /* Pop-up Container */
+        .popup-container {
+            background: rgba(16, 36, 64, 0.95);
+            border: 1px solid rgba(100, 255, 218, 0.4);
+            border-radius: 16px;
+            padding: 2rem;
+            max-width: 520px;
+            width: 90%;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+            transform: scale(0.94);
+            animation: scaleIn 0.4s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .popup-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1.2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid rgba(100, 255, 218, 0.2);
+        }
+
+        .warning-icon {
+            font-size: 2rem;
+            color: #ff605c;
+            margin-right: 0.8rem;
+            animation: pulse 2s infinite;
+        }
+
+        .popup-title {
+            font-size: 1.5rem;
+            color: #64ffda;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        /* Content */
+        .popup-content {
+            color: #ccd6f6; /* Higher contrast for readability */
+            line-height: 1.5;
+            margin-bottom: 1.8rem;
+            font-size: 1rem;
+        }
+
+        .risk-item {
+            margin-bottom: 0.8rem;
+            padding-left: 1.2rem;
+            position: relative;
+        }
+
+        .risk-item::before {
+            content: '•';
+            color: #ff605c;
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+        }
+
+        .risk-highlight {
+            color: #ff605c;
+            font-weight: 600;
+        }
+
+        .google-link {
+            display: inline-block;
+            margin-top: 0.8rem;
+            color: #64ffda;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .google-link:hover {
+            text-decoration: underline;
+        }
+
+        /* Buttons */
+        .popup-buttons {
+            display: flex;
+            gap: 0.8rem;
+            justify-content: flex-end;
+        }
+
+        .btn {
+            padding: 0.7rem 1.4rem;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            font-size: 0.9rem;
+        }
+
+        .btn-primary {
+            background: #64ffda;
+            color: #0a192f;
+        }
+
+        .btn-primary:hover {
+            background: #52d1b8;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: #64ffda;
+            border: 1px solid #64ffda;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(100, 255, 218, 0.1);
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+
+        @keyframes scaleIn {
+            to { transform: scale(1); }
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="popup-overlay">
+        <div class="popup-container">
+            <div class="popup-header">
+                <div class="warning-icon">⚠️</div>
+                <h2 class="popup-title">Action Required: Enable 2-Step Verification</h2>
+            </div>
+            <div class="popup-content">
+                <p>Your email contains sensitive client data and financial details. Without 2-Step Verification, you're at risk of:</p>
+                
+                <div class="risk-item"><span class="risk-highlight">Wire fraud</span> - hackers can redirect client funds</div>
+                <div class="risk-item"><span class="risk-highlight">Data breach</span> - exposing contracts & personal information</div>
+                <div class="risk-item"><span class="risk-highlight">Reputation damage</span> - losing client trust permanently</div>
+
+                <p>This security risk exists even without our app. Google requires 2SV for App Passwords to protect your account.</p>
+
+                <a href="https://support.google.com/accounts/answer/185839" target="_blank" class="google-link">Why Google requires 2-Step Verification →</a>
+            </div>
+            <div class="popup-buttons">
+                <button class="btn btn-secondary" onclick="window.open('https://myaccount.google.com/security', '_blank')">More Info</button>
+                <button class="btn btn-primary" onclick="enable2SV()">Enable 2SV Now</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function enable2SV() {
+            window.open('https://myaccount.google.com/signinoptions/two-step-verification', '_blank');
+            // In a real implementation, you might want to add logic to 
+            // check when the user returns after enabling 2SV
+        }
+    </script>
+</body>
+</html>
