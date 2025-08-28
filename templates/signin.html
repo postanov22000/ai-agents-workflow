@@ -212,7 +212,7 @@
             font-size: 1.5rem;
             font-weight: bold;
             margin: 0 auto 1.5rem;
-            color: #64ffda;
+            color: 64ffda;
         }
 
         .step-title {
@@ -564,15 +564,15 @@
         
         <div class="connection-form" data-scroll>
             <div class="form-group">
-                <label for="email">Your gmail account</label>
+                <label for="email">Your email account</label>
                 <input type="hidden" id="user-id" value="{{ user_id }}" />
                 <input id="email" type="email" placeholder="you@example.com" />              
             </div>
             
-            <!-- <a href="https://replyzeai.onrender.com/connect_gmail" class="cta-button" style="width:100%; text-align:center; margin-top:1rem;">
+            <a href="https://replyzeai.onrender.com/connect_gmail" class="cta-button" style="width:100%; text-align:center; margin-top:1rem;">
                 Connect Gmail Account
             </a>
-            -->
+            
             <!-- SMTP/IMAP button -->
             <button id="connect-smtp-btn" class="cta-button" style="width:100%; margin-top:1rem; text-align:center;">
                 Connect via SMTP/IMAP
@@ -694,12 +694,21 @@
             emailInput.style.boxShadow = 'none';
         });
 
+        // Store the current email to detect changes
+        let currentEmail = '';
+
         // Function to detect email settings when user enters email
-        document.getElementById('email').addEventListener('blur', function() {
+        document.getElementById('email').addEventListener('input', function() {
             const email = this.value;
-            if (email && email.includes('@')) {
+            if (email && email.includes('@') && email !== currentEmail) {
+                currentEmail = email;
+                
+                // Clear any previously stored settings for this email
+                sessionStorage.removeItem('emailSettings');
+                sessionStorage.removeItem('userEmail');
+                
                 // Show loading indicator
-                const connectButton = document.querySelector('.cta-button');
+                const connectButton = document.getElementById('connect-smtp-btn');
                 const originalText = connectButton.textContent;
                 connectButton.textContent = 'Detecting settings...';
                 connectButton.disabled = true;
@@ -725,7 +734,7 @@
                     // Store the detected settings in sessionStorage
                     sessionStorage.setItem('emailSettings', JSON.stringify(data));
                     sessionStorage.setItem('userEmail', email);
-                    console.log('Detected settings:', data);
+                    console.log('Detected settings for', email, ':', data);
                     
                     // Update the button text if we detected settings
                     if (data.smtp_host && data.imap_host) {
@@ -749,12 +758,11 @@
             const popup = document.getElementById('twoSVPopup');
             popup.classList.add('active');
             
-            // Store the email and settings for later use
+            // Always use the current email value from the input
             const email = document.getElementById('email').value;
-            const storedEmail = sessionStorage.getItem('userEmail');
             const settings = sessionStorage.getItem('emailSettings');
             
-            sessionStorage.setItem('smtpEmail', email || storedEmail);
+            sessionStorage.setItem('smtpEmail', email);
             sessionStorage.setItem('smtpSettings', settings || '');
         }
         
@@ -770,8 +778,8 @@
         
         // Function to proceed to SMTP form after 2SV is enabled
         function proceedToSMTP() {
-            const email = sessionStorage.getItem('smtpEmail');
-            const settings = sessionStorage.getItem('smtpSettings');
+            const email = document.getElementById('email').value;
+            const settings = sessionStorage.getItem('emailSettings');
             const userId = document.getElementById('user-id').value;
             
             // Build the URL with parameters
@@ -783,14 +791,50 @@
                 url += `&settings=${encodeURIComponent(settings)}`;
             }
             
+            console.log('Redirecting to:', url);
+            
             // Redirect to the SMTP form
             window.location.href = url;
         }
         
-        // Update the SMTP/IMAP button to show the popup instead of making the request
+        // Update the SMTP/IMAP button to show the popup
         document.getElementById('connect-smtp-btn').addEventListener('click', function(e) {
             e.preventDefault();
-            show2SVPopup();
+            
+            const email = document.getElementById('email').value;
+            if (!email || !email.includes('@')) {
+                alert('Please enter a valid email address');
+                return;
+            }
+            
+            // Always make a fresh request to ensure we have the correct settings
+            fetch('/detect_email_settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'email=' + encodeURIComponent(email)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error('Could not detect settings:', data.error);
+                    alert('Could not detect email settings. Please check your email address and try again.');
+                    return;
+                }
+                
+                // Store the detected settings in sessionStorage
+                sessionStorage.setItem('emailSettings', JSON.stringify(data));
+                sessionStorage.setItem('userEmail', email);
+                console.log('Final detected settings for', email, ':', data);
+                
+                // Show the 2SV popup
+                show2SVPopup();
+            })
+            .catch(error => {
+                console.error('Error detecting settings:', error);
+                alert('An error occurred while detecting email settings. Please try again.');
+            });
         });
     </script>
 </body>
