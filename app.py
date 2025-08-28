@@ -1186,7 +1186,26 @@ def create_transaction():
     )
     return feedback, 200
 
+# Add this to your main app file (e.g., app.py)
+from flask import request, jsonify
+from email_providers import get_email_settings
 
+@app.route('/detect_email_settings', methods=['POST'])
+def detect_email_settings():
+    email = request.form.get('email')
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+    
+    settings = get_email_settings(email)
+    if settings:
+        return jsonify({
+            "smtp_host": settings.get("smtp_host"),
+            "smtp_port": settings.get("smtp_port"),
+            "imap_host": settings.get("imap_host"),
+            "imap_port": settings.get("imap_port")
+        })
+    else:
+        return jsonify({"error": "Could not detect email settings"}), 400
 
 
 # ── Final entry point ──
