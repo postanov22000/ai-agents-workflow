@@ -561,8 +561,12 @@ document.getElementById('email').addEventListener('blur', function() {
             sessionStorage.setItem('userEmail', email);
             console.log('Detected settings:', data);
             
-            // Restore button
-            connectButton.textContent = originalText;
+            // Update the button text if we detected settings
+            if (data.smtp_host && data.imap_host) {
+                connectButton.textContent = 'Connect via SMTP/IMAP (Settings Detected)';
+            } else {
+                connectButton.textContent = originalText;
+            }
             connectButton.disabled = false;
         })
         .catch(error => {
