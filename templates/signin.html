@@ -332,6 +332,151 @@
             font-size: 0.9rem;
         }
 
+        /* 2SV Popup Styles */
+        .popup-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 25, 47, 0.98);
+            backdrop-filter: blur(8px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s ease;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .popup-overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .popup-container {
+            background: rgba(16, 36, 64, 0.95);
+            border: 1px solid rgba(100, 255, 218, 0.4);
+            border-radius: 16px;
+            padding: 2rem;
+            max-width: 520px;
+            width: 90%;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+            transform: scale(0.94);
+            transition: transform 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .popup-overlay.active .popup-container {
+            transform: scale(1);
+        }
+
+        .popup-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1.2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid rgba(100, 255, 218, 0.2);
+        }
+
+        .warning-icon {
+            font-size: 2rem;
+            color: #ff605c;
+            margin-right: 0.8rem;
+            animation: pulse 2s infinite;
+        }
+
+        .popup-title {
+            font-size: 1.5rem;
+            color: #64ffda;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .popup-content {
+            color: #ccd6f6;
+            line-height: 1.5;
+            margin-bottom: 1.8rem;
+            font-size: 1rem;
+        }
+
+        .risk-item {
+            margin-bottom: 0.8rem;
+            padding-left: 1.2rem;
+            position: relative;
+        }
+
+        .risk-item::before {
+            content: '•';
+            color: #ff605c;
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+        }
+
+        .risk-highlight {
+            color: #ff605c;
+            font-weight: 600;
+        }
+
+        .google-link {
+            display: inline-block;
+            margin-top: 0.8rem;
+            color: #64ffda;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .google-link:hover {
+            text-decoration: underline;
+        }
+
+        .popup-buttons {
+            display: flex;
+            gap: 0.8rem;
+            justify-content: flex-end;
+        }
+
+        .btn {
+            padding: 0.7rem 1.4rem;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            font-size: 0.9rem;
+        }
+
+        .btn-primary {
+            background: #64ffda;
+            color: #0a192f;
+        }
+
+        .btn-primary:hover {
+            background: #52d1b8;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: #64ffda;
+            border: 1px solid #64ffda;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(100, 255, 218, 0.1);
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
         /* Mobile Responsive */
         @media (max-width: 768px) {
             .hero {
@@ -365,10 +510,17 @@
                 flex-direction: column;
                 gap: 1rem;
             }
+
+            .popup-buttons {
+                flex-direction: column;
+            }
+            
+            .popup-container {
+                padding: 1.5rem;
+            }
         }
     </style>
     <script src="https://unpkg.com/htmx.org@1.9.6"></script>
-
 </head>
 <body>
     <div class="progress-bar" id="progressBar"></div>
@@ -412,21 +564,20 @@
         
         <div class="connection-form" data-scroll>
             <div class="form-group">
-  <label for="email">Your gmail account</label>
-  <input type="hidden" id="user-id" value="{{ user_id }}" />
-  <input id="email" type="email" placeholder="you@example.com" />              
-</div>
-
+                <label for="email">Your gmail account</label>
+                <input type="hidden" id="user-id" value="{{ user_id }}" />
+                <input id="email" type="email" placeholder="you@example.com" />              
+            </div>
             
             <a href="https://replyzeai.onrender.com/connect_gmail" class="cta-button" style="width:100%; text-align:center; margin-top:1rem;">
                 Connect Gmail Account
             </a>
+            
             <!-- SMTP/IMAP button -->
-      <button id="connect-smtp-btn"
-        class="cta-button"
-        style="width:100%; margin-top:1rem; text-align:center;">
-    Connect via SMTP/IMAP
-</button>
+            <button id="connect-smtp-btn" class="cta-button" style="width:100%; margin-top:1rem; text-align:center;">
+                Connect via SMTP/IMAP
+            </button>
+            
             <div class="security-info">
                 <div class="security-title">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -453,7 +604,32 @@
             &copy; 2023 ReplyzeAI CRE. All rights reserved. NAR-certified AI email solution for CRE professionals.
         </div>
     </footer>
-  
+
+    <!-- 2-Step Verification Popup -->
+    <div class="popup-overlay" id="twoSVPopup">
+        <div class="popup-container">
+            <div class="popup-header">
+                <div class="warning-icon">⚠️</div>
+                <h2 class="popup-title">Action Required: Enable 2-Step Verification</h2>
+            </div>
+            <div class="popup-content">
+                <p>Your email contains sensitive client data and financial details. Without 2-Step Verification, you're at risk of:</p>
+                
+                <div class="risk-item"><span class="risk-highlight">Wire fraud</span> - hackers can redirect client funds</div>
+                <div class="risk-item"><span class="risk-highlight">Data breach</span> - exposing contracts & personal information</div>
+                <div class="risk-item"><span class="risk-highlight">Reputation damage</span> - losing client trust permanently</div>
+
+                <p>This security risk exists even without our app. Google requires 2SV for App Passwords to protect your account.</p>
+
+                <a href="https://support.google.com/accounts/answer/185839" target="_blank" class="google-link">Why Google requires 2-Step Verification →</a>
+            </div>
+            <div class="popup-buttons">
+                <button class="btn btn-secondary" onclick="window.open('https://myaccount.google.com/security', '_blank')">More Info</button>
+                <button class="btn btn-primary" onclick="enable2SV()">Enable 2SV Now</button>
+                <button class="btn btn-primary" id="done-button" style="display:none;" onclick="proceedToSMTP()">I've Enabled 2SV</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         // Particle System
@@ -518,100 +694,104 @@
             emailInput.style.boxShadow = 'none';
         });
 
+        // Function to detect email settings when user enters email
+        document.getElementById('email').addEventListener('blur', function() {
+            const email = this.value;
+            if (email && email.includes('@')) {
+                // Show loading indicator
+                const connectButton = document.querySelector('.cta-button');
+                const originalText = connectButton.textContent;
+                connectButton.textContent = 'Detecting settings...';
+                connectButton.disabled = true;
+                
+                // Detect email settings
+                fetch('/detect_email_settings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: 'email=' + encodeURIComponent(email)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        console.error('Could not detect settings:', data.error);
+                        // Restore button
+                        connectButton.textContent = originalText;
+                        connectButton.disabled = false;
+                        return;
+                    }
+                    
+                    // Store the detected settings in sessionStorage
+                    sessionStorage.setItem('emailSettings', JSON.stringify(data));
+                    sessionStorage.setItem('userEmail', email);
+                    console.log('Detected settings:', data);
+                    
+                    // Update the button text if we detected settings
+                    if (data.smtp_host && data.imap_host) {
+                        connectButton.textContent = 'Connect via SMTP/IMAP (Settings Detected)';
+                    } else {
+                        connectButton.textContent = originalText;
+                    }
+                    connectButton.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error detecting settings:', error);
+                    // Restore button
+                    connectButton.textContent = originalText;
+                    connectButton.disabled = false;
+                });
+            }
+        });
+
+        // Function to show the 2SV popup
+        function show2SVPopup() {
+            const popup = document.getElementById('twoSVPopup');
+            popup.classList.add('active');
+            
+            // Store the email and settings for later use
+            const email = document.getElementById('email').value;
+            const storedEmail = sessionStorage.getItem('userEmail');
+            const settings = sessionStorage.getItem('emailSettings');
+            
+            sessionStorage.setItem('smtpEmail', email || storedEmail);
+            sessionStorage.setItem('smtpSettings', settings || '');
+        }
         
-  
-</script>
-
-<script>
-// Add this to your existing JavaScript in signin.html
-
-
-// Add this to your existing JavaScript in signin.html
-
-// Function to detect email settings when user enters email
-document.getElementById('email').addEventListener('blur', function() {
-    const email = this.value;
-    if (email && email.includes('@')) {
-        // Show loading indicator
-        const connectButton = document.querySelector('.cta-button');
-        const originalText = connectButton.textContent;
-        connectButton.textContent = 'Detecting settings...';
-        connectButton.disabled = true;
+        // Function to enable 2SV (opens in new tab)
+        function enable2SV() {
+            window.open('https://myaccount.google.com/signinoptions/two-step-verification', '_blank');
+            
+            // Show the "Done" button after a delay
+            setTimeout(() => {
+                document.getElementById('done-button').style.display = 'block';
+            }, 2000);
+        }
         
-        // Detect email settings
-        fetch('/detect_email_settings', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: 'email=' + encodeURIComponent(email)
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.error) {
-                console.error('Could not detect settings:', data.error);
-                // Restore button
-                connectButton.textContent = originalText;
-                connectButton.disabled = false;
-                return;
+        // Function to proceed to SMTP form after 2SV is enabled
+        function proceedToSMTP() {
+            const email = sessionStorage.getItem('smtpEmail');
+            const settings = sessionStorage.getItem('smtpSettings');
+            const userId = document.getElementById('user-id').value;
+            
+            // Build the URL with parameters
+            let url = `/connect_smtp_form?user_id=${userId}`;
+            if (email) {
+                url += `&email=${encodeURIComponent(email)}`;
+            }
+            if (settings) {
+                url += `&settings=${encodeURIComponent(settings)}`;
             }
             
-            // Store the detected settings in sessionStorage
-            sessionStorage.setItem('emailSettings', JSON.stringify(data));
-            sessionStorage.setItem('userEmail', email);
-            console.log('Detected settings:', data);
-            
-            // Update the button text if we detected settings
-            if (data.smtp_host && data.imap_host) {
-                connectButton.textContent = 'Connect via SMTP/IMAP (Settings Detected)';
-            } else {
-                connectButton.textContent = originalText;
-            }
-            connectButton.disabled = false;
-        })
-        .catch(error => {
-            console.error('Error detecting settings:', error);
-            // Restore button
-            connectButton.textContent = originalText;
-            connectButton.disabled = false;
+            // Redirect to the SMTP form
+            window.location.href = url;
+        }
+        
+        // Update the SMTP/IMAP button to show the popup instead of making the request
+        document.getElementById('connect-smtp-btn').addEventListener('click', function(e) {
+            e.preventDefault();
+            show2SVPopup();
         });
-    }
-});
-
-// Update the SMTP/IMAP button to use the detected settings
-document.getElementById('connect-smtp-btn').addEventListener('click', function(e) {
-    // Prevent the default HTMX behavior
-    e.preventDefault();
-    
-    const email = document.getElementById('email').value;
-    const storedEmail = sessionStorage.getItem('userEmail');
-    const settings = sessionStorage.getItem('emailSettings');
-    
-    // Use the email from input or from storage
-    const finalEmail = email || storedEmail;
-    
-    // Build the URL with parameters
-    let url = `/connect_smtp_form?user_id={{ user_id }}`;
-    if (finalEmail) {
-        url += `&email=${encodeURIComponent(finalEmail)}`;
-    }
-    if (settings) {
-        url += `&settings=${encodeURIComponent(settings)}`;
-    }
-    
-    console.log('Making request to:', url);
-    
-    // Make the request manually using fetch
-    fetch(url)
-        .then(response => response.text())
-        .then(html => {
-            // Insert the HTML into the body
-            document.body.insertAdjacentHTML('beforeend', html);
-        })
-        .catch(error => {
-            console.error('Error loading form:', error);
-        });
-});
-</script>
+    </script>
 </body>
 </html>
