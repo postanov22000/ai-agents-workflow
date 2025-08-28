@@ -365,10 +365,14 @@ def connect_smtp_form():
     
     # Try to get detected settings from the request
     settings_param = request.args.get('settings')
+    print(f"Raw settings parameter: {settings_param}")  # Debug
+    
     if settings_param:
         try:
             # URL decode the settings parameter first
             decoded_settings = unquote(settings_param)
+            print(f"Decoded settings: {decoded_settings}")  # Debug
+            
             settings = json.loads(decoded_settings)
             smtp_host = settings.get('smtp_host', smtp_host)
             imap_host = settings.get('imap_host', imap_host)
