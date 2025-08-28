@@ -525,6 +525,62 @@
         
   
 </script>
+<script>
+// Add this to your existing JavaScript in signin.html
 
+// Function to detect email settings when user enters email
+document.getElementById('email').addEventListener('blur', function() {
+    const email = this.value;
+    if (email && email.includes('@')) {
+        // Show loading indicator
+        const connectButton = document.querySelector('.cta-button');
+        const originalText = connectButton.textContent;
+        connectButton.textContent = 'Detecting settings...';
+        connectButton.disabled = true;
+        
+        // Detect email settings
+        fetch('/detect_email_settings', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'email=' + encodeURIComponent(email)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('Could not detect settings:', data.error);
+                // Restore button
+                connectButton.textContent = originalText;
+                connectButton.disabled = false;
+                return;
+            }
+            
+            // Store the detected settings in sessionStorage
+            sessionStorage.setItem('emailSettings', JSON.stringify(data));
+            console.log('Detected settings:', data);
+            
+            // Restore button
+            connectButton.textContent = originalText;
+            connectButton.disabled = false;
+        })
+        .catch(error => {
+            console.error('Error detecting settings:', error);
+            // Restore button
+            connectButton.textContent = originalText;
+            connectButton.disabled = false;
+        });
+    }
+});
+
+// Update the SMTP/IMAP button to pass the email
+document.getElementById('connect-smtp-btn').addEventListener('click', function() {
+    const email = document.getElementById('email').value;
+    if (email && email.includes('@')) {
+        // Store the email in sessionStorage
+        sessionStorage.setItem('userEmail', email);
+    }
+});
+</script>
 </body>
 </html>
