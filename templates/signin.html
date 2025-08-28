@@ -212,7 +212,7 @@
             font-size: 1.5rem;
             font-weight: bold;
             margin: 0 auto 1.5rem;
-            color: 64ffda;
+            color: #64ffda;
         }
 
         .step-title {
@@ -696,61 +696,51 @@
 
         // Store the current email to detect changes
         let currentEmail = '';
+        let settingsDetectionTimeout = null;
 
         // Function to detect email settings when user enters email
         document.getElementById('email').addEventListener('input', function() {
             const email = this.value;
-            if (email && email.includes('@') && email !== currentEmail) {
-                currentEmail = email;
-                
-                // Clear any previously stored settings for this email
-                sessionStorage.removeItem('emailSettings');
-                sessionStorage.removeItem('userEmail');
-                
-                // Show loading indicator
-                const connectButton = document.getElementById('connect-smtp-btn');
-                const originalText = connectButton.textContent;
-                connectButton.textContent = 'Detecting settings...';
-                connectButton.disabled = true;
-                
-                // Detect email settings
-                fetch('/detect_email_settings', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: 'email=' + encodeURIComponent(email)
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        console.error('Could not detect settings:', data.error);
-                        // Restore button
-                        connectButton.textContent = originalText;
-                        connectButton.disabled = false;
-                        return;
-                    }
-                    
-                    // Store the detected settings in sessionStorage
-                    sessionStorage.setItem('emailSettings', JSON.stringify(data));
-                    sessionStorage.setItem('userEmail', email);
-                    console.log('Detected settings for', email, ':', data);
-                    
-                    // Update the button text if we detected settings
-                    if (data.smtp_host && data.imap_host) {
-                        connectButton.textContent = 'Connect via SMTP/IMAP (Settings Detected)';
-                    } else {
-                        connectButton.textContent = originalText;
-                    }
-                    connectButton.disabled = false;
-                })
-                .catch(error => {
-                    console.error('Error detecting settings:', error);
-                    // Restore button
-                    connectButton.textContent = originalText;
-                    connectButton.disabled = false;
-                });
+            
+            // Clear any previous timeout
+            if (settingsDetectionTimeout) {
+                clearTimeout(settingsDetectionTimeout);
             }
+            
+            // Set a new timeout to detect settings after user stops typing
+            settingsDetectionTimeout = setTimeout(() => {
+                if (email && email.includes('@') && email !== currentEmail) {
+                    currentEmail = email;
+                    
+                    // Clear any previously stored settings for this email
+                    sessionStorage.removeItem('emailSettings');
+                    sessionStorage.removeItem('userEmail');
+                    
+                    // Detect email settings in the background (without UI changes)
+                    fetch('/detect_email_settings', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: 'email=' + encodeURIComponent(email)
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            console.error('Could not detect settings:', data.error);
+                            return;
+                        }
+                        
+                        // Store the detected settings in sessionStorage
+                        sessionStorage.setItem('emailSettings', JSON.stringify(data));
+                        sessionStorage.setItem('userEmail', email);
+                        console.log('Detected settings for', email, ':', data);
+                    })
+                    .catch(error => {
+                        console.error('Error detecting settings:', error);
+                    });
+                }
+            }, 1000); // Wait 1 second after user stops typing
         });
 
         // Function to show the 2SV popup
@@ -807,6 +797,11 @@
                 return;
             }
             
+            // Show loading state on button
+            const originalText = this.textContent;
+            this.textContent = 'Detecting settings...';
+            this.disabled = true;
+            
             // Always make a fresh request to ensure we have the correct settings
             fetch('/detect_email_settings', {
                 method: 'POST',
@@ -817,8 +812,12 @@
             })
             .then(response => response.json())
             .then(data => {
+                // Restore button state
+                this.disabled = false;
+                
                 if (data.error) {
                     console.error('Could not detect settings:', data.error);
+                    this.textContent = originalText;
                     alert('Could not detect email settings. Please check your email address and try again.');
                     return;
                 }
@@ -828,11 +827,20 @@
                 sessionStorage.setItem('userEmail', email);
                 console.log('Final detected settings for', email, ':', data);
                 
+                // Update button text if settings were detected
+                if (data.smtp_host && data.imap_host) {
+                    this.textContent = 'Connect via SMTP/IMAP (Settings Detected)';
+                } else {
+                    this.textContent = originalText;
+                }
+                
                 // Show the 2SV popup
                 show2SVPopup();
             })
             .catch(error => {
                 console.error('Error detecting settings:', error);
+                this.textContent = originalText;
+                this.disabled = false;
                 alert('An error occurred while detecting email settings. Please try again.');
             });
         });
