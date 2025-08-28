@@ -346,37 +346,49 @@ def dashboard_settings():
 
 import json
 
+import json
+from urllib.parse import unquote
+
 @app.route('/connect_smtp_form')
 def connect_smtp_form():
     user_id = request.args.get('user_id')
-    email = request.args.get('email', '')
     
-    # Initialize with None values first
-    smtp_host = None
-    imap_host = None
+    # Get and decode the email parameter
+    email_param = request.args.get('email', '')
+    email = unquote(email_param) if email_param else ''
+    
+    # Initialize with default values
+    smtp_host = "smtp.gmail.com"
+    imap_host = "imap.gmail.com"
+    smtp_port = 587
+    imap_port = 993
     
     # Try to get detected settings from the request
-    settings_json = request.args.get('settings')
-    if settings_json:
+    settings_param = request.args.get('settings')
+    if settings_param:
         try:
-            settings = json.loads(settings_json)
-            smtp_host = settings.get('smtp_host')
-            imap_host = settings.get('imap_host')
-        except json.JSONDecodeError:
+            # URL decode the settings parameter first
+            decoded_settings = unquote(settings_param)
+            settings = json.loads(decoded_settings)
+            smtp_host = settings.get('smtp_host', smtp_host)
+            imap_host = settings.get('imap_host', imap_host)
+            smtp_port = settings.get('smtp_port', smtp_port)
+            imap_port = settings.get('imap_port', imap_port)
+            print(f"Using detected settings: {settings}")  # For debugging
+        except (json.JSONDecodeError, TypeError) as e:
+            print(f"Error parsing settings: {e}")  # For debugging
             # If JSON parsing fails, fall back to defaults
             pass
     
-    # Only use defaults if no settings were provided or parsing failed
-    if smtp_host is None:
-        smtp_host = "smtp.gmail.com"
-    if imap_host is None:
-        imap_host = "imap.gmail.com"
+    print(f"Final values - Email: {email}, SMTP: {smtp_host}:{smtp_port}, IMAP: {imap_host}:{imap_port}")  # For debugging
     
     return render_template('partials/connect_smtp_form.html', 
                          user_id=user_id, 
                          email=email,
                          smtp_host=smtp_host,
-                         imap_host=imap_host)
+                         imap_host=imap_host,
+                         smtp_port=smtp_port,
+                         imap_port=imap_port)
 
 @app.route("/disconnect_smtp", methods=["POST"])
 def disconnect_smtp():
