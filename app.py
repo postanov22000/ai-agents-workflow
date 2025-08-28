@@ -349,8 +349,13 @@ import json
 import json
 from urllib.parse import unquote
 
-@app.route('/connect_smtp_form')
+@app.route('/connect_smtp_form', methods=['GET', 'POST'])
 def connect_smtp_form():
+    if request.method == 'POST':
+        # Handle POST request (if needed)
+        pass
+    
+    # Handle GET request
     user_id = request.args.get('user_id')
     
     # Get and decode the email parameter
@@ -393,6 +398,7 @@ def connect_smtp_form():
                          imap_host=imap_host,
                          smtp_port=smtp_port,
                          imap_port=imap_port)
+
 def disconnect_smtp():
     user_id = request.form.get("user_id")
     supabase.table("profiles").update({
