@@ -530,6 +530,10 @@
 // Add this to your existing JavaScript in signin.html
 
 // Function to detect email settings when user enters email
+<script>
+// Add this to your existing JavaScript in signin.html
+
+// Function to detect email settings when user enters email
 document.getElementById('email').addEventListener('blur', function() {
     const email = this.value;
     if (email && email.includes('@')) {
@@ -602,7 +606,7 @@ document.getElementById('connect-smtp-btn').addEventListener('click', function(e
     
     console.log('Making request to:', url);
     
-    // Make the request manually
+    // Make the request manually using fetch
     fetch(url)
         .then(response => response.text())
         .then(html => {
