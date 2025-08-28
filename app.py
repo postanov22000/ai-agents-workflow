@@ -353,9 +353,9 @@ from urllib.parse import unquote
 def connect_smtp_form():
     user_id = request.args.get('user_id')
     
-    # Get and decode the email parameter
-    email_param = request.args.get('email', '')
-    email = unquote(email_param) if email_param else ''
+    # Get values from headers
+    email = request.headers.get('X-Email', '')
+    settings_json = request.headers.get('X-Settings', '{}')
     
     # Initialize with default values
     smtp_host = "smtp.gmail.com"
@@ -363,24 +363,16 @@ def connect_smtp_form():
     smtp_port = 587
     imap_port = 993
     
-    # Try to get detected settings from the request
-    settings_param = request.args.get('settings')
-    print(f"Raw settings parameter: {settings_param}")  # Debug
-    
-    if settings_param:
+    # Try to parse settings
+    if settings_json and settings_json != 'null':  # Check if settings_json is not null
         try:
-            # URL decode the settings parameter first
-            decoded_settings = unquote(settings_param)
-            print(f"Decoded settings: {decoded_settings}")  # Debug
-            
-            settings = json.loads(decoded_settings)
+            settings = json.loads(settings_json)
             smtp_host = settings.get('smtp_host', smtp_host)
             imap_host = settings.get('imap_host', imap_host)
             smtp_port = settings.get('smtp_port', smtp_port)
             imap_port = settings.get('imap_port', imap_port)
             print(f"Using detected settings: {settings}")  # For debugging
-        except (json.JSONDecodeError, TypeError) as e:
-            print(f"Error parsing settings: {e}")  # For debugging
+        except json.JSONDecodeError:
             # If JSON parsing fails, fall back to defaults
             pass
     
@@ -393,7 +385,6 @@ def connect_smtp_form():
                          imap_host=imap_host,
                          smtp_port=smtp_port,
                          imap_port=imap_port)
-
 @app.route("/disconnect_smtp", methods=["POST"])
 def disconnect_smtp():
     user_id = request.form.get("user_id")
