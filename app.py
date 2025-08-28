@@ -1187,25 +1187,118 @@ def create_transaction():
     return feedback, 200
 
 # Add this to your main app file (e.g., app.py)
-from flask import request, jsonify
-from email_providers import get_email_settings
+# Add these imports at the top of your app.py
+import re
+import dns.resolver
 
+# Add this route to your app.py
 @app.route('/detect_email_settings', methods=['POST'])
 def detect_email_settings():
     email = request.form.get('email')
     if not email:
         return jsonify({"error": "Email is required"}), 400
     
-    settings = get_email_settings(email)
-    if settings:
-        return jsonify({
-            "smtp_host": settings.get("smtp_host"),
-            "smtp_port": settings.get("smtp_port"),
-            "imap_host": settings.get("imap_host"),
-            "imap_port": settings.get("imap_port")
-        })
-    else:
-        return jsonify({"error": "Could not detect email settings"}), 400
+    # Extract domain from email
+    domain = extract_domain(email)
+    if not domain:
+        return jsonify({"error": "Invalid email format"}), 400
+    
+    # Check against known providers
+    known_providers = {
+        "gmail.com": {
+            "smtp_host": "smtp.gmail.com",
+            "smtp_port": 587,
+            "imap_host": "imap.gmail.com",
+            "imap_port": 993
+        },
+        "outlook.com": {
+            "smtp_host": "smtp-mail.outlook.com",
+            "smtp_port": 587,
+            "imap_host": "outlook.office365.com",
+            "imap_port": 993
+        },
+        "yahoo.com": {
+            "smtp_host": "smtp.mail.yahoo.com",
+            "smtp_port": 587,
+            "imap_host": "imap.mail.yahoo.com",
+            "imap_port": 993
+        },
+        "aol.com": {
+            "smtp_host": "smtp.aol.com",
+            "smtp_port": 587,
+            "imap_host": "imap.aol.com",
+            "imap_port": 993
+        },
+        "icloud.com": {
+            "smtp_host": "smtp.mail.me.com",
+            "smtp_port": 587,
+            "imap_host": "imap.mail.me.com",
+            "imap_port": 993
+        },
+        "hotmail.com": {
+            "smtp_host": "smtp-mail.outlook.com",
+            "smtp_port": 587,
+            "imap_host": "outlook.office365.com",
+            "imap_port": 993
+        },
+        "live.com": {
+            "smtp_host": "smtp-mail.outlook.com",
+            "smtp_port": 587,
+            "imap_host": "outlook.office365.com",
+            "imap_port": 993
+        },
+        "office365.com": {
+            "smtp_host": "smtp.office365.com",
+            "smtp_port": 587,
+            "imap_host": "outlook.office365.com",
+            "imap_port": 993
+        }
+    }
+    
+    # Check if domain is in known providers
+    if domain in known_providers:
+        return jsonify(known_providers[domain])
+    
+    # For custom domains, try to discover settings
+    try:
+        # Try to discover via MX records
+        mx_records = dns.resolver.resolve(domain, 'MX')
+        for mx in mx_records:
+            mx_host = str(mx.exchange).rstrip('.')
+            
+            # Check if it's a known provider's MX
+            if "google" in mx_host:
+                return jsonify({
+                    "smtp_host": "smtp.gmail.com",
+                    "smtp_port": 587,
+                    "imap_host": "imap.gmail.com",
+                    "imap_port": 993
+                })
+            elif "outlook" in mx_host or "office365" in mx_host:
+                return jsonify({
+                    "smtp_host": "smtp.office365.com",
+                    "smtp_port": 587,
+                    "imap_host": "outlook.office365.com",
+                    "imap_port": 993
+                })
+    except:
+        pass
+    
+    # Fallback to common defaults
+    return jsonify({
+        "smtp_host": f"smtp.{domain}",
+        "smtp_port": 587,
+        "imap_host": f"imap.{domain}",
+        "imap_port": 993
+    })
+
+def extract_domain(email):
+    """Extract domain from email address"""
+    pattern = r'@([\w\.-]+)'
+    match = re.search(pattern, email)
+    if match:
+        return match.group(1).lower()
+    return None
 
 
 # ── Final entry point ──
