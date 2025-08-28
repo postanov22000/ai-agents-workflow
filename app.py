@@ -347,21 +347,18 @@ def dashboard_settings():
 @app.route('/connect_smtp_form')
 def connect_smtp_form():
     user_id = request.args.get('user_id')
-    
-    # Get the email from session or request
     email = request.args.get('email', '')
+    settings_json = request.args.get('settings', '{}')
     
     # Initialize with default values
     smtp_host = "smtp.gmail.com"
     imap_host = "imap.gmail.com"
     
-    # Try to get detected settings from session
+    # Try to parse settings
     try:
-        settings_json = request.args.get('settings')
-        if settings_json:
-            settings = json.loads(settings_json)
-            smtp_host = settings.get('smtp_host', smtp_host)
-            imap_host = settings.get('imap_host', imap_host)
+        settings = json.loads(settings_json)
+        smtp_host = settings.get('smtp_host', smtp_host)
+        imap_host = settings.get('imap_host', imap_host)
     except:
         pass
     
