@@ -343,11 +343,33 @@ def dashboard_settings():
         gmail_connected=gmail_connected,
         show_reconnect=show_reconnect
     )
-# New routes for SMTP management
-@app.route("/connect_smtp_form", methods=["GET"])
+
+@app.route('/connect_smtp_form')
 def connect_smtp_form():
-    user_id = request.args.get("user_id")
-    return render_template("partials/connect_smtp_form.html", user_id=user_id)
+    user_id = request.args.get('user_id')
+    
+    # Get the email from session or request
+    email = request.args.get('email', '')
+    
+    # Initialize with default values
+    smtp_host = "smtp.gmail.com"
+    imap_host = "imap.gmail.com"
+    
+    # Try to get detected settings from session
+    try:
+        settings_json = request.args.get('settings')
+        if settings_json:
+            settings = json.loads(settings_json)
+            smtp_host = settings.get('smtp_host', smtp_host)
+            imap_host = settings.get('imap_host', imap_host)
+    except:
+        pass
+    
+    return render_template('partials/connect_smtp_form.html', 
+                         user_id=user_id, 
+                         email=email,
+                         smtp_host=smtp_host,
+                         imap_host=imap_host)
 
 @app.route("/disconnect_smtp", methods=["POST"])
 def disconnect_smtp():
