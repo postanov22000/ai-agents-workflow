@@ -344,23 +344,33 @@ def dashboard_settings():
         show_reconnect=show_reconnect
     )
 
+import json
+
 @app.route('/connect_smtp_form')
 def connect_smtp_form():
     user_id = request.args.get('user_id')
     email = request.args.get('email', '')
-    settings_json = request.args.get('settings', '{}')
     
-    # Initialize with default values
-    smtp_host = "smtp.gmail.com"
-    imap_host = "imap.gmail.com"
+    # Initialize with None values first
+    smtp_host = None
+    imap_host = None
     
-    # Try to parse settings
-    try:
-        settings = json.loads(settings_json)
-        smtp_host = settings.get('smtp_host', smtp_host)
-        imap_host = settings.get('imap_host', imap_host)
-    except:
-        pass
+    # Try to get detected settings from the request
+    settings_json = request.args.get('settings')
+    if settings_json:
+        try:
+            settings = json.loads(settings_json)
+            smtp_host = settings.get('smtp_host')
+            imap_host = settings.get('imap_host')
+        except json.JSONDecodeError:
+            # If JSON parsing fails, fall back to defaults
+            pass
+    
+    # Only use defaults if no settings were provided or parsing failed
+    if smtp_host is None:
+        smtp_host = "smtp.gmail.com"
+    if imap_host is None:
+        imap_host = "imap.gmail.com"
     
     return render_template('partials/connect_smtp_form.html', 
                          user_id=user_id, 
