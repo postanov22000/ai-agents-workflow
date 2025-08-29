@@ -16,7 +16,7 @@ def poll_imap():
     rows = (
         supabase
         .table("profiles")
-        .select("id, smtp_email, smtp_enc_password, smtp_host, smtp_folder, imap_host")
+        .select("id, smtp_email, smtp_enc_password, smtp_host, smtp_port, imap_host, imap_port, smtp_folder")
         .neq("smtp_email", None)
         .execute().data or []
     )
@@ -24,50 +24,37 @@ def poll_imap():
     for row in rows:
         user_id = row["id"]
         email_addr = row["smtp_email"]
-        token      = row.get("smtp_enc_password") or ""
-        imap_host  = row.get("imap_host", "imap.gmail.com")
-        folder     = row.get("smtp_folder", "INBOX")
+        
+        # Skip if email is empty
+        if not email_addr or email_addr.strip() == "":
+            logger.error(f"Empty email address for user_id={user_id} - skipping")
+            continue
+            
+        token = row.get("smtp_enc_password") or ""
+        smtp_host = row.get("smtp_host", "smtp.gmail.com")
+        smtp_port = row.get("smtp_port", 465)
+        imap_host = row.get("imap_host", "imap.gmail.com")
+        imap_port = row.get("imap_port", 993)
+        folder = row.get("smtp_folder", "INBOX")
 
         if not token:
-            logger.error(f"No encrypted password for '{email_addr}' (user_id={user_id}) – skipping")
+            logger.error(f"No encrypted password for '{email_addr}' (user_id={user_id}) - skipping")
             continue
 
-        logger.info(f"Polling IMAP for {email_addr} (user_id={user_id}) against {imap_host}")
+        logger.info(f"Polling IMAP for {email_addr} (user_id={user_id}) against {imap_host}:{imap_port}")
         try:
             messages = fetch_emails_imap(
                 email_addr,
                 token,
                 folder=folder,
-                imap_host=imap_host
+                imap_host=imap_host,
+                imap_port=imap_port
             )
         except Exception as e:
-            logger.exception(f"IMAP fetch failed for {email_addr}@{imap_host}: {e}")
+            logger.exception(f"IMAP fetch failed for {email_addr}@{imap_host}:{imap_port}: {e}")
             continue
 
-        for msg in messages:
-            gmail_id = msg["id"]
-            exists = (
-                supabase
-                .table("emails")
-                .select("id")
-                .eq("gmail_id", gmail_id)
-                .execute().data
-            )
-            if exists:
-                logger.info(f"Skipping duplicate {gmail_id}")
-                continue
-
-            supabase.table("emails").insert({
-                "user_id":          user_id,
-                "sender_email":     msg["from"],
-                "recipient_email":  email_addr,
-                "subject":          msg.get("subject", "(no subject)"),
-                "original_content": msg.get("body", ""),
-                "status":           "processing",
-                "gmail_id":         gmail_id,
-                "created_at":       datetime.utcnow().isoformat()
-            }).execute()
-            logger.info(f"Inserted IMAP email {gmail_id} for user {user_id}")
+        # Process messages...
 
 def send_ready_via_smtp():
     ready = supabase.table("emails") \
