@@ -540,7 +540,7 @@ def disconnect_smtp():
         "smtp_host": None,
         "imap_host": None
     }).eq("id", user_id).execute()
-    return redirect(f"/dashboard/settings?user_id={user_id}")
+    return redirect(f"/dashboard/signin?user_id={user_id}")
 
 @app.route("/dashboard/home")
 def dashboard_home():
