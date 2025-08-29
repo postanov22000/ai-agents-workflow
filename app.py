@@ -145,9 +145,9 @@ def verify_smtp_connection(user_id: str) -> dict:
         
         server_details = resp.data
         smtp_host = server_details.get("smtp_host", "smtp.gmail.com")
-        smtp_port = int(server_details.get("smtp_port", 587))
+        smtp_port = 587
         imap_host = server_details.get("imap_host", "imap.gmail.com")
-        imap_port = int(server_details.get("imap_port", 993))
+        imap_port = 993
         
         # Test SMTP connection
         smtp_working = False
@@ -1522,15 +1522,15 @@ def check_smtp_status():
         return jsonify({"status": "invalid", "message": "No SMTP credentials found"})
     
     # Get SMTP server details from profile
-    resp = supabase.from_("profiles").select("smtp_host, smtp_port, imap_host, imap_port").eq("id", user_id).single().execute()
+    resp = supabase.from_("profiles").select("smtp_host, imap_host").eq("id", user_id).single().execute()
     if resp.error or not resp.data:
         return jsonify({"status": "error", "message": "Could not retrieve server details"}), 500
     
     server_details = resp.data
     smtp_host = server_details.get("smtp_host", "smtp.gmail.com")
-    smtp_port = server_details.get("smtp_port", 587)
+    smtp_port =  587
     imap_host = server_details.get("imap_host", "imap.gmail.com")
-    imap_port = server_details.get("imap_port", 993)
+    imap_port = 993
     
     # Test SMTP connection
     smtp_working = False
