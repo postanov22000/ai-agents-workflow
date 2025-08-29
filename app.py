@@ -141,7 +141,7 @@ def verify_smtp_connection(user_id: str) -> dict:
         ).eq("id", user_id).single().execute()
         
         if not resp.data:  # Changed from: if resp.error or not resp.data:
-        return {"status": "invalid", "message": "Could not retrieve server details"}
+            return {"status": "invalid", "message": "Could not retrieve server details"}
         
         server_details = resp.data
         smtp_host = server_details.get("smtp_host", "smtp.gmail.com")
