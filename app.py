@@ -62,7 +62,7 @@ RETRY_BACKOFF_BASE = 2
 def get_smtp_creds(user_id: str):
     """Return decrypted (email, app_password) or (None, None)."""
     try:
-        resp = supabase.from_("profiles").select("smtp_email, smtp_password").eq("id", user_id).single().execute()
+        resp = supabase.from_("profiles").select("smtp_email, smtp_enc_password").eq("id", user_id).single().execute()
         
         # Check if response has data
         if not resp.data:
@@ -70,11 +70,11 @@ def get_smtp_creds(user_id: str):
             return None, None
             
         # Check if password exists
-        if not resp.data.get("smtp_password"):
+        if not resp.data.get("smtp_enc_password"):
             app.logger.warning(f"No SMTP password found for user {user_id}")
             return None, None
             
-        enc_pwd = resp.data["smtp_password"].encode()
+        enc_pwd = resp.data["smtp_enc_password"].encode()
         try:
             pwd = fernet.decrypt(enc_pwd).decode()
         except Exception as e:
