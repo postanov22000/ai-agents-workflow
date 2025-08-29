@@ -61,15 +61,31 @@ RETRY_BACKOFF_BASE = 2
 #----------------------------------------------------------------------------
 def get_smtp_creds(user_id: str):
     """Return decrypted (email, app_password) or (None, None)."""
-    resp = supabase.from_("profiles").select("smtp_email, smtp_password").eq("id", user_id).single().execute()
-    if resp.error or not resp.data:
-        return None, None
-    enc_pwd = resp.data["smtp_password"].encode()
     try:
-        pwd = fernet.decrypt(enc_pwd).decode()
-    except Exception:
+        resp = supabase.from_("profiles").select("smtp_email, smtp_password").eq("id", user_id).single().execute()
+        
+        # Check if response has data
+        if not resp.data:
+            app.logger.warning(f"No SMTP credentials found for user {user_id}")
+            return None, None
+            
+        # Check if password exists
+        if not resp.data.get("smtp_password"):
+            app.logger.warning(f"No SMTP password found for user {user_id}")
+            return None, None
+            
+        enc_pwd = resp.data["smtp_password"].encode()
+        try:
+            pwd = fernet.decrypt(enc_pwd).decode()
+        except Exception as e:
+            app.logger.error(f"Failed to decrypt password for user {user_id}: {str(e)}")
+            return None, None
+            
+        return resp.data["smtp_email"], pwd
+        
+    except Exception as e:
+        app.logger.error(f"Error retrieving SMTP credentials for user {user_id}: {str(e)}")
         return None, None
-    return resp.data["smtp_email"], pwd
 
 # ---------------------------------------------------------------------------
 def call_edge(endpoint_path: str, payload: dict) -> bool:
@@ -124,8 +140,8 @@ def verify_smtp_connection(user_id: str) -> dict:
             "smtp_host, smtp_port, imap_host, imap_port"
         ).eq("id", user_id).single().execute()
         
-        if resp.error or not resp.data:
-            return {"status": "invalid", "message": "Could not retrieve server details"}
+        if not resp.data:  # Changed from: if resp.error or not resp.data:
+        return {"status": "invalid", "message": "Could not retrieve server details"}
         
         server_details = resp.data
         smtp_host = server_details.get("smtp_host", "smtp.gmail.com")
