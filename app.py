@@ -3,6 +3,10 @@ import time
 import base64
 import requests
 
+import smtplib
+import imaplib
+import ssl
+
 from flask import abort, Flask, render_template, request, redirect, jsonify, make_response, url_for
 from datetime import date, datetime, timezone
 from email.mime.text import MIMEText
@@ -102,7 +106,91 @@ def call_edge(endpoint_path: str, payload: dict) -> bool:
     return False
 
 # ── Routes ──
+#-----------------------------------------------
+# Add this function near your other helper functions
+def verify_smtp_connection(user_id: str) -> dict:
+    """
+    Test SMTP/IMAP connection and return status
+    Returns: {"status": "valid"|"invalid", "message": str}
+    """
+    try:
+        # Get SMTP credentials
+        smtp_email, app_password = get_smtp_creds(user_id)
+        if not smtp_email or not app_password:
+            return {"status": "invalid", "message": "No SMTP credentials found"}
+        
+        # Get server details
+        resp = supabase.from_("profiles").select("smtp_host, smtp_port, imap_host, imap_port").eq("id", user_id).single().execute()
+        if resp.error or not resp.data:
+            return {"status": "invalid", "message": "Could not retrieve server details"}
+        
+        server_details = resp.data
+        smtp_host = server_details.get("smtp_host", "smtp.gmail.com")
+        smtp_port = server_details.get("smtp_port", 587)
+        imap_host = server_details.get("imap_host", "imap.gmail.com")
+        imap_port = server_details.get("imap_port", 993)
+        
+        # Test SMTP connection
+        try:
+            context = ssl.create_default_context()
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                server.starttls(context=context)
+                server.login(smtp_email, app_password)
+        except Exception as e:
+            return {"status": "invalid", "message": f"SMTP connection failed: {str(e)}"}
+        
+        # Test IMAP connection
+        try:
+            with imaplib.IMAP4_SSL(imap_host, imap_port) as server:
+                server.login(smtp_email, app_password)
+        except Exception as e:
+            return {"status": "invalid", "message": f"IMAP connection failed: {str(e)}"}
+        
+        return {"status": "valid", "message": "SMTP and IMAP connections successful"}
+    
+    except Exception as e:
+        return {"status": "invalid", "message": f"Verification error: {str(e)}"}
 
+# Add this route for checking connection status
+@app.route("/check_email_connection")
+def check_email_connection():
+    user_id = request.args.get("user_id")
+    if not user_id:
+        return jsonify({"status": "error", "message": "Missing user_id"}), 400
+    
+    result = verify_smtp_connection(user_id)
+    return jsonify(result)
+
+# Add this function to check connection before allowing email features
+def require_valid_email_connection(user_id):
+    """Check if user has valid email connection, abort if not"""
+    # First check if they have Gmail OAuth
+    try:
+        toks = supabase.table("gmail_tokens").select("credentials").eq("user_id", user_id).execute().data
+        if toks and toks[0]:
+            cd = toks[0]["credentials"]
+            creds = Credentials(
+                token=cd["token"],
+                refresh_token=cd["refresh_token"],
+                token_uri=cd["token_uri"],
+                client_id=cd["client_id"],
+                client_secret=cd["client_secret"],
+                scopes=cd["scopes"],
+            )
+            if not creds.expired or (creds.expired and creds.refresh_token):
+                return True  # Gmail OAuth is valid
+    except Exception:
+        pass
+    
+    # Check SMTP/IMAP connection
+    smtp_status = verify_smtp_connection(user_id)
+    if smtp_status["status"] != "valid":
+        abort(403, "Email connection not verified. Please check your settings.")
+    
+    return True
+
+
+#-------------------------------------------------
 from flask import url_for
 
 @app.route("/")
@@ -601,10 +689,16 @@ def route_connect_smtp():
 
 
 #------------------------------------------
+# Update your send_email function to require valid connection
 @app.route("/send", methods=["POST"])
 def send_email():
     data = request.get_json()
     user_id = data["user_id"]
+    
+    # Check email connection before proceeding
+    require_valid_email_connection(user_id)
+    
+    # Rest of your send logic...
     to = data["to"]
     subject = data["subject"]
     body = data["body"]
@@ -618,9 +712,14 @@ def send_email():
     # else: your existing Gmail API flow
     return send_via_gmail_api(data)
 
+# Update your fetch_mail function to require valid connection
 @app.route("/fetch", methods=["GET"])
 def fetch_mail():
     user_id = request.args.get("user_id")
+    
+    # Check email connection before proceeding
+    require_valid_email_connection(user_id)
+    
     smtp_email, app_password = get_smtp_creds(user_id)
     if smtp_email and app_password:
         messages = fetch_emails_imap(smtp_email, app_password)
@@ -629,6 +728,22 @@ def fetch_mail():
     # else: your existing Gmail-API‐based fetch
     return fetch_via_gmail_api(user_id)
 
+# Add this route to update the connection status in the database
+@app.route("/update_connection_status", methods=["POST"])
+def update_connection_status():
+    user_id = request.form.get("user_id")
+    status = request.form.get("status")  # "valid" or "invalid"
+    
+    if not user_id or not status:
+        return jsonify({"status": "error", "message": "Missing parameters"}), 400
+    
+    # Update the connection status in the database
+    supabase.table("profiles").update({
+        "email_connection_status": status,
+        "connection_checked_at": datetime.now(timezone.utc).isoformat()
+    }).eq("id", user_id).execute()
+    
+    return jsonify({"status": "success"})
 #-----------------------------------------------------------------------
 @app.route("/connect_gmail")
 def connect_gmail():
