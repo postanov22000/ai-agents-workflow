@@ -19,15 +19,13 @@
     <!-- Error display container -->
     <div id="error-container" style="color: #ff6b6b; margin-bottom: 1rem; display: none;"></div>
     
-    <!-- Success message container -->
-    <div id="success-container" style="color: #64ffda; margin-bottom: 1rem; display: none;"></div>
-    
     <form method="POST" 
           action="/connect-smtp" 
           hx-post="/connect-smtp"
           hx-target=".modal-overlay"
           hx-swap="outerHTML"
-          enctype="application/x-www-form-urlencoded">
+          enctype="application/x-www-form-urlencoded"
+          id="smtp-connect-form">
           
       <input type="hidden" name="user_id" value="{{ user_id }}">
       <input type="hidden" name="smtp_email" value="{{ email }}">
@@ -56,7 +54,8 @@
           Cancel
         </button>
         <button type="submit" 
-                style="padding:0.75rem 1.5rem;background:#64ffda;color:#0a192f;border:none;border-radius:4px;font-weight:bold;">
+                style="padding:0.75rem 1.5rem;background:#64ffda;color:#0a192f;border:none;border-radius:4px;font-weight:bold;"
+                id="connect-account-btn">
           Connect Account
         </button>
       </div>
@@ -65,56 +64,67 @@
 </div>
 
 <script>
+  // Add event listener to the form submit button
+  document.getElementById('connect-account-btn').addEventListener('click', function(e) {
+    // Prevent the default form submission
+    e.preventDefault();
+    
+    // Get the form data
+    const form = document.getElementById('smtp-connect-form');
+    const formData = new FormData(form);
+    
+    // Show loading state
+    const button = document.getElementById('connect-account-btn');
+    const originalText = button.textContent;
+    button.textContent = 'Connecting...';
+    button.disabled = true;
+    
+    // Submit the form via fetch API
+    fetch('/connect-smtp', {
+      method: 'POST',
+      body: new URLSearchParams(formData),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      }
+    })
+    .then(response => {
+      if (response.ok) {
+        // Success - redirect to dashboard immediately
+        window.location.href = '/dashboard?user_id={{ user_id }}';
+      } else {
+        // Error - show error message
+        return response.json().then(errorData => {
+          throw new Error(errorData.message || 'Failed to connect account');
+        });
+      }
+    })
+    .catch(error => {
+      // Show error message
+      const errorContainer = document.getElementById('error-container');
+      errorContainer.textContent = error.message;
+      errorContainer.style.display = 'block';
+      
+      // Restore button state
+      button.textContent = originalText;
+      button.disabled = false;
+    });
+  });
+
+  // Keep the HTMX listener for any other HTMX interactions
   document.addEventListener('htmx:afterRequest', function(event) {
     // Check if the request was to the connect-smtp endpoint
     if (event.detail.pathInfo.requestPath.includes('/connect-smtp')) {
       const errorContainer = document.getElementById('error-container');
-      const successContainer = document.getElementById('success-container');
-      
-      // Hide previous messages
-      errorContainer.style.display = 'none';
-      successContainer.style.display = 'none';
       
       if (event.detail.failed) {
         try {
           const response = JSON.parse(event.detail.xhr.responseText);
-          errorContainer.textContent = response.message || 'An error occurred while connecting your account';
+          errorContainer.textContent = response.message || 'An error occurred';
           errorContainer.style.display = 'block';
         } catch (e) {
-          errorContainer.textContent = 'Error: ' + (event.detail.xhr.statusText || 'Unknown error occurred');
+          errorContainer.textContent = 'Error: ' + (event.detail.xhr.statusText || 'Unknown error');
           errorContainer.style.display = 'block';
         }
-      } else if (event.detail.xhr.status >= 200 && event.detail.xhr.status < 300) {
-        // Success - check response type
-        try {
-          const response = JSON.parse(event.detail.xhr.responseText);
-          
-          if (response.redirect) {
-            // Redirect to specified URL
-            window.location.href = response.redirect;
-          } else if (response.message) {
-            // Show success message
-            successContainer.textContent = response.message;
-            successContainer.style.display = 'block';
-            
-            // Redirect to dashboard after 2 seconds
-            setTimeout(() => {
-              window.location.href = '/dashboard'; // Change to your preferred destination
-            }, 2000);
-          }
-        } catch (e) {
-          // If response is not JSON, assume success and redirect
-          successContainer.textContent = 'Account connected successfully! Redirecting...';
-          successContainer.style.display = 'block';
-          
-          setTimeout(() => {
-            window.location.href = '/dashboard'; // Change to your preferred destination
-          }, 2000);
-        }
-      } else {
-        // Handle other status codes
-        errorContainer.textContent = 'Error: ' + event.detail.xhr.status + ' - ' + event.detail.xhr.statusText;
-        errorContainer.style.display = 'block';
       }
     }
   });
