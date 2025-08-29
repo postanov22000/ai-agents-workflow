@@ -137,7 +137,7 @@ def verify_smtp_connection(user_id: str) -> dict:
         
         # Get server details
         resp = supabase.from_("profiles").select(
-            "smtp_host, smtp_port, imap_host, imap_port"
+            "smtp_host, imap_host"
         ).eq("id", user_id).single().execute()
         
         if not resp.data:  # Changed from: if resp.error or not resp.data:
