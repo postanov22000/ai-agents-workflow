@@ -1252,5 +1252,73 @@ input:checked + .slider:before {
     }
   });
 </script>
+    <script>
+// Function to check email connection status
+function checkEmailStatus() {
+    const userId = "{{ user_id }}";
+    if (!userId) return;
+    
+    fetch(`/check_email_connection?user_id=${userId}`)
+        .then(response => response.json())
+        .then(data => {
+            const statusText = document.getElementById('status-text');
+            const statusIcon = document.getElementById('status-icon');
+            const reverifyBtn = document.getElementById('reverify-btn');
+            
+            if (!statusText) return; // Element doesn't exist on this page
+            
+            statusIcon.innerHTML = '';
+            reverifyBtn.style.display = 'none';
+            
+            if (data.status === 'valid') {
+                statusText.innerHTML = 'Connected';
+                statusText.style.color = '#64ffda';
+                statusIcon.innerHTML = '<i class="fas fa-check-circle" style="color: #64ffda; margin-left: 5px;"></i>';
+            } else {
+                statusText.innerHTML = 'Not Connected';
+                statusText.style.color = '#f72585';
+                statusIcon.innerHTML = '<i class="fas fa-times-circle" style="color: #f72585; margin-left: 5px;"></i>';
+                reverifyBtn.style.display = 'block';
+            }
+        })
+        .catch(error => {
+            console.error('Error checking email status:', error);
+            const statusText = document.getElementById('status-text');
+            const statusIcon = document.getElementById('status-icon');
+            const reverifyBtn = document.getElementById('reverify-btn');
+            
+            if (statusText) {
+                statusText.innerHTML = 'Error checking';
+                statusIcon.innerHTML = '<i class="fas fa-times-circle" style="color: #f72585; margin-left: 5px;"></i>';
+                reverifyBtn.style.display = 'block';
+            }
+        });
+}
+
+// Function to reverify connection
+function verifyEmailConnection() {
+    const statusText = document.getElementById('status-text');
+    const statusIcon = document.getElementById('status-icon');
+    const reverifyBtn = document.getElementById('reverify-btn');
+    
+    statusText.innerHTML = 'Testing...';
+    statusIcon.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-left: 5px;"></i>';
+    reverifyBtn.style.display = 'none';
+    
+    // Call the check again
+    checkEmailStatus();
+}
+
+// Check email status on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Wait a moment for the page to load fully
+    setTimeout(checkEmailStatus, 1000);
+});
+
+// Re-check when HTX loads new content
+document.body.addEventListener('htmx:afterSwap', function(evt) {
+    setTimeout(checkEmailStatus, 500);
+});
+</script>
 </body>
 </html> 
