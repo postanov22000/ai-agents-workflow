@@ -19,6 +19,9 @@
     <!-- Error display container -->
     <div id="error-container" style="color: #ff6b6b; margin-bottom: 1rem; display: none;"></div>
     
+    <!-- Success message container -->
+    <div id="success-container" style="color: #64ffda; margin-bottom: 1rem; display: none;"></div>
+    
     <form method="POST" 
           action="/connect-smtp" 
           hx-post="/connect-smtp"
@@ -63,23 +66,55 @@
 
 <script>
   document.addEventListener('htmx:afterRequest', function(event) {
-    if (event.detail.path === '/complete_profile') {
+    // Check if the request was to the connect-smtp endpoint
+    if (event.detail.pathInfo.requestPath.includes('/connect-smtp')) {
       const errorContainer = document.getElementById('error-container');
+      const successContainer = document.getElementById('success-container');
+      
+      // Hide previous messages
+      errorContainer.style.display = 'none';
+      successContainer.style.display = 'none';
+      
       if (event.detail.failed) {
         try {
           const response = JSON.parse(event.detail.xhr.responseText);
-          errorContainer.textContent = response.message;
+          errorContainer.textContent = response.message || 'An error occurred while connecting your account';
           errorContainer.style.display = 'block';
         } catch (e) {
-          errorContainer.textContent = 'Error: ' + event.detail.xhr.statusText;
+          errorContainer.textContent = 'Error: ' + (event.detail.xhr.statusText || 'Unknown error occurred');
           errorContainer.style.display = 'block';
         }
-      } else if (event.detail.xhr.status === 200) {
-        // Success - close modal after 1 second
-        errorContainer.style.display = 'none';
-        setTimeout(() => {
-          document.querySelector('.modal-overlay').remove();
-        }, 1000);
+      } else if (event.detail.xhr.status >= 200 && event.detail.xhr.status < 300) {
+        // Success - check response type
+        try {
+          const response = JSON.parse(event.detail.xhr.responseText);
+          
+          if (response.redirect) {
+            // Redirect to specified URL
+            window.location.href = response.redirect;
+          } else if (response.message) {
+            // Show success message
+            successContainer.textContent = response.message;
+            successContainer.style.display = 'block';
+            
+            // Redirect to dashboard after 2 seconds
+            setTimeout(() => {
+              window.location.href = '/dashboard'; // Change to your preferred destination
+            }, 2000);
+          }
+        } catch (e) {
+          // If response is not JSON, assume success and redirect
+          successContainer.textContent = 'Account connected successfully! Redirecting...';
+          successContainer.style.display = 'block';
+          
+          setTimeout(() => {
+            window.location.href = '/dashboard'; // Change to your preferred destination
+          }, 2000);
+        }
+      } else {
+        // Handle other status codes
+        errorContainer.textContent = 'Error: ' + event.detail.xhr.status + ' - ' + event.detail.xhr.statusText;
+        errorContainer.style.display = 'block';
       }
     }
   });
