@@ -126,5 +126,63 @@
   safeAnimate('emails-sent', emails,  800);
   safeAnimate('time-saved',  emails*5.5 + estimated, 800);
   safeAnimate('kits-generated', kits, 800);
+
+
+    // ----------------------------------------
+    // Function to check email connection status
+function checkEmailStatus() {
+    const userId = "{{ user_id }}";
+    if (!userId) return;
+    
+    fetch(`/check_smtp_status?user_id=${userId}`)
+        .then(response => response.json())
+        .then(data => {
+            const statusText = document.getElementById('status-text');
+            const statusIcon = document.getElementById('status-icon');
+            const reverifyBtn = document.getElementById('reverify-btn');
+            
+            statusIcon.innerHTML = '';
+            reverifyBtn.style.display = 'none';
+            
+            if (data.status === 'valid') {
+                statusText.innerHTML = 'Connected';
+                statusIcon.innerHTML = '<i class="fas fa-check-circle" style="color: #64ffda; margin-left: 5px;"></i>';
+            } else if (data.status === 'partial') {
+                statusText.innerHTML = 'Partial';
+                statusIcon.innerHTML = '<i class="fas fa-exclamation-triangle" style="color: #f8961e; margin-left: 5px;"></i>';
+                reverifyBtn.style.display = 'block';
+            } else {
+                statusText.innerHTML = 'Not Connected';
+                statusIcon.innerHTML = '<i class="fas fa-times-circle" style="color: #f72585; margin-left: 5px;"></i>';
+                reverifyBtn.style.display = 'block';
+            }
+        })
+        .catch(error => {
+            console.error('Error checking email status:', error);
+            document.getElementById('status-text').innerHTML = 'Error checking';
+            document.getElementById('status-icon').innerHTML = '<i class="fas fa-times-circle" style="color: #f72585; margin-left: 5px;"></i>';
+            document.getElementById('reverify-btn').style.display = 'block';
+        });
+}
+
+// Function to reverify connection
+function verifyEmailConnection() {
+    const statusText = document.getElementById('status-text');
+    const statusIcon = document.getElementById('status-icon');
+    const reverifyBtn = document.getElementById('reverify-btn');
+    
+    statusText.innerHTML = 'Testing...';
+    statusIcon.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-left: 5px;"></i>';
+    reverifyBtn.style.display = 'none';
+    
+    // Call the check again
+    checkEmailStatus();
+}
+
+// Check email status on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Wait a moment for the page to load fully
+    setTimeout(checkEmailStatus, 1000);
+});
   </script>
 </div>
