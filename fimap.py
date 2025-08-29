@@ -100,6 +100,10 @@ def fetch_emails_imap(
             imap_port = 993
             imap_ssl = True
 
+    if imap_ssl is None:
+        imap_ssl = True
+
+    
     if imap_ssl:
         mail = imaplib.IMAP4_SSL(imap_host, imap_port)
     else:
