@@ -1523,7 +1523,7 @@ def check_smtp_status():
     
     # Get SMTP server details from profile
     resp = supabase.from_("profiles").select("smtp_host, imap_host").eq("id", user_id).single().execute()
-    if resp.error or not resp.data:
+    if not resp.data:
         return jsonify({"status": "error", "message": "Could not retrieve server details"}), 500
     
     server_details = resp.data
