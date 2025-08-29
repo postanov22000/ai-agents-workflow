@@ -1,6 +1,23 @@
 <div class="main-content">
   <h1>Welcome back, <span>{{ name }}</span> 👋</h1>
 
+
+  <!-- Add this with the other metric cards -->
+<div class="metric-card">
+    <i class="fas fa-envelope metric-icon"></i>
+    <h3>Email Connection</h3>
+    <div class="metric-value" id="email-status">
+        <span id="status-text">Checking...</span>
+        <div id="status-icon"></div>
+    </div>
+    <div class="progress-container">
+        <div id="reverify-btn" style="display: none; margin-top: 10px;">
+            <button class="btn btn-warning" onclick="verifyEmailConnection()">
+                <i class="fas fa-sync-alt"></i> Re-verify
+            </button>
+        </div>
+    </div>
+</div>
   <!-- Metrics Grid -->
   <div class="metrics-grid">
     <div class="metric-card">
