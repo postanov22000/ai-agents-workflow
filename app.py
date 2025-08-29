@@ -120,35 +120,64 @@ def verify_smtp_connection(user_id: str) -> dict:
             return {"status": "invalid", "message": "No SMTP credentials found"}
         
         # Get server details
-        resp = supabase.from_("profiles").select("smtp_host, smtp_port, imap_host, imap_port").eq("id", user_id).single().execute()
+        resp = supabase.from_("profiles").select(
+            "smtp_host, smtp_port, imap_host, imap_port"
+        ).eq("id", user_id).single().execute()
+        
         if resp.error or not resp.data:
             return {"status": "invalid", "message": "Could not retrieve server details"}
         
         server_details = resp.data
         smtp_host = server_details.get("smtp_host", "smtp.gmail.com")
-        smtp_port = server_details.get("smtp_port", 587)
+        smtp_port = int(server_details.get("smtp_port", 587))
         imap_host = server_details.get("imap_host", "imap.gmail.com")
-        imap_port = server_details.get("imap_port", 993)
+        imap_port = int(server_details.get("imap_port", 993))
         
         # Test SMTP connection
+        smtp_working = False
+        imap_working = False
+        smtp_error = None
+        imap_error = None
+        
         try:
             context = ssl.create_default_context()
             with smtplib.SMTP(smtp_host, smtp_port) as server:
+                server.ehlo()
                 server.starttls(context=context)
+                server.ehlo()
                 server.login(smtp_email, app_password)
+                smtp_working = True
         except Exception as e:
-            return {"status": "invalid", "message": f"SMTP connection failed: {str(e)}"}
+            smtp_error = str(e)
+            app.logger.error(f"SMTP test failed for {user_id}: {smtp_error}")
         
         # Test IMAP connection
         try:
             with imaplib.IMAP4_SSL(imap_host, imap_port) as server:
                 server.login(smtp_email, app_password)
+                imap_working = True
         except Exception as e:
-            return {"status": "invalid", "message": f"IMAP connection failed: {str(e)}"}
+            imap_error = str(e)
+            app.logger.error(f"IMAP test failed for {user_id}: {imap_error}")
         
-        return {"status": "valid", "message": "SMTP and IMAP connections successful"}
+        # Update database with connection status
+        status = "valid" if smtp_working and imap_working else "invalid"
+        supabase.table("profiles").update({
+            "email_connection_status": status,
+            "connection_checked_at": datetime.now(timezone.utc).isoformat()
+        }).eq("id", user_id).execute()
+        
+        if smtp_working and imap_working:
+            return {"status": "valid", "message": "SMTP and IMAP connections successful"}
+        elif smtp_working:
+            return {"status": "partial", "message": f"SMTP working but IMAP failed: {imap_error}"}
+        elif imap_working:
+            return {"status": "partial", "message": f"IMAP working but SMTP failed: {smtp_error}"}
+        else:
+            return {"status": "invalid", "message": f"Both SMTP and IMAP failed. SMTP: {smtp_error}, IMAP: {imap_error}"}
     
     except Exception as e:
+        app.logger.error(f"Verification error for {user_id}: {str(e)}")
         return {"status": "invalid", "message": f"Verification error: {str(e)}"}
 
 # Add this route for checking connection status
@@ -708,7 +737,7 @@ def send_email():
         # Use SMTP fallback
         send_email_smtp(smtp_email, app_password, to, subject, body)
         return jsonify({"method": "smtp", "status": "sent"}), 200
-
+        return jsonify({"method": "gmail", "messages": []}), 200
     # else: your existing Gmail API flow
     return send_via_gmail_api(data)
 
@@ -724,7 +753,7 @@ def fetch_mail():
     if smtp_email and app_password:
         messages = fetch_emails_imap(smtp_email, app_password)
         return jsonify({"method": "imap", "messages": messages}), 200
-
+        return jsonify({"method": "gmail", "messages": []}), 200
     # else: your existing Gmail-API‐based fetch
     return fetch_via_gmail_api(user_id)
 
@@ -1514,7 +1543,9 @@ def check_smtp_status():
         return jsonify({"status": "partial", "message": "SMTP working but IMAP failed"})
     else:
         return jsonify({"status": "invalid", "message": "Both SMTP and IMAP failed"})
-
+def check_smtp_status_alias():
+    return check_email_connection()
+  
 # ── Final entry point ──
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
