@@ -63,7 +63,7 @@
 
 <script>
   document.addEventListener('htmx:afterRequest', function(event) {
-    if (event.detail.path === '/connect-smtp') {
+    if (event.detail.path === '/complete_profile') {
       const errorContainer = document.getElementById('error-container');
       if (event.detail.failed) {
         try {
