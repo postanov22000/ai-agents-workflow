@@ -196,6 +196,34 @@ def verify_smtp_connection(user_id: str) -> dict:
         app.logger.error(f"Verification error for {user_id}: {str(e)}")
         return {"status": "invalid", "message": f"Verification error: {str(e)}"}
 
+
+@app.route('/detect_email_settings', methods=['GET', 'POST'])
+def detect_email_settings():
+    if request.method == 'GET':
+        # Handle GET request (for testing or direct browser access)
+        email = request.args.get('email')
+    else:
+        # Handle POST request
+        email = request.form.get('email')
+    
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+    
+    try:
+        settings = detect_email_provider(email)
+        return jsonify(settings)
+    except Exception as e:
+        app.logger.error(f"Error detecting email settings: {e}")
+        # Fall back to Gmail settings
+        return jsonify({
+            "smtp_host": "smtp.gmail.com",
+            "smtp_port": 465,
+            "imap_host": "imap.gmail.com",
+            "imap_port": 993
+        })
+
+
+
 def detect_email_provider(email):
     """
     Detect email provider based on domain without network calls
