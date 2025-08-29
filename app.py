@@ -196,16 +196,13 @@ def verify_smtp_connection(user_id: str) -> dict:
         app.logger.error(f"Verification error for {user_id}: {str(e)}")
         return {"status": "invalid", "message": f"Verification error: {str(e)}"}
 
-@app.route('/detect_email_settings', methods=['POST'])
-def detect_email_settings():
-    email = request.form.get('email')
-    if not email:
-        return jsonify({"error": "Email is required"}), 400
-    
-    # Extract domain from email
+def detect_email_provider(email):
+    """
+    Detect email provider based on domain without network calls
+    """
     domain = email.split('@')[-1].lower()
     
-    known_providers = {
+    provider_map = {
         "gmail.com": {
             "smtp_host": "smtp.gmail.com",
             "smtp_port": 465,
@@ -224,19 +221,17 @@ def detect_email_settings():
             "imap_host": "imap.mail.yahoo.com",
             "imap_port": 993
         },
+        "aol.com": {
+            "smtp_host": "smtp.aol.com",
+            "smtp_port": 465,
+            "imap_host": "imap.aol.com",
+            "imap_port": 993
+        },
         # Add more providers as needed
     }
     
-    if domain in known_providers:
-        return jsonify(known_providers[domain])
-    else:
-        # For custom domains, return common defaults
-        return jsonify({
-            "smtp_host": f"smtp.{domain}",
-            "smtp_port": 465,
-            "imap_host": f"imap.{domain}",
-            "imap_port": 993
-        })
+    # Return settings for known providers, or default to Gmail
+    return provider_map.get(domain, provider_map["gmail.com"])
 
 # Add this route for checking connection status
 @app.route("/check_email_connection")
