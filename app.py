@@ -58,6 +58,60 @@ fernet = Fernet(ENCRYPTION_KEY)
 MAX_RETRIES = 5
 RETRY_BACKOFF_BASE = 2
 
+
+
+
+# Define the follow-up email sequence (subject and body with placeholders)
+FOLLOW_UP_SEQUENCE = [
+    {
+        'delay_days': 1,
+        'subject': 'Follow-up from {brokerage} about {service}',
+        'body': '''
+            <html>
+                <body>
+                    <p>Hello {first_name} {last_name},</p>
+                    <p>We wanted to follow up on your inquiry about {service} in {city}. Let us know if you have any questions!</p>
+                    <p>Best regards,<br>{brokerage}</p>
+                </body>
+            </html>
+        '''
+    },
+    {
+        'delay_days': 3,
+        'subject': 'Are you still interested in {service}?',
+        'body': '''
+            <html>
+                <body>
+                    <p>Hi {first_name},</p>
+                    <p>We haven’t heard back from you regarding {service}. Feel free to reach out if you need more information.</p>
+                    <p>Thanks,<br>{brokerage}</p>
+                </body>
+            </html>
+        '''
+    },
+    {
+        'delay_days': 7,
+        'subject': 'Final follow-up from {brokerage}',
+        'body': '''
+            <html>
+                <body>
+                    <p>Dear {first_name},</p>
+                    <p>This is our last attempt to reach out about {service} in {city}. We hope to hear from you soon.</p>
+                    <p>Sincerely,<br>{brokerage}</p>
+                </body>
+            </html>
+        '''
+    }
+]
+
+# Add these constants near the top of your app.py
+YES_KEYWORDS = ["yes", "confirm", "agreed", "approved", "accept"]
+UNSUBSCRIBE_KEYWORDS = ["unsubscribe", "stop", "cancel", "remove", "opt out"]
+
+
+
+
+
 #----------------------------------------------------------------------------
 def get_smtp_creds(user_id: str):
     """Return decrypted (email, app_password) or (None, None)."""
@@ -1576,6 +1630,380 @@ def check_smtp_status():
         return jsonify({"status": "invalid", "message": "Both SMTP and IMAP failed"})
 def check_smtp_status_alias():
     return check_email_connection()
+
+#-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# Add these template strings (customize as needed)
+YES_TEMPLATE = """Thank you for your confirmation! We're excited to work with you.
+
+We'll be in touch shortly with more details.
+
+Best regards,
+The Team"""
+
+UNSUBSCRIBE_TEMPLATE = """We're sorry to see you go. You have been successfully unsubscribed from our mailing list.
+
+If this was a mistake or you'd like to resubscribe in the future, please don't hesitate to contact us.
+
+Thank you,
+The Team"""
+
+
+
+
+# Update the send_auto_response function to include both text and attachment
+# Update the send_auto_response function to include both text and attachment
+def send_auto_response(user_id, to_email, subject, body, attach_pdf=False):
+    """
+    Send an automated response using Gmail API with both text body and optional PDF attachment
+    """
+    try:
+        tok_resp = supabase.table("gmail_tokens") \
+                          .select("credentials, created_at") \
+                          .eq("user_id", user_id) \
+                          .order("created_at", desc=True) \
+                          .limit(1) \
+                          .execute()
+        
+        if not tok_resp.data or len(tok_resp.data) == 0:
+            return False
+
+        cd = tok_resp.data[0]["credentials"]
+        creds = Credentials(
+            token=cd["token"],
+            refresh_token=cd["refresh_token"],
+            token_uri=cd["token_uri"],
+            client_id=cd["client_id"],
+            client_secret=cd["client_secret"],
+            scopes=cd["scopes"],
+        )
+        if creds.expired and creds.refresh_token:
+            creds.refresh(GoogleRequest())
+
+        svc = build("gmail", "v1", credentials=creds, cache_discovery=False)
+        
+        # Create a multipart message
+        message = MIMEMultipart()
+        message['to'] = to_email
+        message['from'] = "me"
+        message['subject'] = subject
+
+        # Add the text body
+        text_part = MIMEText(body, 'plain')
+        message.attach(text_part)
+
+        # Add PDF from Supabase bucket if requested
+        if attach_pdf:
+            try:
+                # Download PDF from Supabase bucket
+                # Replace 'your-bucket-name' and 'your-file-name.pdf' with your actual values
+                pdf_data = supabase.storage.from_('milch').download('playbook-2025.pdf')
+                
+                pdf_part = MIMEBase('application', 'octet-stream')
+                pdf_part.set_payload(pdf_data)
+                encoders.encode_base64(pdf_part)
+                pdf_part.add_header('Content-Disposition', 'attachment', filename='7-day-conversion-system.pdf')
+                message.attach(pdf_part)
+            except Exception as e:  # Catch any exception, not just StorageException
+                app.logger.error(f"Failed to fetch PDF from Supabase: {str(e)}")
+                # Continue without attachment if PDF fetch fails
+
+        raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        
+        svc.users().messages().send(userId="me", body={"raw": raw}).execute()
+        return True
+    except Exception as e:
+        app.logger.error(f"Gmail API auto-response failed: {str(e)}")
+        return False
+
+
+# Update the check_keywords_and_auto_respond function
+def check_keywords_and_auto_respond(email_id, original_content, user_id, sender_email):
+    """
+    Check email content for YES/UNSUBSCRIBE keywords and send automated responses
+    Returns True if auto-response was sent, False otherwise
+    """
+    content_lower = original_content.lower()
+    
+    # Check for YES keywords
+    if any(keyword in content_lower for keyword in YES_KEYWORDS):
+        # Send confirmation template with PDF attachment
+        success = send_auto_response(
+            user_id, 
+            sender_email, 
+            "Confirmation Received", 
+            YES_TEMPLATE,
+            attach_pdf=True  # This will trigger PDF attachment
+        )
+        
+        if success:
+            # Update email status
+            supabase.table("emails").update({
+                "status": "auto_replied",
+                "processed_content": YES_TEMPLATE,
+                "sent_at": datetime.utcnow().isoformat()
+            }).eq("id", email_id).execute()
+            return True
+    
+    # Check for UNSUBSCRIBE keywords (no attachment)
+    if any(keyword in content_lower for keyword in UNSUBSCRIBE_KEYWORDS):
+        # Send unsubscribe template
+        success = send_auto_response(
+            user_id, 
+            sender_email, 
+            "Unsubscription Confirmation", 
+            UNSUBSCRIBE_TEMPLATE,
+            attach_pdf=False  # No PDF for unsubscribe
+        )
+        
+        if success:
+            # Update email status
+            supabase.table("emails").update({
+                "status": "auto_replied",
+                "processed_content": UNSUBSCRIBE_TEMPLATE,
+                "sent_at": datetime.utcnow().isoformat()
+            }).eq("id", email_id).execute()
+            return True
+    
+    return False
+
+import csv
+from io import TextIOWrapper
+from openpyxl import load_workbook
+
+@app.route("/import_leads", methods=["GET", "POST"])
+def import_leads():
+    user_id = _require_user()
+    if request.method == "GET":
+        return render_template("import_leads.html", user_id=user_id)
+    else:
+        if 'file' not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"error": "No file selected"}), 400
+        
+        try:
+            # Check file extension
+            if file.filename.endswith('.csv'):
+                # Process CSV file
+                csv_file = TextIOWrapper(file, encoding='utf-8')
+                reader = csv.DictReader(csv_file)
+                rows = list(reader)
+            elif file.filename.endswith(('.xlsx', '.xls')):
+                # Process Excel file
+                wb = load_workbook(file)
+                ws = wb.active
+                
+                # Get headers
+                headers = [cell.value for cell in ws[1]]
+                
+                # Get data rows
+                rows = []
+                for row in ws.iter_rows(min_row=2, values_only=True):
+                    rows.append(dict(zip(headers, row)))
+            else:
+                return jsonify({"error": "Invalid file type. Please upload CSV or Excel."}), 400
+            
+            # Check required columns
+            required_columns = ['name', 'Last name', 'Recipient', 'city', 'brokerage', 'service', 'Email Sent']
+            if not all(col in rows[0].keys() for col in required_columns):
+                return jsonify({"error": "Missing required columns. Ensure file has: name, Last name, Recipient, city, brokerage, service, Email Sent"}), 400
+            
+            # Process each row
+            for row in rows:
+                # Parse email_sent date
+                email_sent_str = row.get('Email Sent', '')
+                try:
+                    if email_sent_str:
+                        email_sent = datetime.strptime(str(email_sent_str), '%Y-%m-%d %H:%M:%S')
+                    else:
+                        email_sent = datetime.utcnow()
+                except ValueError:
+                    email_sent = datetime.utcnow()
+                
+                lead_data = {
+                    'user_id': user_id,
+                    'first_name': row.get('name'),
+                    'last_name': row.get('Last name'),
+                    'email': row.get('Recipient'),
+                    'city': row.get('city'),
+                    'brokerage': row.get('brokerage'),
+                    'service': row.get('service'),
+                    'email_sent': email_sent.isoformat()
+                }
+                
+                # Insert lead
+                response = supabase.table('leads').insert(lead_data).execute()
+                if response.data:
+                    lead_id = response.data[0]['id']
+                    # Schedule follow-up emails
+                    for step, seq in enumerate(FOLLOW_UP_SEQUENCE):
+                        scheduled_at = email_sent + timedelta(days=seq['delay_days'])
+                        follow_up_data = {
+                            'lead_id': lead_id,
+                            'sequence_step': step,
+                            'scheduled_at': scheduled_at.isoformat(),
+                            'status': 'pending'
+                        }
+                        supabase.table('lead_follow_ups').insert(follow_up_data).execute()
+            
+            return jsonify({"message": "Leads imported successfully"}), 200
+        
+        except Exception as e:
+            app.logger.error(f"Error importing leads: {str(e)}")
+            return jsonify({"error": "Failed to import leads. Please check the file format."}), 500
+
+@app.route("/process_followups", methods=["GET"])
+def trigger_process_followups():
+    # Similar token validation as /process endpoint
+    token = request.args.get("token")
+    expected_token = os.environ.get("PROCESS_SECRET_TOKEN")
+    
+    if not expected_token or token != expected_token:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        # Process follow-ups independently
+        process_followups()
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        app.logger.error(f"Error in follow-up processing: {str(e)}", exc_info=True)
+        return jsonify({"error": "Internal server error"}), 500
+
+def process_followups():
+    """Process follow-up emails independently"""
+    try:
+        # Fetch pending follow-ups where scheduled_at <= now
+        follow_ups = supabase.table('lead_follow_ups') \
+            .select('id, lead_id, sequence_step, scheduled_at') \
+            .eq('status', 'pending') \
+            .lte('scheduled_at', datetime.utcnow().isoformat()) \
+            .execute()
+        
+        app.logger.info(f"Found {len(follow_ups.data)} follow-ups to process")
+        
+        for follow_up in follow_ups.data:
+            follow_up_id = follow_up['id']
+            lead_id = follow_up['lead_id']
+            step = follow_up['sequence_step']
+            scheduled_at = follow_up['scheduled_at']
+            
+            # Check if this follow-up is overdue (more than 24 hours past scheduled time)
+            scheduled_time = datetime.fromisoformat(scheduled_at.replace('Z', '+00:00'))
+            time_diff = datetime.utcnow() - scheduled_time
+            if time_diff > timedelta(hours=24):
+                app.logger.warning(f"Follow-up {follow_up_id} is more than 24 hours overdue, skipping")
+                supabase.table('lead_follow_ups').update({
+                    'status': 'skipped',
+                    'error_message': 'Overdue by more than 24 hours'
+                }).eq('id', follow_up_id).execute()
+                continue
+            
+            # Get lead details
+            lead = supabase.table('leads').select('*').eq('id', lead_id).single().execute()
+            if not lead.data:
+                app.logger.error(f"Lead not found for follow-up {follow_up_id}")
+                supabase.table('lead_follow_ups').update({
+                    'status': 'failed',
+                    'error_message': 'Lead not found'
+                }).eq('id', follow_up_id).execute()
+                continue
+                
+            lead_data = lead.data
+            user_id = lead_data['user_id']
+            
+            # Get template for this step
+            if step >= len(FOLLOW_UP_SEQUENCE):
+                app.logger.error(f"Invalid sequence step {step} for follow-up {follow_up_id}")
+                supabase.table('lead_follow_ups').update({
+                    'status': 'failed',
+                    'error_message': f'Invalid sequence step {step}'
+                }).eq('id', follow_up_id).execute()
+                continue
+                
+            template = FOLLOW_UP_SEQUENCE[step]
+            subject = template['subject']
+            body = template['body']
+            
+            # Replace placeholders with lead data
+            for key, value in lead_data.items():
+                if value is None:
+                    value = ''
+                placeholder = '{' + key + '}'
+                subject = subject.replace(placeholder, str(value))
+                body = body.replace(placeholder, str(value))
+            
+            # Send email using SMTP or Gmail API
+            try:
+                # Check if user has SMTP credentials
+                prof = supabase.table("profiles") \
+                    .select("smtp_email, smtp_enc_password, smtp_host") \
+                    .eq("id", user_id).single().execute()
+                    
+                if prof.data and prof.data.get("smtp_email") and prof.data.get("smtp_enc_password"):
+                    # Use SMTP
+                    smtp_email = prof.data["smtp_email"]
+                    smtp_pass = fernet.decrypt(prof.data["smtp_enc_password"].encode()).decode()
+                    smtp_host = prof.data.get("smtp_host", "smtp.gmail.com")
+                    send_email_smtp(
+                        smtp_email,
+                        smtp_pass,
+                        lead_data['email'],
+                        subject,
+                        body,
+                        smtp_host=smtp_host
+                    )
+                else:
+                    # Use Gmail API
+                    tok_resp = supabase.table("gmail_tokens") \
+                        .select("credentials") \
+                        .eq("user_id", user_id) \
+                        .order("created_at", desc=True) \
+                        .limit(1) \
+                        .execute()
+                        
+                    if not tok_resp.data:
+                        raise ValueError("No Gmail token found")
+                        
+                    cd = tok_resp.data[0]["credentials"]
+                    creds = Credentials(
+                        token=cd["token"],
+                        refresh_token=cd["refresh_token"],
+                        token_uri=cd["token_uri"],
+                        client_id=cd["client_id"],
+                        client_secret=cd["client_secret"],
+                        scopes=cd["scopes"],
+                    )
+                    if creds.expired and creds.refresh_token:
+                        creds.refresh(GoogleRequest())
+                        
+                    service = build("gmail", "v1", credentials=creds, cache_discovery=False)
+                    msg = MIMEText(body, 'html')
+                    msg['To'] = lead_data['email']
+                    msg['Subject'] = subject
+                    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+                    service.users().messages().send(userId="me", body={"raw": raw}).execute()
+                
+                # Update follow-up as sent
+                supabase.table('lead_follow_ups').update({
+                    'sent_at': datetime.utcnow().isoformat(),
+                    'status': 'sent'
+                }).eq('id', follow_up_id).execute()
+                app.logger.info(f"Successfully sent follow-up {follow_up_id}")
+                
+            except Exception as e:
+                app.logger.error(f"Failed to send follow-up email: {str(e)}")
+                supabase.table('lead_follow_ups').update({
+                    'status': 'failed',
+                    'error_message': str(e)
+                }).eq('id', follow_up_id).execute()
+
+    except Exception as e:
+        app.logger.error(f"Error in process_followups: {str(e)}")
+        raise 
+
   
 # ── Final entry point ──
 if __name__ == "__main__":
