@@ -31,6 +31,15 @@ from cryptography.fernet import Fernet
 from transaction_autopilot import bp as autopilot_bp
 from public import public_bp
 
+
+
+# Add these imports at the top
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
+
+
+
 # ── single Flask app & blueprint registration ──
 app = Flask(__name__, template_folder="templates")
 CORS(app, resources={r"/connect-smtp": {"origins": "https://replyzeai.vercel.app"}})  # ← add this
