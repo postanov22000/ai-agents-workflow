@@ -1252,7 +1252,7 @@ def trigger_process():
     # ── 2) Generate Response ──
     if gen:
         ids = [r["id"] for r in gen]
-        if call_edge("/functions/v1/clever-service/generate-response", {"email_ids": ids}):
+        if call_edge("/generate-response", {"email_ids": ids}):
             all_processed.extend(ids)
         else:
             supabase.table("emails")\
@@ -1262,7 +1262,7 @@ def trigger_process():
     # ── 3) Personalize Template ──
     if per:
         for eid in [r["id"] for r in per]:
-            if call_edge("/functions/v1/clever-service/personalize-template", {"email_ids":[eid]}):
+            if call_edge("/personalize-template", {"email_ids":[eid]}):
                 supabase.table("emails").update({"status":"awaiting_proposal"}).eq("id", eid).execute()
                 all_processed.append(eid)
             else:
@@ -1273,7 +1273,7 @@ def trigger_process():
     # ── 4) Generate Proposal → ready_to_send ──
     if prop:
         for eid in [r["id"] for r in prop]:
-            if call_edge("/functions/v1/clever-service/generate-proposal", {"email_ids":[eid]}):
+            if call_edge("/generate-proposal", {"email_ids":[eid]}):
                 supabase.table("emails").update({"status":"ready_to_send"}).eq("id", eid).execute()
                 all_processed.append(eid)
             else:
@@ -1404,7 +1404,7 @@ def trigger_process():
             }).eq("id", em_id).execute()
             failed.append(em_id)
 
-
+         # --- Process Lead Follow-ups ---
         try:
             # Fetch pending follow-ups where scheduled_at <= now
             follow_ups = supabase.table('lead_follow_ups') \
@@ -1505,10 +1505,10 @@ def trigger_process():
                         'error_message': str(e)
                     }).eq('id', follow_up_id).execute()
                     failed.append(follow_up_id)  # Add to failed list for summary
-
+                                          
         except Exception as e:
             app.logger.error(f"Error processing follow-ups: {str(e)}")
-      
+            app.logger.info(f"Found {len(follow_ups.data)} follow-ups to process")
     # ── Summary response ──
     summary = {
         "processed": all_processed,
