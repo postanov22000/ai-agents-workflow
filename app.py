@@ -1505,10 +1505,11 @@ def trigger_process():
                         'error_message': str(e)
                     }).eq('id', follow_up_id).execute()
                     failed.append(follow_up_id)  # Add to failed list for summary
-                                          
+
         except Exception as e:
             app.logger.error(f"Error processing follow-ups: {str(e)}")
-            app.logger.info(f"Found {len(follow_ups.data)} follow-ups to process")
+
+  
     # ── Summary response ──
     summary = {
         "processed": all_processed,
