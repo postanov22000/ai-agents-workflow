@@ -129,47 +129,80 @@ def send_ready_via_smtp():
 
 # Add to poll_imap_smtp.py
 def process_follow_ups():
-    due_follow_ups = supabase.table("lead_follow_ups") \
-        .select("*, leads(*), profiles(*)") \
-        .lte("scheduled_at", datetime.utcnow().isoformat()) \
-        .eq("status", "processed") \
-        .execute().data
-    
-    for follow_up in due_follow_ups:
-        try:
-            lead = follow_up["leads"]
-            profile = follow_up["profiles"]
+    try:
+        # First get due follow-ups
+        due_follow_ups = supabase.table("lead_follow_ups") \
+            .select("*") \
+            .lte("scheduled_at", datetime.utcnow().isoformat()) \
+            .eq("status", "processed") \
+            .execute().data
+        
+        if not due_follow_ups:
+            logger.info("No due follow-ups to process")
+            return
             
-            # Get the generated content (you'll need to store this in your follow_ups table)
-            content = follow_up.get("generated_content", "")
-            
-            # Send using existing email infrastructure
-            if profile.get("smtp_email") and profile.get("smtp_enc_password"):
-                # Send via SMTP
-                send_email_smtp(
-                    profile["smtp_email"],
-                    fernet.decrypt(profile["smtp_enc_password"].encode()).decode(),
-                    lead["email"],
-                    f"Follow-up: {lead['service']} in {lead['city']}",
-                    content,
-                    smtp_host=profile.get("smtp_host", "smtp.gmail.com")
-                )
-            else:
-                # Send via Gmail API (implement similar to your existing code)
-                pass
+        # Get all lead IDs
+        lead_ids = [fu["lead_id"] for fu in due_follow_ups]
+        
+        # Get all leads with their profiles
+        leads_with_profiles = supabase.table("leads") \
+            .select("*, profiles!inner(*)") \
+            .in_("id", lead_ids) \
+            .execute().data
+        
+        # Create a mapping from lead ID to lead data with profile
+        lead_profile_map = {lead["id"]: lead for lead in leads_with_profiles}
+        
+        for follow_up in due_follow_ups:
+            try:
+                lead_id = follow_up["lead_id"]
+                if lead_id not in lead_profile_map:
+                    logger.error(f"Lead {lead_id} not found for follow-up {follow_up['id']}")
+                    continue
+                    
+                lead_data = lead_profile_map[lead_id]
+                lead = lead_data  # The lead record
+                profile = lead_data["profiles"]  # The associated profile
                 
-            # Mark as sent
-            supabase.table("lead_follow_ups") \
-                .update({"status": "sent", "sent_at": datetime.utcnow().isoformat()}) \
-                .eq("id", follow_up["id"]) \
-                .execute()
+                # Get the generated content
+                content = follow_up.get("generated_content", "")
+                if not content:
+                    logger.error(f"No content for follow-up {follow_up['id']}")
+                    continue
                 
-        except Exception as e:
-            logger.error(f"Failed to send follow-up {follow_up['id']}: {str(e)}")
-            supabase.table("lead_follow_ups") \
-                .update({"status": "failed", "error_message": str(e)}) \
-                .eq("id", follow_up["id"]) \
-                .execute()
+                # Send using existing email infrastructure
+                if profile.get("smtp_email") and profile.get("smtp_enc_password"):
+                    # Send via SMTP
+                    send_email_smtp(
+                        profile["smtp_email"],
+                        fernet.decrypt(profile["smtp_enc_password"].encode()).decode(),
+                        lead["email"],
+                        f"Follow-up: {lead['service']} in {lead['city']}",
+                        content,
+                        smtp_host=profile.get("smtp_host", "smtp.gmail.com")
+                    )
+                else:
+                    # Send via Gmail API (you'll need to implement this)
+                    logger.info(f"SMTP not configured for profile {profile['id']}, skipping Gmail API send")
+                    continue
+                    
+                # Mark as sent
+                supabase.table("lead_follow_ups") \
+                    .update({"status": "sent", "sent_at": datetime.utcnow().isoformat()}) \
+                    .eq("id", follow_up["id"]) \
+                    .execute()
+                    
+                logger.info(f"Sent follow-up {follow_up['id']} to {lead['email']}")
+                    
+            except Exception as e:
+                logger.error(f"Failed to send follow-up {follow_up['id']}: {str(e)}")
+                supabase.table("lead_follow_ups") \
+                    .update({"status": "failed", "error_message": str(e)}) \
+                    .eq("id", follow_up["id"]) \
+                    .execute()
+                    
+    except Exception as e:
+        logger.error(f"Error in process_follow_ups: {str(e)}")
 
 # Call this function in your main loop
 if __name__ == "__main__":
