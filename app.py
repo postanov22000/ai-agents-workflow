@@ -8,7 +8,7 @@ import imaplib
 import ssl
 
 from flask import abort, Flask, render_template, request, redirect, jsonify, make_response, url_for
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 from email.mime.text import MIMEText
 
 from supabase import create_client, Client
