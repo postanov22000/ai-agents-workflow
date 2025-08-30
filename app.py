@@ -1681,7 +1681,7 @@ def generate_follow_up_content(lead_id, sequence_step):
         context += " Reference previous communications if relevant. Keep it concise and focused on providing value."
         
         # Call your AI API (using the same pattern as your existing code)
-      payload = {
+        payload = {
             "context": context,
             "type": "follow_up",
             "sequence_step": sequence_step,
