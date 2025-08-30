@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Import Leads</title>
+    <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 600px; margin: auto; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; }
+        input[type="file"] { padding: 5px; }
+        button { padding: 10px 15px; background: #007bff; color: white; border: none; cursor: pointer; }
+        .message { margin-top: 15px; padding: 10px; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Import Leads</h1>
+        <form hx-post="/import_leads" hx-encoding="multipart/form-data" hx-target="#message">
+            <div class="form-group">
+                <label for="file">Upload CSV or Excel File:</label>
+                <input type="file" id="file" name="file" accept=".csv,.xlsx,.xls" required>
+            </div>
+            <input type="hidden" name="user_id" value="{{ user_id }}">
+            <button type="submit">Import</button>
+        </form>
+        <div id="message"></div>
+    </div>
+</body>
+</html>
