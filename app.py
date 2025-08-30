@@ -1395,6 +1395,111 @@ def trigger_process():
             }).eq("id", em_id).execute()
             failed.append(em_id)
 
+
+        try:
+            # Fetch pending follow-ups where scheduled_at <= now
+            follow_ups = supabase.table('lead_follow_ups') \
+                .select('id, lead_id, sequence_step') \
+                .eq('status', 'pending') \
+                .lte('scheduled_at', datetime.utcnow().isoformat()) \
+                .execute()
+            
+            for follow_up in follow_ups.data:
+                follow_up_id = follow_up['id']
+                lead_id = follow_up['lead_id']
+                step = follow_up['sequence_step']
+                
+                # Get lead details
+                lead = supabase.table('leads').select('*').eq('id', lead_id).single().execute()
+                if not lead.data:
+                    app.logger.error(f"Lead not found for follow-up {follow_up_id}")
+                    continue
+                lead_data = lead.data
+                
+                # Get user_id from lead
+                user_id = lead_data['user_id']
+                
+                # Get template for this step
+                if step >= len(FOLLOW_UP_SEQUENCE):
+                    app.logger.error(f"Invalid sequence step {step} for follow-up {follow_up_id}")
+                    continue
+                template = FOLLOW_UP_SEQUENCE[step]
+                subject = template['subject']
+                body = template['body']
+                
+                # Replace placeholders with lead data
+                for key, value in lead_data.items():
+                    if value is None:
+                        value = ''
+                    placeholder = '{' + key + '}'
+                    subject = subject.replace(placeholder, str(value))
+                    body = body.replace(placeholder, str(value))
+                
+                # Send email using SMTP or Gmail API
+                try:
+                    # Check if user has SMTP credentials
+                    prof = supabase.table("profiles") \
+                        .select("smtp_email, smtp_enc_password, smtp_host") \
+                        .eq("id", user_id).single().execute()
+                    if prof.data and prof.data.get("smtp_email") and prof.data.get("smtp_enc_password"):
+                        # Use SMTP
+                        smtp_email = prof.data["smtp_email"]
+                        smtp_pass = fernet.decrypt(prof.data["smtp_enc_password"].encode()).decode()
+                        smtp_host = prof.data.get("smtp_host", "smtp.gmail.com")
+                        send_email_smtp(
+                            smtp_email,
+                            smtp_pass,
+                            lead_data['email'],
+                            subject,
+                            body,
+                            smtp_host=smtp_host
+                        )
+                    else:
+                        # Use Gmail API
+                        tok_resp = supabase.table("gmail_tokens") \
+                            .select("credentials") \
+                            .eq("user_id", user_id) \
+                            .order("created_at", desc=True) \
+                            .limit(1) \
+                            .execute()
+                        if not tok_resp.data:
+                            raise ValueError("No Gmail token found")
+                        cd = tok_resp.data[0]["credentials"]
+                        creds = Credentials(
+                            token=cd["token"],
+                            refresh_token=cd["refresh_token"],
+                            token_uri=cd["token_uri"],
+                            client_id=cd["client_id"],
+                            client_secret=cd["client_secret"],
+                            scopes=cd["scopes"],
+                        )
+                        if creds.expired and creds.refresh_token:
+                            creds.refresh(GoogleRequest())
+                        service = build("gmail", "v1", credentials=creds, cache_discovery=False)
+                        msg = MIMEText(body, 'html')
+                        msg['To'] = lead_data['email']
+                        msg['Subject'] = subject
+                        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+                        service.users().messages().send(userId="me", body={"raw": raw}).execute()
+                    
+                    # Update follow-up as sent
+                    supabase.table('lead_follow_ups').update({
+                        'sent_at': datetime.utcnow().isoformat(),
+                        'status': 'sent'
+                    }).eq('id', follow_up_id).execute()
+                    sent.append(follow_up_id)  # Add to sent list for summary
+                
+                except Exception as e:
+                    app.logger.error(f"Failed to send follow-up email: {str(e)}")
+                    supabase.table('lead_follow_ups').update({
+                        'status': 'failed',
+                        'error_message': str(e)
+                    }).eq('id', follow_up_id).execute()
+                    failed.append(follow_up_id)  # Add to failed list for summary
+
+        except Exception as e:
+            app.logger.error(f"Error processing follow-ups: {str(e)}")
+      
     # ── Summary response ──
     summary = {
         "processed": all_processed,
@@ -1405,49 +1510,6 @@ def trigger_process():
     return jsonify(summary), 200
 
 #---------------------------------------------------------------------------------------------------------------------------
-# ── 7) Generate follow-up emails for recent conversations ──
-try:
-    # Only run follow-ups once per hour to avoid spamming
-    last_follow_up = supabase.table("process_logs") \
-        .select("last_run") \
-        .eq("process_type", "follow_ups") \
-        .order("last_run", desc=True) \
-        .limit(1) \
-        .execute().data
-    
-    should_run_follow_ups = True
-    if last_follow_up:
-        last_run = datetime.fromisoformat(last_follow_up[0]["last_run"].replace("Z", "+00:00"))
-        if (datetime.now(timezone.utc) - last_run).total_seconds() < 3600:  # 1 hour
-            should_run_follow_ups = False
-    
-    if should_run_follow_ups:
-        # Get all active users
-        users = supabase.table("profiles") \
-            .select("id") \
-            .eq("ai_enabled", True) \
-            .execute().data or []
-        
-        for user in users:
-            user_id = user["id"]
-            # Call the follow-up generator edge function
-            follow_up_payload = {
-                "user_id": user_id,
-                "days_ago": 3,  # Look at emails from last 3 days
-                "limit": 10     # Consider up to 10 recent emails
-            }
-            
-            # Use your existing call_edge function
-            call_edge("/functions/v1/clever-service/generate-follow-up", follow_up_payload)
-        
-        # Log that we ran follow-ups
-        supabase.table("process_logs").insert({
-            "process_type": "follow_ups",
-            "last_run": datetime.now(timezone.utc).isoformat()
-        }).execute()
-
-except Exception as e:
-    app.logger.error(f"Follow-up generation error: {str(e)}")
 
 
 
