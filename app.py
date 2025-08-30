@@ -68,50 +68,15 @@ MAX_RETRIES = 5
 RETRY_BACKOFF_BASE = 2
 
 
-
-
-# Define the follow-up email sequence (subject and body with placeholders)
+# Define follow-up sequence (days after initial contact)
 FOLLOW_UP_SEQUENCE = [
-    {
-        'delay_days': 1,
-        'subject': 'Follow-up from {brokerage} about {service}',
-        'body': '''
-            <html>
-                <body>
-                    <p>Hello {first_name} {last_name},</p>
-                    <p>We wanted to follow up on your inquiry about {service} in {city}. Let us know if you have any questions!</p>
-                    <p>Best regards,<br>{brokerage}</p>
-                </body>
-            </html>
-        '''
-    },
-    {
-        'delay_days': 3,
-        'subject': 'Are you still interested in {service}?',
-        'body': '''
-            <html>
-                <body>
-                    <p>Hi {first_name},</p>
-                    <p>We haven’t heard back from you regarding {service}. Feel free to reach out if you need more information.</p>
-                    <p>Thanks,<br>{brokerage}</p>
-                </body>
-            </html>
-        '''
-    },
-    {
-        'delay_days': 7,
-        'subject': 'Final follow-up from {brokerage}',
-        'body': '''
-            <html>
-                <body>
-                    <p>Dear {first_name},</p>
-                    <p>This is our last attempt to reach out about {service} in {city}. We hope to hear from you soon.</p>
-                    <p>Sincerely,<br>{brokerage}</p>
-                </body>
-            </html>
-        '''
-    }
+    {"delay_days": 1, "name": "Day 1 Follow-up"},
+    {"delay_days": 3, "name": "Day 3 Follow-up"},
+    {"delay_days": 7, "name": "Day 7 Follow-up"},
+    {"delay_days": 14, "name": "Day 14 Follow-up"},
+    {"delay_days": 30, "name": "Day 30 Follow-up"},
 ]
+
 
 #----------------------------------------------------------------------------
 def get_smtp_creds(user_id: str):
@@ -1666,21 +1631,122 @@ def import_leads():
                 if response.data:
                     lead_id = response.data[0]['id']
                     # Schedule follow-up emails
-                    for step, seq in enumerate(FOLLOW_UP_SEQUENCE):
-                        scheduled_at = email_sent + timedelta(days=seq['delay_days'])
-                        follow_up_data = {
-                            'lead_id': lead_id,
-                            'sequence_step': step,
-                            'scheduled_at': scheduled_at.isoformat(),
-                            'status': 'pending'
-                        }
-                        supabase.table('lead_follow_ups').insert(follow_up_data).execute()
+            # Schedule follow-up emails
+            for step, seq in enumerate(FOLLOW_UP_SEQUENCE):
+                scheduled_at = email_sent + timedelta(days=seq['delay_days'])
+                follow_up_data = {
+                    'lead_id': lead_id,
+                    'sequence_step': step,
+                    'scheduled_at': scheduled_at.isoformat(),
+                    'status': 'pending'
+                }
+                supabase.table('lead_follow_ups').insert(follow_up_data).execute()
             
             return jsonify({"message": "Leads imported successfully"}), 200
         
         except Exception as e:
             app.logger.error(f"Error importing leads: {str(e)}")
             return jsonify({"error": "Failed to import leads. Please check the file format."}), 500
+
+
+#------------------------------------------------------------------------------------------------------------------
+def generate_follow_up_content(lead_id, sequence_step):
+    """Generate follow-up content using AI with context of previous communications"""
+    try:
+        # Get lead details and previous emails
+        lead = supabase.table("leads").select("*").eq("id", lead_id).single().execute().data
+        previous_emails = supabase.table("emails") \
+            .select("subject, original_content, processed_content, sent_at") \
+            .eq("sender_email", lead["email"]) \
+            .order("sent_at", desc=True) \
+            .limit(5) \
+            .execute().data
+        
+        # Build context for AI
+        context = f"""
+        Lead: {lead['first_name']} {lead['last_name']}
+        Company: {lead['brokerage']}
+        Service: {lead['service']}
+        Location: {lead['city']}
+        
+        Previous communications:
+        """
+        
+        for i, email in enumerate(previous_emails):
+            context += f"\nEmail {i+1} ({email.get('sent_at', '')}):\n"
+            context += f"Subject: {email.get('subject', 'No subject')}\n"
+            context += f"Content: {email.get('original_content', email.get('processed_content', ''))}\n"
+        
+        context += f"\n\nWrite a friendly, professional follow-up email for day {FOLLOW_UP_SEQUENCE[sequence_step]['delay_days']}."
+        context += " Reference previous communications if relevant. Keep it concise and focused on providing value."
+        
+        # Call your AI API (using the same pattern as your existing code)
+        # This is a simplified version - adapt to match your actual AI integration
+        prompt = {
+            "context": context,
+            "type": "follow_up",
+            "sequence_step": sequence_step
+        }
+        
+        # Use your existing Edge Function call pattern
+        success = call_edge("/functions/v1/clever-service/generate-follow-up", prompt)
+        
+        if success:
+            return True
+        else:
+            app.logger.error(f"Failed to generate follow-up content for lead {lead_id}")
+            return False
+            
+    except Exception as e:
+        app.logger.error(f"Error generating follow-up content: {str(e)}")
+        return False
+#-------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+@app.route("/process_follow_ups", methods=["GET"])
+def process_follow_ups():
+    # Check for secret token (similar to your /process endpoint)
+    token = request.args.get("token")
+    if token != os.environ.get("PROCESS_SECRET_TOKEN"):
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    try:
+        # Get due follow-ups
+        now = datetime.now(timezone.utc).isoformat()
+        due_follow_ups = supabase.table("lead_follow_ups") \
+            .select("*, leads(*)") \
+            .lte("scheduled_at", now) \
+            .eq("status", "pending") \
+            .execute().data
+        
+        results = {"processed": [], "failed": []}
+        
+        for follow_up in due_follow_ups:
+            try:
+                # Generate content using AI
+                if generate_follow_up_content(follow_up["lead_id"], follow_up["sequence_step"]):
+                    # Update status
+                    supabase.table("lead_follow_ups") \
+                        .update({"status": "processed", "processed_at": now}) \
+                        .eq("id", follow_up["id"]) \
+                        .execute()
+                    results["processed"].append(follow_up["id"])
+                else:
+                    supabase.table("lead_follow_ups") \
+                        .update({"status": "failed", "processed_at": now}) \
+                        .eq("id", follow_up["id"]) \
+                        .execute()
+                    results["failed"].append(follow_up["id"])
+                    
+            except Exception as e:
+                app.logger.error(f"Error processing follow-up {follow_up['id']}: {str(e)}")
+                results["failed"].append(follow_up["id"])
+        
+        return jsonify(results), 200
+        
+    except Exception as e:
+        app.logger.error(f"Error in process_follow_ups: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 
 
