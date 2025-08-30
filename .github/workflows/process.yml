@@ -77,3 +77,20 @@ jobs:
             -X POST "https://replyzeai.onrender.com/autopilot/trigger-all")
           echo "Autopilot-all returned $HTTP"
           test "$HTTP" = "200" || test "$HTTP" = "204"
+
+
+
+
+    # Add this job after the trigger-processing job
+  process-follow-ups:
+    needs: poll-mail
+    runs-on: ubuntu-latest
+    steps:
+    - name: Process Follow-ups
+      run: |
+        HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
+          "https://replyzeai.onrender.com/process_follow_ups?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
+        echo "Follow-up processing returned status: $HTTP"
+        if [[ "$HTTP" != "200" && "$HTTP" != "204" ]]; then
+          echo "::warning::Follow-up processing returned non-success status: $HTTP"
+        fi
