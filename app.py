@@ -1350,6 +1350,54 @@ def trigger_process():
     }
     return jsonify(summary), 200
 
+#---------------------------------------------------------------------------------------------------------------------------
+# ── 7) Generate follow-up emails for recent conversations ──
+try:
+    # Only run follow-ups once per hour to avoid spamming
+    last_follow_up = supabase.table("process_logs") \
+        .select("last_run") \
+        .eq("process_type", "follow_ups") \
+        .order("last_run", desc=True) \
+        .limit(1) \
+        .execute().data
+    
+    should_run_follow_ups = True
+    if last_follow_up:
+        last_run = datetime.fromisoformat(last_follow_up[0]["last_run"].replace("Z", "+00:00"))
+        if (datetime.now(timezone.utc) - last_run).total_seconds() < 3600:  # 1 hour
+            should_run_follow_ups = False
+    
+    if should_run_follow_ups:
+        # Get all active users
+        users = supabase.table("profiles") \
+            .select("id") \
+            .eq("ai_enabled", True) \
+            .execute().data or []
+        
+        for user in users:
+            user_id = user["id"]
+            # Call the follow-up generator edge function
+            follow_up_payload = {
+                "user_id": user_id,
+                "days_ago": 3,  # Look at emails from last 3 days
+                "limit": 10     # Consider up to 10 recent emails
+            }
+            
+            # Use your existing call_edge function
+            call_edge("/functions/v1/clever-service/generate-follow-up", follow_up_payload)
+        
+        # Log that we ran follow-ups
+        supabase.table("process_logs").insert({
+            "process_type": "follow_ups",
+            "last_run": datetime.now(timezone.utc).isoformat()
+        }).execute()
+
+except Exception as e:
+    app.logger.error(f"Follow-up generation error: {str(e)}")
+
+
+
+#-----------------------------------------------------------------------------------------------------
 
 @app.route("/transaction/<txn_id>/ready", methods=["POST"])
 def mark_ready(txn_id):
