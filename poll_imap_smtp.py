@@ -126,6 +126,53 @@ def send_ready_via_smtp():
                 "error_message": str(e)
             }).eq("id", em_id).execute()
 
+
+# Add to poll_imap_smtp.py
+def process_follow_ups():
+    due_follow_ups = supabase.table("lead_follow_ups") \
+        .select("*, leads(*), profiles(*)") \
+        .lte("scheduled_at", datetime.utcnow().isoformat()) \
+        .eq("status", "processed") \  # Already generated content, ready to send
+        .execute().data
+    
+    for follow_up in due_follow_ups:
+        try:
+            lead = follow_up["leads"]
+            profile = follow_up["profiles"]
+            
+            # Get the generated content (you'll need to store this in your follow_ups table)
+            content = follow_up.get("generated_content", "")
+            
+            # Send using existing email infrastructure
+            if profile.get("smtp_email") and profile.get("smtp_enc_password"):
+                # Send via SMTP
+                send_email_smtp(
+                    profile["smtp_email"],
+                    fernet.decrypt(profile["smtp_enc_password"].encode()).decode(),
+                    lead["email"],
+                    f"Follow-up: {lead['service']} in {lead['city']}",
+                    content,
+                    smtp_host=profile.get("smtp_host", "smtp.gmail.com")
+                )
+            else:
+                # Send via Gmail API (implement similar to your existing code)
+                pass
+                
+            # Mark as sent
+            supabase.table("lead_follow_ups") \
+                .update({"status": "sent", "sent_at": datetime.utcnow().isoformat()}) \
+                .eq("id", follow_up["id"]) \
+                .execute()
+                
+        except Exception as e:
+            logger.error(f"Failed to send follow-up {follow_up['id']}: {str(e)}")
+            supabase.table("lead_follow_ups") \
+                .update({"status": "failed", "error_message": str(e)}) \
+                .eq("id", follow_up["id"]) \
+                .execute()
+
+# Call this function in your main loop
 if __name__ == "__main__":
     poll_imap()
     send_ready_via_smtp()
+    process_follow_ups()  # Add this line
