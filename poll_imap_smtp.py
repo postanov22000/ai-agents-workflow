@@ -132,7 +132,7 @@ def process_follow_ups():
     due_follow_ups = supabase.table("lead_follow_ups") \
         .select("*, leads(*), profiles(*)") \
         .lte("scheduled_at", datetime.utcnow().isoformat()) \
-        .eq("status", "processed") \  # Already generated content, ready to send
+        .eq("status", "processed") \  
         .execute().data
     
     for follow_up in due_follow_ups:
