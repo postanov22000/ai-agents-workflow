@@ -1698,7 +1698,7 @@ def generate_follow_up_content(lead_id, sequence_step):
             return True
         else:
         # This is a simplified version - adapt to match your actual AI integration
-        prompt = {
+            prompt = {
             "context": context,
             "type": "follow_up",
             "sequence_step": sequence_step
