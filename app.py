@@ -1681,6 +1681,22 @@ def generate_follow_up_content(lead_id, sequence_step):
         context += " Reference previous communications if relevant. Keep it concise and focused on providing value."
         
         # Call your AI API (using the same pattern as your existing code)
+      payload = {
+            "context": context,
+            "type": "follow_up",
+            "sequence_step": sequence_step,
+            "lead_id": lead_id
+        }
+        
+        # Use your existing Edge Function call pattern
+        success = call_edge("/functions/v1/generate-follow-up", payload)
+        
+        if success:
+            # Update the follow-up record with generated content
+            # You'll need to modify your Edge Function to return the generated content
+            # For now, we'll assume the Edge Function updates the record directly
+            return True
+        else:
         # This is a simplified version - adapt to match your actual AI integration
         prompt = {
             "context": context,
@@ -1689,7 +1705,7 @@ def generate_follow_up_content(lead_id, sequence_step):
         }
         
         # Use your existing Edge Function call pattern
-        success = call_edge("/functions/v1/clever-service/generate-follow-up", prompt)
+        success = call_edge("/functions/v1/generate-follow-up", prompt)
         
         if success:
             return True
