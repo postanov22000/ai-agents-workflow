@@ -13,6 +13,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+fernet = Fernet(ENCRYPTION_KEY.encode()) 
 
 def poll_imap():
     rows = (
