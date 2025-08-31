@@ -1677,7 +1677,7 @@ def generate_follow_up_content(lead_id, sequence_step):
             .select("generated_content, sent_at, sequence_step") \
             .eq("lead_id", lead_id) \
             .eq("status", "sent") \
-            .lt("sequence_step", sequence_step) \  # Only get follow-ups from previous steps
+            .lt("sequence_step", sequence_step) \
             .order("sent_at", desc=True) \
             .execute().data or []
         
