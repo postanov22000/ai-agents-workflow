@@ -449,6 +449,38 @@
   transform: translateY(-3px);
 }
 
+/*-----------------------------------------------------------------------------------------------*/
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.follow-up {
+    animation: fadeInUp 0.5s ease forwards;
+}
+    
+.follow-up {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(100, 255, 218, 0.2);
+}
+
+.follow-up h4 {
+    color: #64ffda;
+    margin-bottom: 0.5rem;
+    font-size: 1.2rem;
+}
+
+.follow-up .preview-content {
+    margin-top: 0.5rem;
+}
+/*--------------------------------------------------------------------------------------------------*/    
   </style>
 </head>
 <body>
@@ -493,7 +525,15 @@
         <div class="trial-counter"><i class="fas fa-gift"></i> Free uses remaining: <span class="counter-number" id="ai-counter">3</span></div>
         <div class="form-group"><label for="incoming-email">Incoming Email</label><textarea id="incoming-email" placeholder="Paste the email here..."></textarea></div>
         <button class="cta-button" id="generate-reply-btn">Generate Reply</button>
-        <div class="preview-container" id="reply-preview" style="display:none;"><div class="preview-header"><h3 class="preview-title">AI Generated Reply</h3></div><div class="preview-content" id="reply-content"></div></div>
+        <div class="preview-container" id="reply-preview" style="display:none;"><div class="preview-header"><h3 class="preview-title">AI Generated Reply</h3></div><div class="preview-content" id="reply-content"></div>
+        <!-- Add this after the reply preview container -->
+<div id="follow-ups-container" class="preview-container" style="display: none;">
+    <div class="preview-header">
+        <h3 class="preview-title">Follow-Up Emails</h3>
+    </div>
+    <!-- Follow-ups will be inserted here dynamically -->
+</div>
+        </div>
       </div>
     </div>
   </section>
@@ -716,10 +756,10 @@
   let aiCount = 3, loiCount = 3, psaCount = 3;
 
   // AI Responder
-  document.getElementById('generate-reply-btn').addEventListener('click', async function() {
+document.getElementById('generate-reply-btn').addEventListener('click', async function() {
     if (aiCount <= 0) {
-      alert('No more free AI responses. Please sign up.');
-      return document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
+        alert('No more free AI responses. Please sign up.');
+        return document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
     }
     const btn = this;
     const prompt = document.getElementById('incoming-email').value.trim();
@@ -732,33 +772,60 @@
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
 
     try {
-      const res = await fetch('https://replyzeai.onrender.com/api/generate-reply-prompt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt })
-      });
-      const data = await res.json();
-      if (data.reply) {
-        document.getElementById('reply-content').textContent = data.reply;
-        document.getElementById('reply-preview').style.display = 'block';
-      } else {
-        alert('Error: ' + (data.error || 'Unknown error'));
-      }
+        const res = await fetch('https://replyzeai.onrender.com/api/generate-reply-prompt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt })
+        });
+        const data = await res.json();
+        if (data.reply) {
+            // Display the main reply
+            document.getElementById('reply-content').textContent = data.reply;
+            document.getElementById('reply-preview').style.display = 'block';
+
+            // Clear previous follow-ups and hide container initially
+            const followUpsContainer = document.getElementById('follow-ups-container');
+            followUpsContainer.style.display = 'none';
+            followUpsContainer.querySelectorAll('.follow-up').forEach(el => el.remove());
+
+            // If there are follow-ups, display them sequentially
+            if (data.follow_ups && data.follow_ups.length > 0) {
+                followUpsContainer.style.display = 'block';
+                
+                // Display each follow-up with a delay
+                data.follow_ups.forEach((followUp, index) => {
+                    setTimeout(() => {
+                        const followUpDiv = document.createElement('div');
+                        followUpDiv.className = 'follow-up';
+                        followUpDiv.innerHTML = `
+                            <h4>Follow-Up ${index + 1}</h4>
+                            <div class="preview-content">${followUp}</div>
+                        `;
+                        followUpsContainer.appendChild(followUpDiv);
+                        
+                        // Scroll to the new follow-up
+                        followUpDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }, (index + 1) * 2000); // 2-second delay between each follow-up
+                });
+            }
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
     } catch (err) {
-      console.error('Request failed:', err);
-      alert('Network error. Please try again.');
+        console.error('Request failed:', err);
+        alert('Network error. Please try again.');
     } finally {
-      btn.disabled = false;
-      btn.innerHTML = 'Generate Reply';
+        btn.disabled = false;
+        btn.innerHTML = 'Generate Reply';
     }
 
     if (aiCount === 0) {
-      setTimeout(() => {
-        alert("You've used your free AI responses! Sign up now.");
-        document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
-      }, 1_000);
+        setTimeout(() => {
+            alert("You've used your free AI responses! Sign up now.");
+            document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
+        }, 1000);
     }
-  });
+});
 
   // Document Generation (LOI & PSA)
   document.querySelectorAll('.doc-btn').forEach(btn =>
