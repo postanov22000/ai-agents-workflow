@@ -1653,14 +1653,35 @@ def import_leads():
 def generate_follow_up_content(lead_id, sequence_step):
     """Generate follow-up content using AI with context of previous communications"""
     try:
-        # Get lead details and previous emails
-        lead = supabase.table("leads").select("*").eq("id", lead_id).single().execute().data
+        app.logger.info(f"Starting follow-up generation for lead {lead_id}, step {sequence_step}")
+        
+        # Get lead details
+        lead_resp = supabase.table("leads").select("*").eq("id", lead_id).single().execute()
+        if not lead_resp.data:
+            app.logger.error(f"Lead {lead_id} not found")
+            return False
+            
+        lead = lead_resp.data
+        app.logger.info(f"Found lead: {lead['email']}")
+        
+        # Get previous emails from emails table
         previous_emails = supabase.table("emails") \
             .select("subject, original_content, processed_content, sent_at") \
             .eq("sender_email", lead["email"]) \
             .order("sent_at", desc=True) \
             .limit(5) \
-            .execute().data
+            .execute().data or []
+        
+        # Get previous follow-ups from lead_follow_ups table
+        previous_follow_ups = supabase.table("lead_follow_ups") \
+            .select("generated_content, sent_at, sequence_step") \
+            .eq("lead_id", lead_id) \
+            .eq("status", "sent") \
+            .lt("sequence_step", sequence_step) \  # Only get follow-ups from previous steps
+            .order("sent_at", desc=True) \
+            .execute().data or []
+        
+        app.logger.info(f"Found {len(previous_emails)} previous emails and {len(previous_follow_ups)} previous follow-ups")
         
         # Build context for AI
         context = f"""
@@ -1672,15 +1693,28 @@ def generate_follow_up_content(lead_id, sequence_step):
         Previous communications:
         """
         
+        # Add emails from emails table
         for i, email in enumerate(previous_emails):
             context += f"\nEmail {i+1} ({email.get('sent_at', '')}):\n"
             context += f"Subject: {email.get('subject', 'No subject')}\n"
-            context += f"Content: {email.get('original_content', email.get('processed_content', ''))}\n"
+            content = email.get('original_content') or email.get('processed_content', '')
+            context += f"Content: {content[:200]}...\n" if len(content) > 200 else f"Content: {content}\n"
+        
+        # Add follow-ups from lead_follow_ups table
+        for i, follow_up in enumerate(previous_follow_ups, start=len(previous_emails)+1):
+            context += f"\nFollow-up {i} (Day {FOLLOW_UP_SEQUENCE[follow_up['sequence_step']]['delay_days']}, {follow_up.get('sent_at', '')}):\n"
+            content = follow_up.get('generated_content', '')
+            context += f"Content: {content[:200]}...\n" if len(content) > 200 else f"Content: {content}\n"
+        
+        if not previous_emails and not previous_follow_ups:
+            context += "\nNo previous communications found. This is the first contact.\n"
         
         context += f"\n\nWrite a friendly, professional follow-up email for day {FOLLOW_UP_SEQUENCE[sequence_step]['delay_days']}."
         context += " Reference previous communications if relevant. Keep it concise and focused on providing value."
         
-        # Call your AI API (using the same pattern as your existing code)
+        app.logger.info(f"Built context for AI: {context[:500]}...")
+        
+        # Call your AI API
         payload = {
             "context": context,
             "type": "follow_up",
@@ -1688,33 +1722,20 @@ def generate_follow_up_content(lead_id, sequence_step):
             "lead_id": lead_id
         }
         
+        app.logger.info(f"Calling edge function with payload: {payload}")
+        
         # Use your existing Edge Function call pattern
         success = call_edge("/functions/v1/generate-follow-up", payload)
         
         if success:
-            # Update the follow-up record with generated content
-            # You'll need to modify your Edge Function to return the generated content
-            # For now, we'll assume the Edge Function updates the record directly
-            return True
-        else:
-        # This is a simplified version - adapt to match your actual AI integration
-            prompt = {
-            "context": context,
-            "type": "follow_up",
-            "sequence_step": sequence_step
-        }
-        
-        # Use your existing Edge Function call pattern
-        success = call_edge("/functions/v1/generate-follow-up", prompt)
-        
-        if success:
+            app.logger.info(f"Successfully generated follow-up for lead {lead_id}")
             return True
         else:
             app.logger.error(f"Failed to generate follow-up content for lead {lead_id}")
             return False
             
     except Exception as e:
-        app.logger.error(f"Error generating follow-up content: {str(e)}")
+        app.logger.error(f"Error generating follow-up content: {str(e)}", exc_info=True)
         return False
 #-------------------------------------------------------------------------------------------------------------------------------------------------
 
