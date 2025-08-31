@@ -24,10 +24,68 @@ def generate_reply_prompt():
     if not prompt:
         return jsonify({"error": "Missing prompt"}), 400
 
+    # Enhanced prompt to generate reply and three follow-ups
+    enhanced_prompt = f"""
+    Generate a professional reply to the following email, and then generate three follow-up emails that would be sent later.
+    Format your response exactly as follows:
+
+    === REPLY ===
+    [Your main reply here]
+
+    === FOLLOW UP 1 ===
+    [First follow-up email]
+
+    === FOLLOW UP 2 ===
+    [Second follow-up email]
+
+    === FOLLOW UP 3 ===
+    [Third follow-up email]
+
+    Email to respond to:
+    {prompt}
+    """
+
     try:
         from utils import callAIML_from_flask
-        reply = callAIML_from_flask(prompt)
-        return jsonify({"reply": reply})
+        full_response = callAIML_from_flask(enhanced_prompt)
+        
+        # Parse the response to extract reply and follow-ups
+        sections = {}
+        current_section = None
+        lines = full_response.split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            if line == "=== REPLY ===":
+                current_section = 'reply'
+                sections[current_section] = []
+            elif line == "=== FOLLOW UP 1 ===":
+                current_section = 'follow_up_1'
+                sections[current_section] = []
+            elif line == "=== FOLLOW UP 2 ===":
+                current_section = 'follow_up_2'
+                sections[current_section] = []
+            elif line == "=== FOLLOW UP 3 ===":
+                current_section = 'follow_up_3'
+                sections[current_section] = []
+            elif current_section and line:
+                sections[current_section].append(line)
+        
+        # Join the lines for each section
+        reply = ' '.join(sections.get('reply', [])).strip()
+        follow_ups = [
+            ' '.join(sections.get('follow_up_1', [])).strip(),
+            ' '.join(sections.get('follow_up_2', [])).strip(),
+            ' '.join(sections.get('follow_up_3', [])).strip()
+        ]
+        
+        # Remove any empty follow-ups
+        follow_ups = [fu for fu in follow_ups if fu]
+        
+        return jsonify({
+            "reply": reply,
+            "follow_ups": follow_ups
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
