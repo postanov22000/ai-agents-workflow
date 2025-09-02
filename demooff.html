@@ -834,7 +834,9 @@
               phone,
               user_type: 'real_estate_agent'
             },
-            emailRedirectTo: window.location.origin + '/welcome.html'
+              const userId = data.user.id;
+
+            window.location.href = '/signin?user_id=' + userId;
           }
         });
         
