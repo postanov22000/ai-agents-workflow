@@ -426,6 +426,10 @@
             <input type="email" id="email" placeholder="Email Address" required>
           </div>
           
+          <div class="form-group" style="margin-bottom: 1.5rem;">
+            <input type="tel" id="phone" placeholder="Phone Number">
+          </div>
+          
           <div class="form-group password-group" style="margin-bottom: 1.5rem;">
             <input type="password" id="password" placeholder="Password" required minlength="6">
             <span class="toggle-password" id="toggle-password">
@@ -504,362 +508,374 @@
   </footer>
 
   <!-- Include Supabase JS -->
-  
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   
   <script>
-  // Cookie-based rate limiting
-  function setCookie(name, value, days) {
-    let expires = "";
-    if (days) {
-      const date = new Date();
-      date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
-      expires = "; expires=" + date.toUTCString();
-    }
-    document.cookie = name + "=" + (value || "") + expires + "; path=/; SameSite=Lax";
-  }
-
-  function getCookie(name) {
-    const nameEQ = name + "=";
-    const ca = document.cookie.split(';');
-    for(let i = 0; i < ca.length; i++) {
-      let c = ca[i];
-      while (c.charAt(0) === ' ') c = c.substring(1, c.length);
-      if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
-    }
-    return null;
-  }
-
-  // Initialize rate limiting
-  let aiCount, loiCount, psaCount;
-
-  function initRateLimiting() {
-    const trialsCookie = getCookie('free_trials');
+  // Initialize Supabase first to avoid reference errors
+  const initializeApp = function() {
+    // Supabase Configuration
+    const supabaseUrl = 'https://skxzfkudduqrubtgtodp.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODAwNzMsImV4cCI6MjA2MTE1NjA3M30.Wj3V5-swysAz8xAbA4lKmo-NNu_mv1UW_X4BgFNq0ag';
+    window.supabase = supabase.createClient(supabaseUrl, supabaseKey);
     
-    if (trialsCookie) {
-      const trials = JSON.parse(trialsCookie);
-      aiCount = trials.ai;
-      loiCount = trials.loi;
-      psaCount = trials.psa;
-    } else {
-      // First visit - set initial values
-      aiCount = 3;
-      loiCount = 3;
-      psaCount = 3;
-      updateTrialsCookie();
-    }
-    
-    // Update UI
-    document.getElementById('ai-counter').textContent = aiCount;
-    document.getElementById('loi-counter').textContent = loiCount;
-    document.getElementById('psa-counter').textContent = psaCount;
-  }
+    // Now initialize the rest of the application
+    initApplication();
+  };
 
-  function updateTrialsCookie() {
-    const trials = {
-      ai: aiCount,
-      loi: loiCount,
-      psa: psaCount
-    };
-    setCookie('free_trials', JSON.stringify(trials), 7); // Expires in 7 days
-  }
-
-  // Progress Bar
-  window.addEventListener('scroll', () => {
-    const st = document.documentElement.scrollTop,
-          sh = document.documentElement.scrollHeight,
-          ch = document.documentElement.clientHeight;
-    document.getElementById('progressBar').style.width = ((st / (sh - ch)) * 100) + '%';
-  });
-
-  // Scroll Anim
-  const els = document.querySelectorAll('[data-scroll]');
-  const inView = (e, off = 100) =>
-    e.getBoundingClientRect().top <= (window.innerHeight || document.documentElement.clientHeight) - off;
-  const handleScroll = () => els.forEach(e => {
-    if (inView(e)) e.setAttribute('data-scroll', 'in');
-  });
-  window.addEventListener('scroll', handleScroll);
-  document.addEventListener('DOMContentLoaded', handleScroll);
-
-  // Initialize rate limiting on page load
-  document.addEventListener('DOMContentLoaded', initRateLimiting);
-
-  // AI Responder
-  document.getElementById('generate-reply-btn').addEventListener('click', async function() {
-    if (aiCount <= 0) {
-      alert('No more free AI responses. Please sign up for a full account.');
-      return document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
-    }
-    const btn = this;
-    const prompt = document.getElementById('incoming-email').value.trim();
-    if (!prompt) return alert('Please paste an email text.');
-
-    aiCount--;
-    updateTrialsCookie();
-    document.getElementById('ai-counter').textContent = aiCount;
-
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
-
-    try {
-      const res = await fetch('https://replyzeai.onrender.com/api/generate-reply-prompt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt })
-      });
-      const data = await res.json();
-      if (data.reply) {
-        // Display the main reply
-        document.getElementById('reply-content').textContent = data.reply;
-        document.getElementById('reply-preview').style.display = 'block';
-
-        // Clear previous follow-ups and hide container initially
-        const followUpsContainer = document.getElementById('follow-ups-container');
-        followUpsContainer.style.display = 'none';
-        followUpsContainer.querySelectorAll('.follow-up').forEach(el => el.remove());
-
-        // If there are follow-ups, display them sequentially
-        if (data.follow_ups && data.follow_ups.length > 0) {
-          followUpsContainer.style.display = 'block';
-          
-          // Display each follow-up with a delay
-          data.follow_ups.forEach((followUp, index) => {
-            setTimeout(() => {
-              const followUpDiv = document.createElement('div');
-              followUpDiv.className = 'follow-up';
-              followUpDiv.innerHTML = `
-                <h4>Follow-Up ${index + 1}</h4>
-                <div class="preview-content">${followUp}</div>
-              `;
-              followUpsContainer.appendChild(followUpDiv);
-              
-              // Scroll to the new follow-up
-              followUpDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }, (index + 1) * 2000); // 2-second delay between each follow-up
-          });
-        }
-      } else {
-        alert('Error: ' + (data.error || 'Unknown error'));
+  // Main application initialization
+  const initApplication = function() {
+    // Cookie-based rate limiting
+    function setCookie(name, value, days) {
+      let expires = "";
+      if (days) {
+        const date = new Date();
+        date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+        expires = "; expires=" + date.toUTCString();
       }
-    } catch (err) {
-      console.error('Request failed:', err);
-      alert('Network error. Please try again.');
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = 'Generate Reply';
+      document.cookie = name + "=" + (value || "") + expires + "; path=/; SameSite=Lax";
     }
 
-    if (aiCount === 0) {
-      setTimeout(() => {
-        alert("You've used your free AI responses! Sign up now for unlimited access.");
-        document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
-      }, 1000);
+    function getCookie(name) {
+      const nameEQ = name + "=";
+      const ca = document.cookie.split(';');
+      for(let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+      }
+      return null;
     }
-  });
 
-  // Document Generation (LOI & PSA)
-  document.querySelectorAll('.doc-btn').forEach(btn =>
-    btn.addEventListener('click', async function() {
-      const type = this.getAttribute('data-type'),
-            cnt  = type === 'loi' ? loiCount : psaCount;
+    // Initialize rate limiting
+    let aiCount, loiCount, psaCount;
 
-      if (cnt <= 0) {
-        alert('Free trials exhausted. Please sign up for unlimited access.');
+    function initRateLimiting() {
+      const trialsCookie = getCookie('free_trials');
+      
+      if (trialsCookie) {
+        const trials = JSON.parse(trialsCookie);
+        aiCount = trials.ai;
+        loiCount = trials.loi;
+        psaCount = trials.psa;
+      } else {
+        // First visit - set initial values
+        aiCount = 3;
+        loiCount = 3;
+        psaCount = 3;
+        updateTrialsCookie();
+      }
+      
+      // Update UI
+      document.getElementById('ai-counter').textContent = aiCount;
+      document.getElementById('loi-counter').textContent = loiCount;
+      document.getElementById('psa-counter').textContent = psaCount;
+    }
+
+    function updateTrialsCookie() {
+      const trials = {
+        ai: aiCount,
+        loi: loiCount,
+        psa: psaCount
+      };
+      setCookie('free_trials', JSON.stringify(trials), 7); // Expires in 7 days
+    }
+
+    // Progress Bar
+    window.addEventListener('scroll', () => {
+      const st = document.documentElement.scrollTop,
+            sh = document.documentElement.scrollHeight,
+            ch = document.documentElement.clientHeight;
+      document.getElementById('progressBar').style.width = ((st / (sh - ch)) * 100) + '%';
+    });
+
+    // Scroll Anim
+    const els = document.querySelectorAll('[data-scroll]');
+    const inView = (e, off = 100) =>
+      e.getBoundingClientRect().top <= (window.innerHeight || document.documentElement.clientHeight) - off;
+    const handleScroll = () => els.forEach(e => {
+      if (inView(e)) e.setAttribute('data-scroll', 'in');
+    });
+    window.addEventListener('scroll', handleScroll);
+    document.addEventListener('DOMContentLoaded', handleScroll);
+
+    // Initialize rate limiting on page load
+    document.addEventListener('DOMContentLoaded', initRateLimiting);
+
+    // AI Responder
+    document.getElementById('generate-reply-btn').addEventListener('click', async function() {
+      if (aiCount <= 0) {
+        alert('No more free AI responses. Please sign up for a full account.');
         return document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
       }
+      const btn = this;
+      const prompt = document.getElementById('incoming-email').value.trim();
+      if (!prompt) return alert('Please paste an email text.');
 
-      // decrement
-      if (type === 'loi') loiCount--; else psaCount--;
+      aiCount--;
       updateTrialsCookie();
-      document.getElementById(type + '-counter').textContent = (type === 'loi' ? loiCount : psaCount);
+      document.getElementById('ai-counter').textContent = aiCount;
 
-      const b = this, orig = b.innerHTML;
-      b.disabled = true;
-      b.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
-
-      // collect payload
-      const payload = {};
-      b.closest('.generator-card')
-       .querySelectorAll('input,textarea,select')
-       .forEach(i => i.id && (payload[i.id] = i.value));
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
 
       try {
-        const res = await fetch(`https://replyzeai.onrender.com/api/generate-${type}`, {
+        const res = await fetch('https://replyzeai.onrender.com/api/generate-reply-prompt', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({ prompt })
         });
-        if (!res.ok) throw new Error(`Server returned ${res.status}`);
-        const blob = await res.blob();
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement('a');
-        a.href     = url;
-        a.download = `${type.toUpperCase()}-Document.docx`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
+        const data = await res.json();
+        if (data.reply) {
+          // Display the main reply
+          document.getElementById('reply-content').textContent = data.reply;
+          document.getElementById('reply-preview').style.display = 'block';
+
+          // Clear previous follow-ups and hide container initially
+          const followUpsContainer = document.getElementById('follow-ups-container');
+          followUpsContainer.style.display = 'none';
+          followUpsContainer.querySelectorAll('.follow-up').forEach(el => el.remove());
+
+          // If there are follow-ups, display them sequentially
+          if (data.follow_ups && data.follow_ups.length > 0) {
+            followUpsContainer.style.display = 'block';
+            
+            // Display each follow-up with a delay
+            data.follow_ups.forEach((followUp, index) => {
+              setTimeout(() => {
+                const followUpDiv = document.createElement('div');
+                followUpDiv.className = 'follow-up';
+                followUpDiv.innerHTML = `
+                  <h4>Follow-Up ${index + 1}</h4>
+                  <div class="preview-content">${followUp}</div>
+                `;
+                followUpsContainer.appendChild(followUpDiv);
+                
+                // Scroll to the new follow-up
+                followUpDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              }, (index + 1) * 2000); // 2-second delay between each follow-up
+            });
+          }
+        } else {
+          alert('Error: ' + (data.error || 'Unknown error'));
+        }
       } catch (err) {
-        console.error('Error generating document:', err);
-        alert('Error generating document. Please try again.');
+        console.error('Request failed:', err);
+        alert('Network error. Please try again.');
       } finally {
-        b.disabled = false;
-        b.innerHTML = orig;
+        btn.disabled = false;
+        btn.innerHTML = 'Generate Reply';
       }
 
-      if ((type === 'loi' && loiCount === 0) || (type === 'psa' && psaCount === 0)) {
+      if (aiCount === 0) {
         setTimeout(() => {
-          alert('Free trials exhausted. Sign up for unlimited access.');
+          alert("You've used your free AI responses! Sign up now for unlimited access.");
           document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
         }, 1000);
       }
-    })
-  );
-  </script>
-  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <script>
-  // Initialize Supabase
-  const supabaseUrl = 'https://skxzfkudduqrubtgtodp.supabase.co';
-  const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhbmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODAwNzMsImV4cCI6MjA2MTE1NjA3M30.Wj3V5-swysAz8xAbA4lKmo-NNu_mv1UW_X4BgFNq0ag';
-  const supabase = supabase.createClient(supabaseUrl, supabaseKey);
-
-  // Password visibility toggle
-  document.querySelectorAll('.toggle-password').forEach(toggle => {
-    toggle.addEventListener('click', function() {
-      const input = this.previousElementSibling;
-      const icon = this.querySelector('i');
-      
-      if (input.type === 'password') {
-        input.type = 'text';
-        icon.classList.replace('fa-eye', 'fa-eye-slash');
-      } else {
-        input.type = 'password';
-        icon.classList.replace('fa-eye-slash', 'fa-eye');
-      }
     });
-  });
 
-  // Password strength indicator
-  const passwordInput = document.getElementById('password');
-  const strengthBar = document.getElementById('password-strength-bar');
-  
-  passwordInput.addEventListener('input', function() {
-    const password = this.value;
-    let strength = 0;
-    
-    if (password.length >= 8) strength += 25;
-    if (/[A-Z]/.test(password)) strength += 25;
-    if (/[0-9]/.test(password)) strength += 25;
-    if (/[^A-Za-z0-9]/.test(password)) strength += 25;
-    
-    strengthBar.style.width = strength + '%';
-    
-    if (strength < 50) {
-      strengthBar.style.background = '#ff605c';
-    } else if (strength < 75) {
-      strengthBar.style.background = '#ffbd44';
-    } else {
-      strengthBar.style.background = '#00ca4e';
-    }
-  });
+    // Document Generation (LOI & PSA)
+    document.querySelectorAll('.doc-btn').forEach(btn =>
+      btn.addEventListener('click', async function() {
+        const type = this.getAttribute('data-type'),
+              cnt  = type === 'loi' ? loiCount : psaCount;
 
-  // Password confirmation check
-  const confirmPasswordInput = document.getElementById('confirm-password');
-  const passwordMatchMessage = document.getElementById('password-match-message');
-  
-  confirmPasswordInput.addEventListener('input', function() {
-    if (this.value !== passwordInput.value) {
-      passwordMatchMessage.textContent = 'Passwords do not match';
-      passwordMatchMessage.style.color = '#ff605c';
-    } else {
-      passwordMatchMessage.textContent = 'Passwords match';
-      passwordMatchMessage.style.color = '#00ca4e';
-    }
-  });
+        if (cnt <= 0) {
+          alert('Free trials exhausted. Please sign up for unlimited access.');
+          return document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
+        }
 
-  // Form submission handler
-  document.getElementById('signup-form').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    
-    const formMessage = document.getElementById('form-message');
-    const signupButton = document.getElementById('signup-button');
-    const originalButtonText = signupButton.innerHTML;
-    
-    // Get form values
-    const name = document.getElementById('name').value;
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    const confirmPassword = document.getElementById('confirm-password').value;
-    
-    // Validate passwords match
-    if (password !== confirmPassword) {
-      formMessage.textContent = 'Passwords do not match';
-      formMessage.className = 'form-message form-error';
-      formMessage.style.display = 'block';
-      return;
-    }
-    
-    // Validate password length
-    if (password.length < 6) {
-      formMessage.textContent = 'Password must be at least 6 characters long';
-      formMessage.className = 'form-message form-error';
-      formMessage.style.display = 'block';
-      return;
-    }
-    
-    // Show loading state
-    signupButton.disabled = true;
-    signupButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Account...';
-    formMessage.style.display = 'none';
-    
-    try {
-      // Create user with Supabase
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: name,
-            user_type: 'real_estate_agent'
-          },
-          emailRedirectTo: window.location.origin + '/demo'
+        // decrement
+        if (type === 'loi') loiCount--; else psaCount--;
+        updateTrialsCookie();
+        document.getElementById(type + '-counter').textContent = (type === 'loi' ? loiCount : psaCount);
+
+        const b = this, orig = b.innerHTML;
+        b.disabled = true;
+        b.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+
+        // collect payload
+        const payload = {};
+        b.closest('.generator-card')
+         .querySelectorAll('input,textarea,select')
+         .forEach(i => i.id && (payload[i.id] = i.value));
+
+        try {
+          const res = await fetch(`https://replyzeai.onrender.com/api/generate-${type}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (!res.ok) throw new Error(`Server returned ${res.status}`);
+          const blob = await res.blob();
+          const url  = URL.createObjectURL(blob);
+          const a    = document.createElement('a');
+          a.href     = url;
+          a.download = `${type.toUpperCase()}-Document.docx`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        } catch (err) {
+          console.error('Error generating document:', err);
+          alert('Error generating document. Please try again.');
+        } finally {
+          b.disabled = false;
+          b.innerHTML = orig;
+        }
+
+        if ((type === 'loi' && loiCount === 0) || (type === 'psa' && psaCount === 0)) {
+          setTimeout(() => {
+            alert('Free trials exhausted. Sign up for unlimited access.');
+            document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
+          }, 1000);
+        }
+      })
+    );
+
+    // Password visibility toggle
+    document.querySelectorAll('.toggle-password').forEach(toggle => {
+      toggle.addEventListener('click', function() {
+        const input = this.previousElementSibling;
+        const icon = this.querySelector('i');
+        
+        if (input.type === 'password') {
+          input.type = 'text';
+          icon.classList.replace('fa-eye', 'fa-eye-slash');
+        } else {
+          input.type = 'password';
+          icon.classList.replace('fa-eye-slash', 'fa-eye');
         }
       });
+    });
+
+    // Password strength indicator
+    const passwordInput = document.getElementById('password');
+    const strengthBar = document.getElementById('password-strength-bar');
+    
+    passwordInput.addEventListener('input', function() {
+      const password = this.value;
+      let strength = 0;
       
-      if (error) throw error;
+      if (password.length >= 8) strength += 25;
+      if (/[A-Z]/.test(password)) strength += 25;
+      if (/[0-9]/.test(password)) strength += 25;
+      if (/[^A-Za-z0-9]/.test(password)) strength += 25;
       
-      // Show success message
-      formMessage.textContent = 'your 30 day free trial will start successfully! Please check your email to verify your account.';
-      formMessage.className = 'form-message form-success';
-      formMessage.style.display = 'block';
+      strengthBar.style.width = strength + '%';
       
-      // Reset form
-      this.reset();
-      strengthBar.style.width = '0%';
-      passwordMatchMessage.textContent = '';
+      if (strength < 50) {
+        strengthBar.style.background = '#ff605c';
+      } else if (strength < 75) {
+        strengthBar.style.background = '#ffbd44';
+      } else {
+        strengthBar.style.background = '#00ca4e';
+      }
+    });
+
+    // Password confirmation check
+    const confirmPasswordInput = document.getElementById('confirm-password');
+    const passwordMatchMessage = document.getElementById('password-match-message');
+    
+    confirmPasswordInput.addEventListener('input', function() {
+      if (this.value !== passwordInput.value) {
+        passwordMatchMessage.textContent = 'Passwords do not match';
+        passwordMatchMessage.style.color = '#ff605c';
+      } else {
+        passwordMatchMessage.textContent = 'Passwords match';
+        passwordMatchMessage.style.color = '#00ca4e';
+      }
+    });
+
+    // Form submission handler
+    document.getElementById('signup-form').addEventListener('submit', async function(e) {
+      e.preventDefault();
       
-      // Reset trial counters
-      aiCount = 3;
-      loiCount = 3;
-      psaCount = 3;
-      updateTrialsCookie();
-      document.getElementById('ai-counter').textContent = '3';
-      document.getElementById('loi-counter').textContent = '3';
-      document.getElementById('psa-counter').textContent = '3';
+      const formMessage = document.getElementById('form-message');
+      const signupButton = document.getElementById('signup-button');
+      const originalButtonText = signupButton.innerHTML;
       
-    } catch (error) {
-      console.error('Signup error:', error);
-      formMessage.textContent = error.message.includes('already registered') 
-        ? 'Email already registered. Try logging in or resetting your password.'
-        : error.message;
-      formMessage.className = 'form-message form-error';
-      formMessage.style.display = 'block';
-    } finally {
-      // Restore button state
-      signupButton.disabled = false;
-      signupButton.innerHTML = originalButtonText;
-    }
-  });
+      // Get form values
+      const name = document.getElementById('name').value;
+      const email = document.getElementById('email').value;
+      const phone = document.getElementById('phone').value;
+      const password = document.getElementById('password').value;
+      const confirmPassword = document.getElementById('confirm-password').value;
+      
+      // Validate passwords match
+      if (password !== confirmPassword) {
+        formMessage.textContent = 'Passwords do not match';
+        formMessage.className = 'form-message form-error';
+        formMessage.style.display = 'block';
+        return;
+      }
+      
+      // Validate password length
+      if (password.length < 6) {
+        formMessage.textContent = 'Password must be at least 6 characters long';
+        formMessage.className = 'form-message form-error';
+        formMessage.style.display = 'block';
+        return;
+      }
+      
+      // Show loading state
+      signupButton.disabled = true;
+      signupButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Account...';
+      formMessage.style.display = 'none';
+      
+      try {
+        // Create user with Supabase
+        const { data, error } = await window.supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: name,
+              phone,
+              user_type: 'real_estate_agent'
+            },
+            emailRedirectTo: window.location.origin + '/welcome.html'
+          }
+        });
+        
+        if (error) throw error;
+        
+        // Show success message
+        formMessage.textContent = 'Account created successfully! Please check your email to verify your account.';
+        formMessage.className = 'form-message form-success';
+        formMessage.style.display = 'block';
+        
+        // Reset form
+        this.reset();
+        strengthBar.style.width = '0%';
+        passwordMatchMessage.textContent = '';
+        
+        // Reset trial counters
+        aiCount = 3;
+        loiCount = 3;
+        psaCount = 3;
+        updateTrialsCookie();
+        document.getElementById('ai-counter').textContent = '3';
+        document.getElementById('loi-counter').textContent = '3';
+        document.getElementById('psa-counter').textContent = '3';
+        
+      } catch (error) {
+        console.error('Signup error:', error);
+        formMessage.textContent = error.message.includes('already registered') 
+          ? 'Email already registered. Try logging in or resetting your password.'
+          : error.message;
+        formMessage.className = 'form-message form-error';
+        formMessage.style.display = 'block';
+      } finally {
+        // Restore button state
+        signupButton.disabled = false;
+        signupButton.innerHTML = originalButtonText;
+      }
+    });
+  };
+
+  // Start the application initialization
+  initializeApp();
   </script>
 </body>
 </html>
