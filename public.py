@@ -179,3 +179,126 @@ def catch_all(page):
         abort(404)
     return render_template(f"{page}.html")
 
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+@public_bp.route("/api/generate-full-kit", methods=["OPTIONS", "POST"])
+def generate_full_kit():
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    try:
+        data = request.get_json(force=True)
+        
+        # Set default values for any missing fields
+        defaults = {
+            "transaction_type": "Purchase",
+            "rent_type": "Annual Lease",
+            "inspection_days": 10,
+            "mortgage_years": 30,
+            "interest_rate": 3.5,
+            "parking_spaces": 1,
+            "broker_name": "John Smith",
+        }
+        
+        for key, value in defaults.items():
+            if key not in data or not data[key]:
+                data[key] = value
+        
+        # Generate all documents
+        documents = []
+        
+        # LOI
+        try:
+            loi_tpl = DocxTemplate("templates/transaction_autopilot/loi_template.docx")
+            loi_tpl.render(data)
+            loi_bio = BytesIO()
+            loi_tpl.save(loi_bio)
+            loi_bio.seek(0)
+            documents.append(("Letter_of_Intent.docx", loi_bio))
+        except Exception as e:
+            print(f"Error generating LOI: {e}")
+        
+        # PSA
+        try:
+            psa_tpl = DocxTemplate("templates/transaction_autopilot/psa_template.docx")
+            psa_tpl.render(data)
+            psa_bio = BytesIO()
+            psa_tpl.save(psa_bio)
+            psa_bio.seek(0)
+            documents.append(("Purchase_Sale_Agreement.docx", psa_bio))
+        except Exception as e:
+            print(f"Error generating PSA: {e}")
+        
+        # Purchase Offer
+        try:
+            purchase_offer_tpl = DocxTemplate("templates/transaction_autopilot/purchase_offer_template.docx")
+            purchase_offer_tpl.render(data)
+            purchase_offer_bio = BytesIO()
+            purchase_offer_tpl.save(purchase_offer_bio)
+            purchase_offer_bio.seek(0)
+            documents.append(("Purchase_Offer.docx", purchase_offer_bio))
+        except Exception as e:
+            print(f"Error generating Purchase Offer: {e}")
+        
+        # Agency Disclosure
+        try:
+            agency_tpl = DocxTemplate("templates/transaction_autopilot/agency_disclosure_template.docx")
+            agency_tpl.render(data)
+            agency_bio = BytesIO()
+            agency_tpl.save(agency_bio)
+            agency_bio.seek(0)
+            documents.append(("Agency_Disclosure.docx", agency_bio))
+        except Exception as e:
+            print(f"Error generating Agency Disclosure: {e}")
+        
+        # Real Estate Purchase Agreement
+        try:
+            purchase_tpl = DocxTemplate("templates/transaction_autopilot/real_estate_purchase_template.docx")
+            purchase_tpl.render(data)
+            purchase_bio = BytesIO()
+            purchase_tpl.save(purchase_bio)
+            purchase_bio.seek(0)
+            documents.append(("Real_Estate_Purchase_Agreement.docx", purchase_bio))
+        except Exception as e:
+            print(f"Error generating Real Estate Purchase Agreement: {e}")
+        
+        # Lease Agreement
+        try:
+            lease_tpl = DocxTemplate("templates/transaction_autopilot/lease_template.docx")
+            lease_tpl.render(data)
+            lease_bio = BytesIO()
+            lease_tpl.save(lease_bio)
+            lease_bio.seek(0)
+            documents.append(("Lease_Agreement.docx", lease_bio))
+        except Exception as e:
+            print(f"Error generating Lease Agreement: {e}")
+        
+        # Seller Disclosure
+        try:
+            seller_tpl = DocxTemplate("templates/transaction_autopilot/seller_disclosure_template.docx")
+            seller_tpl.render(data)
+            seller_bio = BytesIO()
+            seller_tpl.save(seller_bio)
+            seller_bio.seek(0)
+            documents.append(("Seller_Disclosure.docx", seller_bio))
+        except Exception as e:
+            print(f"Error generating Seller Disclosure: {e}")
+
+        # Create a ZIP file in memory
+        zip_io = BytesIO()
+        with zipfile.ZipFile(zip_io, 'w') as zip_file:
+            for filename, file_bio in documents:
+                zip_file.writestr(filename, file_bio.getvalue())
+        
+        zip_io.seek(0)
+        
+        return send_file(
+            zip_io,
+            as_attachment=True,
+            download_name=f"complete_closing_kit_{data.get('id', 'demo')}.zip",
+            mimetype="application/zip"
+        )
+        
+    except Exception as e:
+        print(f"Error in generate_full_kit: {e}")
+        return jsonify({"error": str(e)}), 500
