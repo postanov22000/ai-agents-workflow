@@ -179,6 +179,125 @@
       border: 1px solid rgba(0, 202, 78, 0.3);
       color: #00ca4e;
     }
+    
+    /*------------------------------------------------------------------------------------------*/
+    {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    body {
+      background: linear-gradient(135deg, #1a2f4b, #112240);
+      color: #ffffff;
+      padding: 20px;
+    }
+    .gf-container {
+      width: 100%;
+      max-width: 1000px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    .gamified-form {
+      background: rgba(16, 36, 64, 0.8);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(100, 255, 218, 0.2);
+      border-radius: 16px;
+      padding: 30px;
+      box-shadow: 0 15px 30px rgba(10, 25, 47, 0.5);
+      position: relative;
+      overflow: hidden;
+    }
+    .header-section {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .header-section h2 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      background: linear-gradient(45deg, #64ffda, #8affdf);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 15px rgba(100, 255, 218, 0.3);
+    }
+    .header-section p {
+      color: #8892b0;
+      font-size: 1.1rem;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .form-group { 
+      margin-bottom: 20px; 
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      color: #64ffda;
+      font-weight: 600;
+    }
+    .form-control {
+      width: 100%;
+      padding: 14px 18px;
+      border-radius: 8px;
+      border: none;
+      background: rgba(255,255,255,0.1);
+      color: white;
+      font-size: 1rem;
+      transition: all 0.3s ease;
+    }
+    .form-control:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(100,255,218,0.3);
+      background: rgba(255,255,255,0.15);
+    }
+    .grid-2 { 
+      display: grid; 
+      grid-template-columns: 1fr 1fr; 
+      gap: 20px; 
+    }
+    .grid-3 { 
+      display: grid; 
+      grid-template-columns: 1fr 1fr 1fr; 
+      gap: 20px; 
+    }
+    .cta-button {
+      padding: 14px 30px;
+      border-radius: 50px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1rem;
+      border: none;
+      transition: all 0.3s ease;
+      background: linear-gradient(135deg, #64ffda 0%, #52d1b8 100%);
+      color: #0a192f;
+      box-shadow: 0 4px 15px rgba(100,255,218,0.3);
+      margin-top: 20px;
+    }
+    .cta-button:hover {
+      background: linear-gradient(135deg, #73ffe1 0%, #61e8cf 100%);
+      transform: translateY(-3px);
+      box-shadow: 0 8px 25px rgba(100,255,218,0.4);
+    }
+    .form-section {
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid rgba(100,255,218,0.2);
+    }
+    .form-section h3 {
+      color: #64ffda;
+      margin-bottom: 15px;
+      font-size: 1.5rem;
+    }
+    @media (max-width: 768px) {
+      .grid-2, .grid-3 { 
+        grid-template-columns: 1fr; 
+        gap: 15px; 
+      }
+    }
+    /*---------------------------------------------------------------------------------------------------------------*/
   </style>
 </head>
 <body>
@@ -303,6 +422,316 @@
     </div>
   </section>
 
+  <!--------------------------------------------------------------------------------------------------------------------------------------------------------------------------->
+  <section>
+<div class="gf-container">
+    <div class="gamified-form">
+      <div class="header-section">
+        <h2>Generate Complete Closing Kit</h2>
+        <p>Fill out the form below to generate all transaction documents</p>
+      </div>
+
+      <form id="demo-transaction-form">
+        <!-- Mission 1: Property Quest -->
+        <div class="form-section">
+          <h3>🏠 Property Information</h3>
+          <div class="form-group">
+            <label for="property_address">📍 Address of Adventure</label>
+            <input type="text" id="property_address" name="property_address" class="form-control" placeholder="e.g. 123 Elm St" required>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="city">🏙 City</label>
+              <input type="text" id="city" name="city" class="form-control" placeholder="e.g. Gotham" required>
+            </div>
+            <div class="form-group">
+              <label for="state">🌎 State</label>
+              <input type="text" id="state" name="state" class="form-control" placeholder="e.g. NY" required>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mission 2: Quick Property Details -->
+        <div class="form-section">
+          <h3>🔍 Property Details</h3>
+          <div class="form-group">
+            <label for="name_of_property">🏷️ Name of Property</label>
+            <input type="text" id="name_of_property" name="name_of_property" class="form-control" placeholder="Property nickname">
+          </div>
+          <div class="form-group">
+            <label for="description_of_property">📝 Description</label>
+            <input type="text" id="description_of_property" name="description_of_property" class="form-control" placeholder="One‑liner summary">
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="square_feet">📏 Sq. Feet</label>
+              <input type="number" id="square_feet" name="square_feet" class="form-control" placeholder="e.g. 1500">
+            </div>
+            <div class="form-group">
+              <label for="legal_description">📜 Legal Desc.</label>
+              <input type="text" id="legal_description" name="legal_description" class="form-control" placeholder="Official details">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="premises_description">📋 Premises Description</label>
+            <input type="text" id="premises_description" name="premises_description" class="form-control" placeholder="e.g. 2-bed, 2-bath floor plan">
+          </div>
+        </div>
+
+        <!-- Mission 3: Cast & Crew -->
+        <div class="form-section">
+          <h3>👥 Parties Information</h3>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="buyer_name">🎭 Buyer Name</label>
+              <input type="text" id="buyer_name" name="buyer_name" class="form-control" placeholder="Hero of the story" required>
+            </div>
+            <div class="form-group">
+              <label for="seller_name">🎭 Seller Name</label>
+              <input type="text" id="seller_name" name="seller_name" class="form-control" placeholder="Your counterpart" required>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="buyer_address">🏠 Buyer Address</label>
+              <input type="text" id="buyer_address" name="buyer_address" class="form-control" placeholder="Where they live">
+            </div>
+            <div class="form-group">
+              <label for="seller_address">🏠 Seller Address</label>
+              <input type="text" id="seller_address" name="seller_address" class="form-control" placeholder="Original owner address">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="agency_name">🏢 Agency Name</label>
+            <input type="text" id="agency_name" name="agency_name" class="form-control" placeholder="Your agency">
+          </div>
+        </div>
+
+        <!-- Mission 4: Deal Dynamics -->
+        <div class="form-section">
+          <h3>💰 Financial Information</h3>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="purchase_price">💸 Offer Price</label>
+              <input type="number" id="purchase_price" name="purchase_price" step="0.01" class="form-control" placeholder="e.g. 250000" required>
+            </div>
+            <div class="form-group">
+              <label for="deposit_amount">💰 Deposit</label>
+              <input type="number" id="deposit_amount" name="deposit_amount" step="0.01" class="form-control" placeholder="e.g. 5000" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="earnest_money_held_by">🏦 Earnest Money Held By</label>
+            <input type="text" id="earnest_money_held_by" name="earnest_money_held_by" class="form-control" placeholder="e.g. Escrow Company">
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="commission_amount">💵 Commission Amount</label>
+              <input type="number" id="commission_amount" name="commission_amount" step="0.01" class="form-control" placeholder="e.g. 15000">
+            </div>
+            <div class="form-group">
+              <label for="brokerage_fee">💳 Brokerage Fee</label>
+              <input type="number" id="brokerage_fee" name="brokerage_fee" step="0.01" class="form-control" placeholder="e.g. 500">
+            </div>
+          </div>
+        </div>
+
+        <!-- Mission 5: Timeline -->
+        <div class="form-section">
+          <h3>🗓️ Timeline</h3>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="agreement_date">📆 Agreement Date</label>
+              <input type="date" id="agreement_date" name="agreement_date" class="form-control">
+            </div>
+            <div class="form-group">
+              <label for="closing_date">📅 Closing Date</label>
+              <input type="date" id="closing_date" name="closing_date" class="form-control">
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="possession_date">🚪 Possession Date</label>
+              <input type="date" id="possession_date" name="possession_date" class="form-control">
+            </div>
+            <div class="form-group">
+              <label for="occupy_property_date">🏠 Occupancy Date</label>
+              <input type="date" id="occupy_property_date" name="occupy_property_date" class="form-control">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="inspection_days">🔍 Inspection Days</label>
+            <input type="number" id="inspection_days" name="inspection_days" class="form-control" placeholder="e.g. 10">
+          </div>
+        </div>
+
+        <!-- Mission 6: Financing -->
+        <div class="form-section">
+          <h3>🏦 Financing</h3>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="mortgage_amount">💼 Mortgage Amt.</label>
+              <input type="number" id="mortgage_amount" name="mortgage_amount" class="form-control" placeholder="Loan amount">
+            </div>
+            <div class="form-group">
+              <label for="mortgage_years">📆 Term (years)</label>
+              <input type="number" id="mortgage_years" name="mortgage_years" class="form-control" placeholder="e.g. 30">
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="interest_rate">📊 Interest %</label>
+              <input type="number" step="0.01" id="interest_rate" name="interest_rate" class="form-control" placeholder="e.g. 3.5">
+            </div>
+            <div class="form-group">
+              <label for="security_deposit">🔒 Security Deposit</label>
+              <input type="number" step="0.01" id="security_deposit" name="security_deposit" class="form-control" placeholder="e.g. 2500">
+            </div>
+          </div>
+        </div>
+
+        <!-- Mission 7: Extras & Details -->
+        <div class="form-section">
+          <h3>⭐ Additional Details</h3>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="county">📋 County</label>
+              <input type="text" id="county" name="county" class="form-control" placeholder="e.g. King">
+            </div>
+            <div class="form-group">
+              <label for="location">📍 Location Note</label>
+              <input type="text" id="location" name="location" class="form-control" placeholder="Neighborhood details">
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="structure_age">🏢 Structure Age</label>
+              <input type="text" id="structure_age" name="structure_age" class="form-control" placeholder="e.g. Built 1990">
+            </div>
+            <div class="form-group">
+              <label for="transaction_type">📄 Transaction Type</label>
+              <select id="transaction_type" name="transaction_type" class="form-control">
+                <option value="Purchase">Purchase</option>
+                <option value="Lease">Lease</option>
+                <option value="Commercial">Commercial</option>
+                <option value="Residential">Residential</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="additional_explanations">🗒️ Additional Explanations</label>
+            <textarea id="additional_explanations" name="additional_explanations" class="form-control" placeholder="Any extra context…"></textarea>
+          </div>
+        </div>
+
+        <!-- Mission 8: Rent/Lease Terms -->
+        <div class="form-section">
+          <h3>🏘️ Rent/Lease Terms</h3>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="rent_type">🧾 Rent Type</label>
+              <select id="rent_type" name="rent_type" class="form-control">
+                <option value="">Select rent type</option>
+                <option value="Month-to-month">Month-to-month</option>
+                <option value="Annual Lease">Annual Lease</option>
+                <option value="Short-term">Short-term</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="agreed_rent">💳 Agreed Rent</label>
+              <input type="number" id="agreed_rent" name="agreed_rent" class="form-control" placeholder="Amount">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="maintenance_terms">🛠️ Maintenance Terms</label>
+            <input type="text" id="maintenance_terms" name="maintenance_terms" class="form-control" placeholder="Who handles repairs?">
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="parking_spaces">🚗 Parking Spaces</label>
+              <input type="number" id="parking_spaces" name="parking_spaces" class="form-control" placeholder="Number of spaces">
+            </div>
+            <div class="form-group">
+              <label for="parking_fee">💰 Parking Fee</label>
+              <input type="number" id="parking_fee" name="parking_fee" step="0.01" class="form-control" placeholder="Monthly fee">
+            </div>
+          </div>
+        </div>
+
+        <!-- Mission 9: Contacts -->
+        <div class="form-section">
+          <h3>📞 Contact Information</h3>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="landlord_phone">📱 Landlord Phone</label>
+              <input type="tel" id="landlord_phone" name="landlord_phone" class="form-control" placeholder="(123) 456-7890">
+            </div>
+            <div class="form-group">
+              <label for="tenant_phone">📱 Tenant Phone</label>
+              <input type="tel" id="tenant_phone" name="tenant_phone" class="form-control" placeholder="(098) 765-4321">
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="landlord_email">📧 Landlord Email</label>
+              <input type="email" id="landlord_email" name="landlord_email" class="form-control" placeholder="email@example.com">
+            </div>
+            <div class="form-group">
+              <label for="tenant_email">📧 Tenant Email</label>
+              <input type="email" id="tenant_email" name="tenant_email" class="form-control" placeholder="email@example.com">
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="broker_name">🤵 Broker Name</label>
+              <input type="text" id="broker_name" name="broker_name" class="form-control" placeholder="Broker's name">
+            </div>
+            <div class="form-group">
+              <label for="broker_payday">💰 Broker Payday</label>
+              <input type="date" id="broker_payday" name="broker_payday" class="form-control">
+            </div>
+          </div>
+        </div>
+
+        <!-- Mission 10: Final Sign & Go -->
+        <div class="form-section">
+          <h3>✍️ Signatures</h3>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="buyer_signature">🖋 Buyer Signature</label>
+              <input type="text" id="buyer_signature" name="buyer_signature" class="form-control" placeholder="Type full name" required>
+            </div>
+            <div class="form-group">
+              <label for="seller_signature">🖋 Seller Signature</label>
+              <input type="text" id="seller_signature" name="seller_signature" class="form-control" placeholder="Type full name" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="time">⏱ Timestamp</label>
+            <input type="time" id="time" name="time" class="form-control">
+          </div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" name="terms_agreed" required>
+              I agree to the terms and conditions
+            </label>
+          </div>
+        </div>
+
+        <button type="submit" class="cta-button" id="generate-full-kit">
+          <i class="fas fa-file-archive"></i> Generate Complete Closing Kit
+        </button>
+      </form>
+    </div>
+  </div>
+
+    
+  </section>
+<!-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------->
+
+
+  
   <!-- Document Generation Section -->
   <section class="generator-section" id="documents">
     <div class="generator-container">
@@ -878,7 +1307,72 @@
       }
     });
   };
+//-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+document.getElementById('demo-transaction-form').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const button = document.getElementById('generate-full-kit');
+      const originalText = button.innerHTML;
+      
+      // Collect form data
+      const formData = new FormData(this);
+      const data = Object.fromEntries(formData.entries());
+      
+      // Add a unique ID
+      data.id = 'demo_' + Date.now();
+      
+      button.disabled = true;
+      button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+      
+      try {
+        const response = await fetch('/api/generate-full-kit', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `complete_closing_kit_${data.id}.zip`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(url);
+        } else {
+          const error = await response.text();
+          alert('Error generating documents: ' + error);
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        alert('An error occurred while generating the documents.');
+      } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+      }
+    });
 
+    // Set default dates
+    document.addEventListener('DOMContentLoaded', function() {
+      const today = new Date();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      // Format dates for input fields
+      const formatDate = (date) => date.toISOString().split('T')[0];
+      const formatTime = (date) => date.toTimeString().substring(0, 5);
+      
+      // Set default values
+      document.getElementById('agreement_date').value = formatDate(today);
+      document.getElementById('closing_date').value = formatDate(tomorrow);
+      document.getElementById('time').value = formatTime(today);
+    });
+    
+//----------------------------------------------------------------------------------------------------------------------------------------------------------------------------    
   // Start the application initialization
   initializeApp();
   </script>
