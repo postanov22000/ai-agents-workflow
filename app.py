@@ -1786,7 +1786,117 @@ def process_follow_ups():
         return jsonify({"error": str(e)}), 500
 
 
+#----------------------------------------------------------------------------------------------------------------------------------------
+# Add to app.py
 
+@app.route("/api/generate-complete-kit", methods=["POST"])
+def generate_complete_kit():
+    """Generate a complete closing kit with all document types"""
+    data = request.get_json()
+    ip = request.remote_addr
+    
+    # Check rate limits
+    if (ip not in demo_rate_limits or 
+        'closing_kits' not in demo_rate_limits[ip] or 
+        demo_rate_limits[ip]['closing_kits'] <= 0):
+        
+        return jsonify({"error": "Closing kit limit exceeded"}), 429
+    
+    try:
+        # Decrement the limit
+        demo_rate_limits[ip]['closing_kits'] -= 1
+        
+        # Generate all document types
+        docs = []
+        templates = [
+            ("loi_template.docx", "LOI"),
+            ("psa_template.docx", "PSA"),
+            ("purchase_offer_template.docx", "PURCHASE_OFFER"),
+            ("agency_disclosure_template.docx", "AGENCY_DISCLOSURE"),
+            ("real_estate_purchase_template.docx", "REAL_ESTATE_PURCHASE"),
+            ("lease_template.docx", "LEASE"),
+            ("seller_disclosure_template.docx", "SELLER_DISCLOSURE"),
+        ]
+        
+        # Create temporary directory for documents
+        import tempfile
+        import uuid
+        tmpdir = tempfile.mkdtemp()
+        
+        for template_name, prefix in templates:
+            try:
+                tpl = DocxTemplate(f"templates/transaction_autopilot/{template_name}")
+                
+                # Map form data to template variables
+                template_data = map_form_data_to_template(data, prefix.lower())
+                tpl.render(template_data)
+                
+                out_name = f"{prefix}_{data.get('id', 'demo')}_{uuid.uuid4().hex[:6]}.docx"
+                out_path = os.path.join(tmpdir, out_name)
+                tpl.save(out_path)
+                docs.append(out_path)
+            except Exception as e:
+                app.logger.error(f"Error generating {template_name}: {str(e)}")
+                continue
+        
+        # Bundle into ZIP
+        zip_io = BytesIO()
+        with zipfile.ZipFile(zip_io, "w") as zf:
+            for doc_path in docs:
+                zf.write(doc_path, arcname=os.path.basename(doc_path))
+        
+        zip_io.seek(0)
+        
+        # Clean up temporary files
+        for doc_path in docs:
+            try:
+                os.remove(doc_path)
+            except:
+                pass
+                
+        try:
+            os.rmdir(tmpdir)
+        except:
+            pass
+        
+        # Return the ZIP file
+        return send_file(
+            zip_io,
+            as_attachment=True,
+            download_name=f"complete_closing_kit_{data.get('id', 'demo')}.zip",
+            mimetype="application/zip"
+        )
+        
+    except Exception as e:
+        app.logger.error(f"Error generating closing kit: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+def map_form_data_to_template(form_data, doc_type):
+    """Map form data to appropriate template variables based on document type"""
+    mapped_data = form_data.copy()
+    
+    # Add common mappings
+    mapped_data['transaction_id'] = form_data.get('id', '')
+    mapped_data['current_date'] = datetime.now().strftime('%B %d, %Y')
+    
+    # Document-specific mappings
+    if doc_type == 'loi':
+        mapped_data['letter_date'] = datetime.now().strftime('%B %d, %Y')
+        mapped_data['buyer_signature'] = form_data.get('buyer_signature', '')
+        mapped_data['seller_signature'] = form_data.get('seller_signature', '')
+    
+    elif doc_type == 'psa':
+        mapped_data['effective_date'] = form_data.get('agreement_date', '')
+        mapped_data['closing_date'] = form_data.get('closing_date', '')
+        mapped_data['purchase_price'] = f"${float(form_data.get('purchase_price', 0)):,.2f}"
+    
+    elif doc_type == 'lease':
+        mapped_data['lease_term'] = form_data.get('rent_type', '')
+        mapped_data['monthly_rent'] = f"${float(form_data.get('agreed_rent', 0)):,.2f}"
+        mapped_data['security_deposit'] = f"${float(form_data.get('deposit_amount', 0)):,.2f}"
+    
+    return mapped_data
+#-----------------------------------------------------------------------------------------------------------------------------------------
   
 # ── Final entry point ──
 if __name__ == "__main__":
