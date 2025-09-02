@@ -824,7 +824,7 @@
       formMessage.style.display = 'none';
       
       try {
-        // Create user with Supabase
+        // Create user with Supabase - FIXED
         const { data, error } = await window.supabase.auth.signUp({
           email,
           password,
@@ -833,14 +833,14 @@
               full_name: name,
               phone,
               user_type: 'real_estate_agent'
-            },
-              const userId = data.user.id;
-
-            window.location.href = '/signin?user_id=' + userId;
+            }
           }
         });
         
         if (error) throw error;
+        
+        // If signup was successful, we can get the user id from the response
+        const userId = data.user.id;
         
         // Show success message
         formMessage.textContent = 'Account created successfully! Please check your email to verify your account.';
@@ -860,6 +860,9 @@
         document.getElementById('ai-counter').textContent = '3';
         document.getElementById('loi-counter').textContent = '3';
         document.getElementById('psa-counter').textContent = '3';
+        
+        // Redirect after successful signup (optional)
+         window.location.href = '/signin?user_id=' + userId;
         
       } catch (error) {
         console.error('Signup error:', error);
