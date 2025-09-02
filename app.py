@@ -636,7 +636,7 @@ def dashboard_home():
     # (Same logic as /dashboard for HTMX partial)
     profile_resp = (
         supabase.table("profiles")
-                .select("full_name, ai_enabled, email, generate_leases")
+                .select("display_name, ai_enabled, email, generate_leases")
                 .eq("id", user_id)
                 .single()
                 .execute()
@@ -645,7 +645,7 @@ def dashboard_home():
         return "Profile query error", 500
 
     profile         = profile_resp.data
-    full_name       = profile.get("full_name", "")
+    full_name       = profile.get("display_name", "")
     ai_enabled      = profile.get("ai_enabled", True)
     generate_leases = profile.get("generate_leases", False)
 
