@@ -1243,7 +1243,7 @@ def trigger_process():
     all_processed, sent, drafted, failed = [], [], [], []
 
     # ── 2) Generate Response ──
-   if gen:
+    if gen:
         # Check rate limit before making AI calls
         ip = request.remote_addr
         now = datetime.now()
