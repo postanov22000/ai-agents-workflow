@@ -37,14 +37,14 @@ CORS(app, resources={r"/connect-smtp": {"origins": "https://replyzeai.vercel.app
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
 
 # Rate limiting storage
+# Rate limiting storage - fix structure and initialization
 demo_rate_limits = defaultdict(lambda: {
-    'emails': 20,          # 20 emails per day
-    'kits': 20,            # 20 kits per month
-    'leads': 25,           # 25 leads per month
-    'last_reset': datetime.now()
+    'emails': {'remaining': 20, 'last_reset': datetime.now()},
+    'kits': {'remaining': 20, 'last_reset': datetime.now()},
+    'leads': {'remaining': 25, 'last_reset': datetime.now()}
 })
 
-# Rate limit decorator
+# Fixed rate limit decorator
 def check_rate_limit(resource):
     def decorator(f):
         @wraps(f)
@@ -52,18 +52,27 @@ def check_rate_limit(resource):
             ip = request.remote_addr
             now = datetime.now()
             
-            # Reset limits if it's a new day (for emails) or new month (for others)
-            if (now - demo_rate_limits[ip]['last_reset']).days >= 1 and resource == 'emails':
-                demo_rate_limits[ip]['emails'] = 20
-                demo_rate_limits[ip]['last_reset'] = now
-            elif (now - demo_rate_limits[ip]['last_reset']).days >= 30:
-                demo_rate_limits[ip]['kits'] = 20
-                demo_rate_limits[ip]['leads'] = 25
-                demo_rate_limits[ip]['last_reset'] = now
+            # Reset limits based on their specific time periods
+            if resource == 'emails':
+                # Daily reset for emails
+                if (now - demo_rate_limits[ip][resource]['last_reset']).days >= 1:
+                    demo_rate_limits[ip][resource]['remaining'] = 20
+                    demo_rate_limits[ip][resource]['last_reset'] = now
+            else:
+                # Monthly reset for kits and leads
+                if (now - demo_rate_limits[ip][resource]['last_reset']).days >= 30:
+                    if resource == 'kits':
+                        demo_rate_limits[ip][resource]['remaining'] = 20
+                    else:  # leads
+                        demo_rate_limits[ip][resource]['remaining'] = 25
+                    demo_rate_limits[ip][resource]['last_reset'] = now
             
-            if demo_rate_limits[ip][resource] <= 0:
+            # Check if limit is exceeded
+            if demo_rate_limits[ip][resource]['remaining'] <= 0:
                 return jsonify({"error": f"{resource.capitalize()} limit exceeded"}), 429
-                
+            
+            # Decrement the counter and proceed
+            demo_rate_limits[ip][resource]['remaining'] -= 1
             return f(*args, **kwargs)
         return decorated_function
     return decorator
@@ -1940,21 +1949,27 @@ def rate_limit_status():
     ip = request.remote_addr
     now = datetime.now()
     
-    # Reset limits if needed
-    if (now - demo_rate_limits[ip]['last_reset']).days >= 1:
-        demo_rate_limits[ip]['emails'] = 20
-        demo_rate_limits[ip]['last_reset'] = now
-    
-    if (now - demo_rate_limits[ip]['last_reset']).days >= 30:
-        demo_rate_limits[ip]['kits'] = 20
-        demo_rate_limits[ip]['leads'] = 25
-        demo_rate_limits[ip]['last_reset'] = now
+    # Check and reset limits if needed (same logic as decorator)
+    for resource in ['emails', 'kits', 'leads']:
+        if resource == 'emails':
+            if (now - demo_rate_limits[ip][resource]['last_reset']).days >= 1:
+                demo_rate_limits[ip][resource]['remaining'] = 20
+                demo_rate_limits[ip][resource]['last_reset'] = now
+        else:
+            if (now - demo_rate_limits[ip][resource]['last_reset']).days >= 30:
+                if resource == 'kits':
+                    demo_rate_limits[ip][resource]['remaining'] = 20
+                else:
+                    demo_rate_limits[ip][resource]['remaining'] = 25
+                demo_rate_limits[ip][resource]['last_reset'] = now
     
     return jsonify({
-        'emails_remaining': demo_rate_limits[ip]['emails'],
-        'kits_remaining': demo_rate_limits[ip]['kits'],
-        'leads_remaining': demo_rate_limits[ip]['leads'],
-        'reset_date': (demo_rate_limits[ip]['last_reset'] + timedelta(days=30)).strftime('%Y-%m-%d')
+        'emails_remaining': demo_rate_limits[ip]['emails']['remaining'],
+        'kits_remaining': demo_rate_limits[ip]['kits']['remaining'],
+        'leads_remaining': demo_rate_limits[ip]['leads']['remaining'],
+        'emails_reset': (demo_rate_limits[ip]['emails']['last_reset'] + timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S'),
+        'kits_reset': (demo_rate_limits[ip]['kits']['last_reset'] + timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S'),
+        'leads_reset': (demo_rate_limits[ip]['leads']['last_reset'] + timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S')
     })
 #-----------------------------------------------------------------------------------------------------------------------------------------
   
