@@ -1455,56 +1455,152 @@
     });
   };
 //-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
-document.getElementById('demo-transaction-form').addEventListener('submit', async function(e) {
-      e.preventDefault();
-      
-      const button = document.getElementById('generate-full-kit');
-      const originalText = button.innerHTML;
-      
-      // Collect form data
-      const formData = new FormData(this);
-      const data = Object.fromEntries(formData.entries());
-      
-      // Add a unique ID
-      data.id = 'demo_' + Date.now();
-      
-      button.disabled = true;
-      button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
-      
-      try {
-        const response = await fetch('/api/generate-full-kit', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(data)
-        });
-        
-        if (response.ok) {
-          const blob = await response.blob();
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `complete_closing_kit_${data.id}.zip`;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          window.URL.revokeObjectURL(url);
-        } else {
-          const error = await response.text();
-          alert('Error generating documents: ' + error);
-        }
-      } catch (error) {
-        console.error('Error:', error);
-        alert('An error occurred while generating the documents.');
-      } finally {
-        button.disabled = false;
-        button.innerHTML = originalText;
-      }
-    });
+ // Initialize the gamified form
+    window.initGamifiedForm = function(){
+      const missionCards = document.querySelectorAll('.mission-card');
+      const btnPrev       = document.getElementById('btn-prev');
+      const btnNext       = document.getElementById('btn-next');
+      const progressFill  = document.getElementById('progress-fill');
+      const progressText  = document.getElementById('progress-text');
+      const achievement   = document.getElementById('achievement-badge');
+      const confettiWrap  = document.getElementById('confetti-container');
+      let currentMission  = 0,
+          totalMissions   = missionCards.length;
 
-    // Set default dates
+      function updateProgress(){
+        const pct = ((currentMission+1)/totalMissions)*100;
+        progressFill.style.width = pct+'%';
+        progressText.textContent  = `${currentMission+1}/${totalMissions}`;
+      }
+      
+      function updateButtons(){
+        btnPrev.style.visibility = currentMission===0 ? 'hidden':'visible';
+        if(currentMission===totalMissions-1){
+          btnNext.textContent = '🚀 Generate Kit!';
+          btnNext.classList.replace('btn-next','btn-submit');
+        } else {
+          btnNext.innerHTML = 'Next Mission <i class="fas fa-arrow-right"></i>';
+          btnNext.classList.replace('btn-submit','btn-next');
+        }
+      }
+      
+      function showBadge(msg='Mission Complete! 🎉'){
+        achievement.textContent = msg;
+        achievement.classList.add('show');
+        createConfetti();
+      }
+      
+      function hideBadge(){ achievement.classList.remove('show'); }
+      
+      function createConfetti(){
+        confettiWrap.innerHTML = '';
+        for(let i=0;i<80;i++){
+          const c=document.createElement('div');
+          c.classList.add('confetti');
+          const x= Math.random()*100+'%', y= Math.random()*100+'%';
+          const size=(Math.random()*6+4)+'px';
+          const colors=['#64ffda','#f72585','#ff9e00','#4361ee','#7209b7'];
+          const clr=colors[Math.floor(Math.random()*colors.length)];
+          const rot=Math.random()*360+'deg';
+          c.style.cssText=`
+            left:${x}; top:${y};
+            width:${size}; height:${size};
+            background-color:${clr};
+            transform:rotate(${rot});
+            animation:confettiFall ${Math.random()*2+1}s forwards;
+          `;
+          if(Math.random()<0.5) c.style.borderRadius='50%';
+          else if(Math.random()<0.5) c.style.clipPath='polygon(50% 0,0 100%,100% 100%)';
+          confettiWrap.appendChild(c);
+        }
+      }
+      
+      function validateMission(){
+        const inputs = missionCards[currentMission]
+          .querySelectorAll('input[required],select[required],input[type="checkbox"][required]');
+        for(let el of inputs){
+          if(el.type==='checkbox' ? !el.checked : !el.value.trim()){
+            el.focus();
+            return false;
+          }
+        }
+        return true;
+      }
+
+      // wire buttons
+      btnNext.onclick = ()=>{
+        if(currentMission < totalMissions-1){
+          if(!validateMission()) return alert('Please complete all required fields.');
+          showBadge();
+          setTimeout(()=>{
+            hideBadge();
+            missionCards[currentMission].classList.remove('active');
+            currentMission++;
+            missionCards[currentMission].classList.add('active');
+            updateProgress(); updateButtons();
+            window.scrollTo({top:0,behavior:'smooth'});
+          },1000);
+        } else {
+          if (!validateMission()) return alert('Please complete all required fields.');
+          showBadge('Generating Your Kit! 🚀');
+          
+          // Collect form data and send via AJAX
+          const formData = new FormData(document.getElementById('demo-transaction-form'));
+          const data = Object.fromEntries(formData.entries());
+          
+          // Add a unique ID
+          data.id = 'demo_' + Date.now();
+          
+          setTimeout(() => {
+            fetch('/api/generate-full-kit', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(data)
+            })
+            .then(response => {
+              if (response.ok) {
+                return response.blob();
+              }
+              throw new Error('Network response was not ok.');
+            })
+            .then(blob => {
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `complete_closing_kit_${data.id}.zip`;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              window.URL.revokeObjectURL(url);
+            })
+            .catch(error => {
+              console.error('Error:', error);
+              alert('An error occurred while generating the documents.');
+            });
+          }, 1200);
+        }
+      };
+      
+      btnPrev.onclick = ()=>{
+        if(currentMission>0){
+          missionCards[currentMission].classList.remove('active');
+          currentMission--;
+          missionCards[currentMission].classList.add('active');
+          updateProgress(); updateButtons();
+          window.scrollTo({top:0,behavior:'smooth'});
+        }
+      };
+
+      // init state
+      updateProgress();
+      updateButtons();
+    };
+
+    // run on initial load
     document.addEventListener('DOMContentLoaded', function() {
+      // Set default dates
       const today = new Date();
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
@@ -1517,8 +1613,10 @@ document.getElementById('demo-transaction-form').addEventListener('submit', asyn
       document.getElementById('agreement_date').value = formatDate(today);
       document.getElementById('closing_date').value = formatDate(tomorrow);
       document.getElementById('time').value = formatTime(today);
+      
+      // Initialize the gamified form
+      initGamifiedForm();
     });
-    
 //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------    
   // Start the application initialization
   initializeApp();
