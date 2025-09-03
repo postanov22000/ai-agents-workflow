@@ -7,10 +7,18 @@ from docxtpl import DocxTemplate
 import docx2txt
 import pytesseract
 from pdf2image import convert_from_path
+from datetime import datetime, timedelta
+from collections import defaultdict
 
 # Initialize logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+# Rate limiting storage
+demo_rate_limits = defaultdict(lambda: {
+    'kits': 20,  # 20 kits per month
+    'last_reset': datetime.now()
+})
 
 # Supabase client setup
 def get_supabase_client():
@@ -37,6 +45,22 @@ def trigger_all_autopilots():
     processed = []
     for txn in transactions:
         try:
+            # Check rate limit
+            ip = request.remote_addr
+            now = datetime.now()
+            
+            # Reset limits if it's a new month
+            if (now - demo_rate_limits[ip]['last_reset']).days >= 30:
+                demo_rate_limits[ip]['kits'] = 20
+                demo_rate_limits[ip]['last_reset'] = now
+            
+            if demo_rate_limits[ip]['kits'] <= 0:
+                logger.warning(f"Kit generation limit reached for IP {ip}")
+                continue
+                
+            # Decrement kit count
+            demo_rate_limits[ip]['kits'] -= 1
+            
             response = trigger_autopilot_from_payload({
                 "transaction_type": txn.get("transaction_type", "generic"),
                 "data": txn
