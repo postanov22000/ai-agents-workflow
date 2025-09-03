@@ -979,47 +979,6 @@
 <!-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------->
 
 
-  
-  <!-- Document Generation Section -->
-  <section class="generator-section" id="documents">
-    <div class="generator-container">
-      <div class="generator-card" data-scroll>
-        <div class="document-type">
-          <div class="document-icon"><i class="fas fa-file-contract"></i></div>
-          <h2 class="document-title">Document Generation</h2>
-        </div>
-        <p class="document-description">Generate professional real estate documents in seconds. Perfect for solo agents who need to create LOIs and PSAs quickly.</p>
-        
-        <div class="trial-counter"><i class="fas fa-gift"></i> Free LOIs remaining: <span class="counter-number" id="loi-counter">3</span></div>
-        <div class="trial-counter"><i class="fas fa-gift"></i> Free PSAs remaining: <span class="counter-number" id="psa-counter">3</span></div>
-        
-        <div class="form-group">
-          <label for="property-address">Property Address</label>
-          <input type="text" id="property-address" placeholder="123 Main St, Anytown, USA">
-        </div>
-        
-        <div class="form-group">
-          <label for="client-name">Client Name</label>
-          <input type="text" id="client-name" placeholder="John and Jane Smith">
-        </div>
-        
-        <div class="form-group">
-          <label for="offer-price">Offer Price</label>
-          <input type="text" id="offer-price" placeholder="$450,000">
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-          <button class="cta-button doc-btn" data-type="loi">
-            <i class="fas fa-file-alt"></i> Generate LOI
-          </button>
-          <button class="cta-button doc-btn" data-type="psa">
-            <i class="fas fa-file-signature"></i> Generate PSA
-          </button>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- Testimonials -->
   <section class="testimonials" id="testimonials">
     <h2 data-scroll>What Real Estate Agents Say</h2>
@@ -1351,64 +1310,7 @@
       }
     });
 
-    // Document Generation (LOI & PSA)
-    document.querySelectorAll('.doc-btn').forEach(btn =>
-      btn.addEventListener('click', async function() {
-        const type = this.getAttribute('data-type'),
-              cnt  = type === 'loi' ? loiCount : psaCount;
 
-        if (cnt <= 0) {
-          alert('Free trials exhausted. Please sign up for unlimited access.');
-          return document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
-        }
-
-        // decrement
-        if (type === 'loi') loiCount--; else psaCount--;
-        updateTrialsCookie();
-        document.getElementById(type + '-counter').textContent = (type === 'loi' ? loiCount : psaCount);
-
-        const b = this, orig = b.innerHTML;
-        b.disabled = true;
-        b.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
-
-        // collect payload
-        const payload = {};
-        b.closest('.generator-card')
-         .querySelectorAll('input,textarea,select')
-         .forEach(i => i.id && (payload[i.id] = i.value));
-
-        try {
-          const res = await fetch(`https://replyzeai.onrender.com/api/generate-${type}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          if (!res.ok) throw new Error(`Server returned ${res.status}`);
-          const blob = await res.blob();
-          const url  = URL.createObjectURL(blob);
-          const a    = document.createElement('a');
-          a.href     = url;
-          a.download = `${type.toUpperCase()}-Document.docx`;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          URL.revokeObjectURL(url);
-        } catch (err) {
-          console.error('Error generating document:', err);
-          alert('Error generating document. Please try again.');
-        } finally {
-          b.disabled = false;
-          b.innerHTML = orig;
-        }
-
-        if ((type === 'loi' && loiCount === 0) || (type === 'psa' && psaCount === 0)) {
-          setTimeout(() => {
-            alert('Free trials exhausted. Sign up for unlimited access.');
-            document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
-          }, 1000);
-        }
-      })
-    );
 
     // Password visibility toggle
     document.querySelectorAll('.toggle-password').forEach(toggle => {
