@@ -1180,7 +1180,7 @@ def debug_env():
 from datetime import datetime
 
 @app.route("/process", methods=["GET"])
-@check_rate_limit('emails')
+#@check_rate_limit('emails')
 def trigger_process():
     token = request.args.get("token")
     if token != os.environ.get("PROCESS_SECRET_TOKEN"):
@@ -1243,14 +1243,35 @@ def trigger_process():
     all_processed, sent, drafted, failed = [], [], [], []
 
     # ── 2) Generate Response ──
-    if gen:
-        ids = [r["id"] for r in gen]
-        if call_edge("/functions/v1/clever-service/generate-response", {"email_ids": ids}):
-            all_processed.extend(ids)
-        else:
+   if gen:
+        # Check rate limit before making AI calls
+        ip = request.remote_addr
+        now = datetime.now()
+        
+        # Reset email limit if it's a new day
+        if (now - demo_rate_limits[ip]['emails']['last_reset']).days >= 1:
+            demo_rate_limits[ip]['emails']['remaining'] = 20
+            demo_rate_limits[ip]['emails']['last_reset'] = now
+        
+        # Check if we have remaining emails
+        if demo_rate_limits[ip]['emails']['remaining'] <= 0:
+            app.logger.warning(f"Rate limit exceeded for IP {ip}, skipping AI calls")
+            # Mark emails as error due to rate limiting
+            ids = [r["id"] for r in gen]
             supabase.table("emails")\
-                    .update({"status":"error","error_message":"generate-response failed"})\
+                    .update({"status":"error","error_message":"Rate limit exceeded"})\
                     .in_("id", ids).execute()
+        else:
+            # Decrement the counter and proceed with AI calls
+            demo_rate_limits[ip]['emails']['remaining'] -= 1
+            ids = [r["id"] for r in gen]
+            if call_edge("/functions/v1/clever-service/generate-response", {"email_ids": ids}):
+                all_processed.extend(ids)
+            else:
+                supabase.table("emails")\
+                        .update({"status":"error","error_message":"generate-response failed"})\
+                        .in_("id", ids).execute()
+
 
     # ── 3) Personalize Template ──
     if per:
@@ -1290,6 +1311,15 @@ def trigger_process():
         to_addr   = rec["sender_email"]
         subject   = rec.get("subject", "Your Email")  # Get the original subject or default
 
+        # 20-email/day limit
+        if emails_sent_today.get(uid, 0) >= 20:
+            app.logger.info(f"User {uid} reached daily limit, marking {em_id} error")
+            supabase.table("emails").update({
+                "status": "error",
+                "error_message": "Daily email limit reached"
+            }).eq("id", em_id).execute()
+            failed.append(em_id)
+            continue 
 
         # load personalization flags & build HTML
         lease_flag = supabase.table("profiles") \
