@@ -2,48 +2,72 @@ import os
 import time
 import base64
 import requests
-
 import smtplib
 import imaplib
 import ssl
-
 from flask import abort, Flask, render_template, request, redirect, jsonify, make_response, url_for
 from datetime import date, datetime, timezone, timedelta
 from email.mime.text import MIMEText
-
 from supabase import create_client, Client
-
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request as GoogleRequest
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 import google.auth.transport.requests as grequests
-
-  # saves & encrypts creds to Supabase
 from fimap import send_email_smtp, fetch_emails_imap
-
 from flask_cors import CORS  
-
 from cryptography.fernet import Fernet
-
-# bring in your Blueprints
 from transaction_autopilot import bp as autopilot_bp
 from public import public_bp
-
-
-
-# Add these imports at the top
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
-
-
+import re
+import dns.resolver
+import csv
+from io import TextIOWrapper
+from openpyxl import load_workbook
+from collections import defaultdict
+from functools import wraps
 
 # ── single Flask app & blueprint registration ──
 app = Flask(__name__, template_folder="templates")
-CORS(app, resources={r"/connect-smtp": {"origins": "https://replyzeai.vercel.app"}})  # ← add this
+CORS(app, resources={r"/connect-smtp": {"origins": "https://replyzeai.vercel.app"}})
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
+
+# Rate limiting storage
+demo_rate_limits = defaultdict(lambda: {
+    'emails': 20,          # 20 emails per day
+    'kits': 20,            # 20 kits per month
+    'leads': 25,           # 25 leads per month
+    'last_reset': datetime.now()
+})
+
+# Rate limit decorator
+def check_rate_limit(resource):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            ip = request.remote_addr
+            now = datetime.now()
+            
+            # Reset limits if it's a new day (for emails) or new month (for others)
+            if (now - demo_rate_limits[ip]['last_reset']).days >= 1 and resource == 'emails':
+                demo_rate_limits[ip]['emails'] = 20
+                demo_rate_limits[ip]['last_reset'] = now
+            elif (now - demo_rate_limits[ip]['last_reset']).days >= 30:
+                demo_rate_limits[ip]['kits'] = 20
+                demo_rate_limits[ip]['leads'] = 25
+                demo_rate_limits[ip]['last_reset'] = now
+            
+            if demo_rate_limits[ip][resource] <= 0:
+                return jsonify({"error": f"{resource.capitalize()} limit exceeded"}), 429
+                
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
 #--------------------------------------------------------------
 @app.route("/signin")
 def signin():
@@ -67,7 +91,6 @@ fernet = Fernet(ENCRYPTION_KEY)
 MAX_RETRIES = 5
 RETRY_BACKOFF_BASE = 2
 
-
 # Define follow-up sequence (days after initial contact)
 FOLLOW_UP_SEQUENCE = [
     {"delay_days": 1, "name": "Day 1 Follow-up"},
@@ -76,7 +99,6 @@ FOLLOW_UP_SEQUENCE = [
     {"delay_days": 14, "name": "Day 14 Follow-up"},
     {"delay_days": 30, "name": "Day 30 Follow-up"},
 ]
-
 
 #----------------------------------------------------------------------------
 def get_smtp_creds(user_id: str):
@@ -705,7 +727,6 @@ def dashboard_home():
     estimated_saved = kits_generated * PER_KIT_SAVE_MINUTES
  
 
-
     return render_template(
         "partials/home.html",
         name=full_name,
@@ -1053,7 +1074,7 @@ def new_lease_submit():
       <p>{data['tenant_name']} ({data['tenant_type'].title()})</p>
 
       <h3>Terms</h3>
-      <p><strong>Type:</strong> {data['lease_type'].replace('-', ' ').title()}<br>
+      <p><strong>Type:</strong> {data['lease_type'].replace('-', '').title()}<br>
       <strong>Term:</strong> {data['lease_term']} months<br>
       <strong>Dates:</strong> {data['start_date']} → {data['end_date']}</p>
 
@@ -1150,10 +1171,16 @@ def debug_env():
 from datetime import datetime
 
 @app.route("/process", methods=["GET"])
+@check_rate_limit('emails')
 def trigger_process():
     token = request.args.get("token")
     if token != os.environ.get("PROCESS_SECRET_TOKEN"):
         return jsonify({"error": "Unauthorized"}), 401
+        
+    # Decrement email count
+    ip = request.remote_addr
+    demo_rate_limits[ip]['emails'] -= 1
+    
 # ── 0) DAILY RESET CHECK ──
     today_str = date.today().isoformat()
     rl_row = SUPABASE_SERVICE.table("rate_limit_reset") \
@@ -1385,7 +1412,12 @@ def mark_ready(txn_id):
     return "", 204
 
 @app.route("/autopilot/batch", methods=["POST"])
+@check_rate_limit('kits')
 def batch_autopilot():
+    # Decrement kit count
+    ip = request.remote_addr
+    demo_rate_limits[ip]['kits'] -= 1
+    
     txns = supabase.table("transactions").select("*").eq("ready_for_kit", True).eq("kit_generated", False).execute().data or []
     results = []
     for t in txns:
@@ -1564,7 +1596,12 @@ from io import TextIOWrapper
 from openpyxl import load_workbook
 
 @app.route("/import_leads", methods=["GET", "POST"])
+@check_rate_limit('leads')
 def import_leads():
+    # Decrement leads count
+    ip = request.remote_addr
+    demo_rate_limits[ip]['leads'] -= 1
+    
     user_id = _require_user()
     if request.method == "GET":
         return render_template("import_leads.html", user_id=user_id)
@@ -1797,14 +1834,14 @@ def generate_complete_kit():
     
     # Check rate limits
     if (ip not in demo_rate_limits or 
-        'closing_kits' not in demo_rate_limits[ip] or 
-        demo_rate_limits[ip]['closing_kits'] <= 0):
+        'kits' not in demo_rate_limits[ip] or 
+        demo_rate_limits[ip]['kits'] <= 0):
         
         return jsonify({"error": "Closing kit limit exceeded"}), 429
     
     try:
         # Decrement the limit
-        demo_rate_limits[ip]['closing_kits'] -= 1
+        demo_rate_limits[ip]['kits'] -= 1
         
         # Generate all document types
         docs = []
@@ -1896,6 +1933,29 @@ def map_form_data_to_template(form_data, doc_type):
         mapped_data['security_deposit'] = f"${float(form_data.get('deposit_amount', 0)):,.2f}"
     
     return mapped_data
+
+# Add a route to check rate limit status
+@app.route("/rate_limit_status")
+def rate_limit_status():
+    ip = request.remote_addr
+    now = datetime.now()
+    
+    # Reset limits if needed
+    if (now - demo_rate_limits[ip]['last_reset']).days >= 1:
+        demo_rate_limits[ip]['emails'] = 20
+        demo_rate_limits[ip]['last_reset'] = now
+    
+    if (now - demo_rate_limits[ip]['last_reset']).days >= 30:
+        demo_rate_limits[ip]['kits'] = 20
+        demo_rate_limits[ip]['leads'] = 25
+        demo_rate_limits[ip]['last_reset'] = now
+    
+    return jsonify({
+        'emails_remaining': demo_rate_limits[ip]['emails'],
+        'kits_remaining': demo_rate_limits[ip]['kits'],
+        'leads_remaining': demo_rate_limits[ip]['leads'],
+        'reset_date': (demo_rate_limits[ip]['last_reset'] + timedelta(days=30)).strftime('%Y-%m-%d')
+    })
 #-----------------------------------------------------------------------------------------------------------------------------------------
   
 # ── Final entry point ──
