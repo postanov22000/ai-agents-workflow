@@ -181,7 +181,8 @@
     }
     
     /*------------------------------------------------------------------------------------------*/
-     * {
+     /* Gamified form CSS */
+    * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
@@ -191,12 +192,18 @@
       background: linear-gradient(135deg, #1a2f4b, #112240);
       color: #ffffff;
       padding: 20px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
     .gf-container {
       width: 100%;
       max-width: 1000px;
       margin: 40px auto;
       padding: 0 20px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
     }
     .gamified-form {
       background: rgba(16, 36, 64, 0.8);
@@ -207,6 +214,9 @@
       box-shadow: 0 15px 30px rgba(10, 25, 47, 0.5);
       position: relative;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
     }
     .header-section {
       text-align: center;
@@ -253,6 +263,7 @@
     .mission-container {
       position: relative;
       min-height: 400px;
+      flex: 1;
     }
     .mission-card {
       background: rgba(10,25,47,0.8);
@@ -268,6 +279,8 @@
       transform: translateY(20px);
       transition: all 0.5s ease;
       pointer-events: none;
+      max-height: calc(100vh - 300px);
+      overflow-y: auto;
     }
     .mission-card.active {
       opacity: 1;
@@ -350,6 +363,13 @@
       display: flex;
       justify-content: space-between;
       margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(100,255,218,0.2);
+      position: sticky;
+      bottom: 0;
+      background: rgba(16, 36, 64, 0.95);
+      z-index: 100;
+      border-radius: 0 0 16px 16px;
     }
     .btn {
       padding: 14px 30px;
@@ -442,6 +462,10 @@
       }
       .mission-card { 
         padding: 20px; 
+      }
+      .btn {
+        padding: 12px 20px;
+        font-size: 0.9rem;
       }
     }
     /*---------------------------------------------------------------------------------------------------------------*/
@@ -1629,7 +1653,8 @@
             currentMission++;
             missionCards[currentMission].classList.add('active');
             updateProgress(); updateButtons();
-            window.scrollTo({top:0,behavior:'smooth'});
+            // Scroll to top of form container instead of page top
+            document.querySelector('.gamified-form').scrollIntoView({behavior: 'smooth', block: 'start'});
           },1000);
         } else {
           if (!validateMission()) return alert('Please complete all required fields.');
@@ -1680,7 +1705,8 @@
           currentMission--;
           missionCards[currentMission].classList.add('active');
           updateProgress(); updateButtons();
-          window.scrollTo({top:0,behavior:'smooth'});
+          // Scroll to top of form container instead of page top
+          document.querySelector('.gamified-form').scrollIntoView({behavior: 'smooth', block: 'start'});
         }
       };
 
