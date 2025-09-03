@@ -1187,8 +1187,8 @@ def trigger_process():
         return jsonify({"error": "Unauthorized"}), 401
         
     # Decrement email count
-    ip = request.remote_addr
-    demo_rate_limits[ip]['emails'] -= 1
+#    ip = request.remote_addr
+ #   demo_rate_limits[ip]['emails'] -= 1
     
 # ── 0) DAILY RESET CHECK ──
     today_str = date.today().isoformat()
@@ -1424,8 +1424,8 @@ def mark_ready(txn_id):
 @check_rate_limit('kits')
 def batch_autopilot():
     # Decrement kit count
-    ip = request.remote_addr
-    demo_rate_limits[ip]['kits'] -= 1
+#    ip = request.remote_addr
+ #   demo_rate_limits[ip]['kits'] -= 1
     
     txns = supabase.table("transactions").select("*").eq("ready_for_kit", True).eq("kit_generated", False).execute().data or []
     results = []
@@ -1608,8 +1608,8 @@ from openpyxl import load_workbook
 @check_rate_limit('leads')
 def import_leads():
     # Decrement leads count
-    ip = request.remote_addr
-    demo_rate_limits[ip]['leads'] -= 1
+#    ip = request.remote_addr
+ #   demo_rate_limits[ip]['leads'] -= 1
     
     user_id = _require_user()
     if request.method == "GET":
