@@ -182,20 +182,6 @@
     
     /*------------------------------------------------------------------------------------------*/
      /* Gamified form CSS */
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
-    body {
-      background: linear-gradient(135deg, #1a2f4b, #112240);
-      color: #ffffff;
-      padding: 20px;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
     .gf-container {
       width: 100%;
       max-width: 1000px;
@@ -614,7 +600,7 @@
       </div>
       <div class="confetti-container" id="confetti-container"></div>
 
-      <form id="demo-transaction-form">
+      <form id="demo-transaction-form" method="POST" action="#">
         <div class="mission-container">
           <!-- Mission 1: Property Quest -->
           <div class="mission-card active" id="mission-1">
@@ -1206,7 +1192,7 @@
   const initializeApp = function() {
     // Supabase Configuration
     const supabaseUrl = 'https://skxzfkudduqrubtgtodp.supabase.co';
-    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODAwNzMsImV4cCI6MjA2MTE1NjA3M30.Wj3V5-swysAz8xAbA4lKmo-NNu_mv1UW_X4BgFNq0ag';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhbmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODAwNzMsImV4cCI6MjA2MTE1NjA3M30.Wj3V5-swysAz8xAbA4lKmo-NNu_mv1UW_X4BgFNq0ag';
     window.supabase = supabase.createClient(supabaseUrl, supabaseKey);
     
     // Now initialize the rest of the application
