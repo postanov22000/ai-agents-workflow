@@ -1180,7 +1180,7 @@ def debug_env():
 from datetime import datetime
 
 @app.route("/process", methods=["GET"])
-#@check_rate_limit('emails')
+@check_rate_limit('emails')
 def trigger_process():
     token = request.args.get("token")
     if token != os.environ.get("PROCESS_SECRET_TOKEN"):
