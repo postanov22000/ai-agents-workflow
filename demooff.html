@@ -1179,7 +1179,7 @@
     }
 
     // Initialize rate limiting
-    let aiCount, loiCount, psaCount;
+    let aiCount;
 
     function initRateLimiting() {
       const trialsCookie = getCookie('free_trials');
@@ -1187,27 +1187,19 @@
       if (trialsCookie) {
         const trials = JSON.parse(trialsCookie);
         aiCount = trials.ai;
-        loiCount = trials.loi;
-        psaCount = trials.psa;
       } else {
         // First visit - set initial values
         aiCount = 3;
-        loiCount = 3;
-        psaCount = 3;
         updateTrialsCookie();
       }
       
       // Update UI
       document.getElementById('ai-counter').textContent = aiCount;
-      document.getElementById('loi-counter').textContent = loiCount;
-      document.getElementById('psa-counter').textContent = psaCount;
     }
 
     function updateTrialsCookie() {
       const trials = {
         ai: aiCount,
-        loi: loiCount,
-        psa: psaCount
       };
       setCookie('free_trials', JSON.stringify(trials), 7); // Expires in 7 days
     }
