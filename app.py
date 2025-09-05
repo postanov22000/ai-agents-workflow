@@ -520,7 +520,7 @@ def leads_list():
     if search_query:
         # Use the correct syntax for OR conditions in Supabase
         search_pattern = f"%{search_query}%"
-        # Create individual filters and combine them
+        # Create individual filters and combine them using the correct syntax
         query = query.or_(f"first_name.ilike.{search_pattern},last_name.ilike.{search_pattern},email.ilike.{search_pattern},brokerage.ilike.{search_pattern}")
     
     # Execute query
@@ -529,7 +529,21 @@ def leads_list():
         leads = result.data or []
     except Exception as e:
         app.logger.error(f"Error fetching leads: {str(e)}")
-        leads = []
+        # Fallback: fetch all and filter in Python
+        try:
+            all_leads = supabase.table("leads").select("*").eq("user_id", user_id).execute().data or []
+            if search_query:
+                search_lower = search_query.lower()
+                leads = [lead for lead in all_leads if 
+                        (lead.get("first_name", "").lower().find(search_lower) != -1 or
+                         lead.get("last_name", "").lower().find(search_lower) != -1 or
+                         lead.get("email", "").lower().find(search_lower) != -1 or
+                         lead.get("brokerage", "").lower().find(search_lower) != -1)]
+            else:
+                leads = all_leads
+        except Exception as e2:
+            app.logger.error(f"Error with fallback lead fetching: {str(e2)}")
+            leads = []
     
     # Calculate funnel counts
     counts = {
@@ -601,17 +615,27 @@ def add_lead_note(lead_id):
         return jsonify({"error": "Note content is required"}), 400
     
     try:
-        # Add note to lead - make sure the table and column names match your database
-        supabase.table("lead_notes").insert({
+        # Add note to lead
+        result = supabase.table("lead_notes").insert({
             "lead_id": lead_id,
             "user_id": user_id,
             "content": note_content,
             "created_at": datetime.now(timezone.utc).isoformat()
         }).execute()
         
+        # Check if insertion was successful
+        if not result.data:
+            app.logger.error(f"Note insertion failed: {result}")
+            return jsonify({"error": "Failed to add note - no data returned"}), 500
+            
         return "", 204
     except Exception as e:
-        app.logger.error(f"Error adding lead note: {str(e)}", exc_info=True)  # Added exc_info for full traceback
+        app.logger.error(f"Error adding lead note: {str(e)}", exc_info=True)
+        
+        # Check if it's a specific API error
+        if hasattr(e, 'message') and "foreign key constraint" in str(e.message).lower():
+            return jsonify({"error": "Invalid lead ID"}), 400
+            
         return jsonify({"error": "Failed to add note"}), 500
 
 
