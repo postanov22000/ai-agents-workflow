@@ -518,7 +518,7 @@ def leads_list():
         query = query.eq("status", filter_type)
     
     # Replace the problematic search query section with this:
-if search_query:
+    if search_query:
     search_pattern = f"%{search_query}%"
     # Create individual filters for each field
     query = query.or_(
