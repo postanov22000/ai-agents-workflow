@@ -519,9 +519,9 @@ def leads_list():
     
     # Replace the problematic search query section with this:
     if search_query:
-        search_pattern = f"%{search_query}%"
-    # Create individual filters for each field
-    query = query.or_(
+    search_pattern = f"%{search_query}%"
+    # Use the correct syntax for OR conditions
+    query = query.filter('or', 
         f"first_name.ilike.{search_pattern}",
         f"last_name.ilike.{search_pattern}",
         f"email.ilike.{search_pattern}",
