@@ -1,0 +1,234 @@
+<div class="main-content">
+  <h1>Leads Funnel <span>Tracking</span> 👥</h1>
+
+  <!-- Search and Filter Controls -->
+  <div class="client-controls">
+    <div class="search-bar">
+      <input 
+        type="text" 
+        id="leadSearch" 
+        placeholder="Search leads by name, email, or brokerage..."
+        hx-get="/dashboard/leads/search"
+        hx-trigger="keyup changed delay:500ms"
+        hx-target="#leads-results"
+        hx-include="[name='user_id']"
+        name="q"
+      >
+      <input type="hidden" name="user_id" value="{{ user_id }}">
+    </div>
+    
+    <div class="client-filters">
+      <button class="filter-btn active" data-filter="all">All Leads</button>
+      <button class="filter-btn" data-filter="new">New</button>
+      <button class="filter-btn" data-filter="contacted">Contacted</button>
+      <button class="filter-btn" data-filter="proposal">Proposal Sent</button>
+      <button class="filter-btn" data-filter="closed">Closed</button>
+    </div>
+  </div>
+
+  <!-- Funnel Visualization -->
+  <div class="chart-container">
+    <div class="chart-header">
+      <div class="chart-title">Leads Funnel</div>
+    </div>
+    <div class="funnel-visualization">
+      <div class="funnel-stage">
+        <div class="stage-header">New Leads</div>
+        <div class="stage-count" id="new-count">0</div>
+        <div class="stage-bar">
+          <div class="stage-fill" style="width: 0%"></div>
+        </div>
+      </div>
+      
+      <div class="funnel-stage">
+        <div class="stage-header">Contacted</div>
+        <div class="stage-count" id="contacted-count">0</div>
+        <div class="stage-bar">
+          <div class="stage-fill" style="width: 0%"></div>
+        </div>
+      </div>
+      
+      <div class="funnel-stage">
+        <div class="stage-header">Proposal Sent</div>
+        <div class="stage-count" id="proposal-count">0</div>
+        <div class="stage-bar">
+          <div class="stage-fill" style="width: 0%"></div>
+        </div>
+      </div>
+      
+      <div class="funnel-stage">
+        <div class="stage-header">Closed</div>
+        <div class="stage-count" id="closed-count">0</div>
+        <div class="stage-bar">
+          <div class="stage-fill" style="width: 0%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leads Results -->
+  <div id="leads-results" 
+       hx-get="/dashboard/leads/list?user_id={{ user_id }}"
+       hx-trigger="load">
+    <div class="loading-spinner">
+      <i class="fas fa-spinner fa-spin"></i> Loading leads...
+    </div>
+  </div>
+</div>
+
+<style>
+  /* Funnel Visualization Styles */
+  .funnel-visualization {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+    flex-wrap: wrap;
+  }
+  
+  .funnel-stage {
+    flex: 1;
+    min-width: 180px;
+    margin: 0 10px 20px;
+    text-align: center;
+  }
+  
+  .stage-header {
+    font-weight: 600;
+    color: #64ffda;
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+  }
+  
+  .stage-count {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+    color: #ffffff;
+  }
+  
+  .stage-bar {
+    height: 10px;
+    background: rgba(100, 255, 218, 0.2);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+  
+  .stage-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #64ffda, #52d1b8);
+    border-radius: 5px;
+    transition: width 1s ease;
+  }
+  
+  /* Leads Table */
+  .leads-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background: rgba(16, 36, 64, 0.6);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  
+  .leads-table th {
+    text-align: left;
+    padding: 15px;
+    background: rgba(100, 255, 218, 0.1);
+    color: #64ffda;
+    font-weight: 600;
+  }
+  
+  .leads-table td {
+    padding: 15px;
+    border-bottom: 1px solid rgba(100, 255, 218, 0.1);
+  }
+  
+  .leads-table tr:hover td {
+    background: rgba(100, 255, 218, 0.05);
+  }
+  
+  .lead-status {
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    display: inline-block;
+  }
+  
+  .status-new {
+    background: rgba(100, 255, 218, 0.2);
+    color: #64ffda;
+  }
+  
+  .status-contacted {
+    background: rgba(248, 150, 30, 0.2);
+    color: #f8961e;
+  }
+  
+  .status-proposal {
+    background: rgba(86, 124, 228, 0.2);
+    color: #567ce4;
+  }
+  
+  .status-closed {
+    background: rgba(100, 255, 218, 0.3);
+    color: #64ffda;
+  }
+  
+  .loading-spinner {
+    text-align: center;
+    padding: 40px;
+    color: #64ffda;
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 768px) {
+    .funnel-visualization {
+      flex-direction: column;
+    }
+    
+    .funnel-stage {
+      margin: 0 0 20px;
+    }
+    
+    .leads-table {
+      display: block;
+      overflow-x: auto;
+    }
+  }
+</style>
+
+<script>
+  // Filter buttons functionality
+  document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('filter-btn')) {
+      // Update active state
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      e.target.classList.add('active');
+      
+      // Trigger HTMX request with filter
+      const filter = e.target.dataset.filter;
+      htmx.ajax('GET', `/dashboard/leads/list?user_id={{ user_id }}&filter=${filter}`, {
+        target: '#leads-results',
+        swap: 'innerHTML'
+      });
+    }
+  });
+  
+  // Function to update funnel visualization
+  function updateFunnel(counts) {
+    const total = Math.max(1, counts.new + counts.contacted + counts.proposal + counts.closed);
+    
+    document.getElementById('new-count').textContent = counts.new;
+    document.getElementById('contacted-count').textContent = counts.contacted;
+    document.getElementById('proposal-count').textContent = counts.proposal;
+    document.getElementById('closed-count').textContent = counts.closed;
+    
+    document.querySelectorAll('.stage-fill')[0].style.width = `${(counts.new / total) * 100}%`;
+    document.querySelectorAll('.stage-fill')[1].style.width = `${(counts.contacted / total) * 100}%`;
+    document.querySelectorAll('.stage-fill')[2].style.width = `${(counts.proposal / total) * 100}%`;
+    document.querySelectorAll('.stage-fill')[3].style.width = `${(counts.closed / total) * 100}%`;
+  }
+</script>
