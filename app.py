@@ -604,6 +604,11 @@ def add_lead_note(lead_id):
         return jsonify({"error": "Note content is required"}), 400
     
     try:
+        # First verify the lead exists and belongs to this user
+        lead_check = supabase.table("leads").select("id").eq("id", lead_id).eq("user_id", user_id).execute()
+        if not lead_check.data:
+            return jsonify({"error": "Lead not found or access denied"}), 404
+        
         # Add note to lead
         result = supabase.table("lead_notes").insert({
             "lead_id": lead_id,
@@ -622,8 +627,11 @@ def add_lead_note(lead_id):
         app.logger.error(f"Error adding lead note: {str(e)}", exc_info=True)
         
         # Check if it's a specific API error
-        if hasattr(e, 'message') and "foreign key constraint" in str(e.message).lower():
+        error_msg = str(e)
+        if "foreign key constraint" in error_msg.lower():
             return jsonify({"error": "Invalid lead ID"}), 400
+        elif "null value" in error_msg.lower():
+            return jsonify({"error": "Missing required fields"}), 400
             
         return jsonify({"error": "Failed to add note"}), 500
 
