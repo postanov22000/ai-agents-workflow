@@ -1784,7 +1784,7 @@ def generate_follow_up_content(lead_id, sequence_step):
         lead_resp = supabase.table("leads").select("*").eq("id", lead_id).single().execute()
         if not lead_resp.data:
             app.logger.error(f"Lead {lead_id} not found")
-            return False
+            return None
             
         lead = lead_resp.data
         app.logger.info(f"Found lead: {lead['email']}")
@@ -1850,18 +1850,20 @@ def generate_follow_up_content(lead_id, sequence_step):
         app.logger.info(f"Calling edge function with payload: {payload}")
         
         # Use your existing Edge Function call pattern
-        success = call_edge("/functions/v1/generate-follow-up", payload)
+        # Modify call_edge to return the response content instead of just success/failure
+        response = call_edge("/functions/v1/generate-follow-up", payload, return_response=True)
         
-        if success:
+        if response and response.status_code == 200:
+            content = response.json().get("content")
             app.logger.info(f"Successfully generated follow-up for lead {lead_id}")
-            return True
+            return content
         else:
             app.logger.error(f"Failed to generate follow-up content for lead {lead_id}")
-            return False
+            return None
             
     except Exception as e:
         app.logger.error(f"Error generating follow-up content: {str(e)}", exc_info=True)
-        return False
+        return None
 #-------------------------------------------------------------------------------------------------------------------------------------------------
 
 
