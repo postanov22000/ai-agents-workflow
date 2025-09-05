@@ -516,7 +516,7 @@ def leads_list():
     if filter_type != "all":
         query = query.eq("status", filter_type)
     
-    if search_query:
+if search_query:
     # Use the correct syntax for OR conditions
     search_pattern = f"%{search_query}%"
     query = query.or_(
