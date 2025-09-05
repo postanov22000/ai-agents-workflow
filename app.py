@@ -140,7 +140,7 @@ def get_smtp_creds(user_id: str):
         return None, None
 
 # ---------------------------------------------------------------------------
-def call_edge(endpoint_path: str, payload: dict) -> bool:
+def call_edge(endpoint_path: str, payload: dict, return_response: bool = False):
     url = f"{EDGE_BASE_URL}{endpoint_path}"
     app.logger.info(f"🔗 call_edge → URL: {url}")
     app.logger.info(f"🔗 call_edge → Payload: {payload}")
@@ -157,7 +157,10 @@ def call_edge(endpoint_path: str, payload: dict) -> bool:
             app.logger.info(f"↩️  Response [{resp.status_code}]: {resp.text}")
 
             if resp.status_code == 200:
-                return True
+                if return_response:
+                    return resp
+                else:
+                    return True
             elif resp.status_code == 429:
                 wait = RETRY_BACKOFF_BASE ** attempt
                 app.logger.warning(f"[{endpoint_path}] Rate‐limited, retry {attempt+1}/{MAX_RETRIES} after {wait}s")
@@ -165,13 +168,19 @@ def call_edge(endpoint_path: str, payload: dict) -> bool:
                 continue
             else:
                 app.logger.error(f"[{endpoint_path}] Failed ({resp.status_code}): {resp.text}")
-                return False
+                if return_response:
+                    return resp
+                else:
+                    return False
         except requests.RequestException as e:
             wait = RETRY_BACKOFF_BASE ** attempt
             app.logger.error(f"[{endpoint_path}] Exception: {e}, retrying in {wait}s")
             time.sleep(wait)
     app.logger.error(f"[{endpoint_path}] Exceeded max retries.")
-    return False
+    if return_response:
+        return None
+    else:
+        return False
 
 # ── Routes ──
 #-----------------------------------------------
@@ -1638,10 +1647,6 @@ from openpyxl import load_workbook
 @app.route("/import_leads", methods=["GET", "POST"])
 @check_rate_limit('leads')
 def import_leads():
-    # Decrement leads count
-    #ip = request.remote_addr
-    #demo_rate_limits[ip]['leads'] -= 1
-    
     user_id = _require_user()
     if request.method == "GET":
         return render_template("import_leads.html", user_id=user_id)
@@ -1710,48 +1715,39 @@ def import_leads():
                     
                     # Send immediate follow-up (step 0)
                     try:
-                        # Generate immediate follow-up content
-                        success = generate_follow_up_content(lead_id, 0)  # 0 for immediate follow-up
+                        # Generate immediate follow-up content and get it directly
+                        follow_up_content = generate_follow_up_content(lead_id, 0)  # 0 for immediate follow-up
                         
-                        if success:
-                            # Get the generated content
-                            follow_up_resp = supabase.table('lead_follow_ups') \
-                                .select('generated_content') \
-                                .eq('lead_id', lead_id) \
-                                .eq('sequence_step', 0) \
-                                .single() \
-                                .execute()
+                        if follow_up_content:
+                            # Send the email immediately
+                            lead = supabase.table('leads').select('*').eq('id', lead_id).single().execute().data
                             
-                            if follow_up_resp.data:
-                                # Send the email immediately
-                                lead = supabase.table('leads').select('*').eq('id', lead_id).single().execute().data
+                            # Get user's email credentials
+                            smtp_email, app_password = get_smtp_creds(user_id)
+                            if smtp_email and app_password:
+                                # Get SMTP server details
+                                prof_resp = supabase.from_("profiles").select("smtp_host").eq("id", user_id).single().execute()
+                                smtp_host = prof_resp.data.get("smtp_host", "smtp.gmail.com") if prof_resp.data else "smtp.gmail.com"
                                 
-                                # Get user's email credentials
-                                smtp_email, app_password = get_smtp_creds(user_id)
-                                if smtp_email and app_password:
-                                    # Get SMTP server details
-                                    prof_resp = supabase.from_("profiles").select("smtp_host").eq("id", user_id).single().execute()
-                                    smtp_host = prof_resp.data.get("smtp_host", "smtp.gmail.com") if prof_resp.data else "smtp.gmail.com"
-                                    
-                                    # Send the email
-                                    send_email_smtp(
-                                        smtp_email,
-                                        app_password,
-                                        lead['email'],
-                                        "Follow-up from your inquiry",
-                                        follow_up_resp.data['generated_content'],
-                                        smtp_host=smtp_host
-                                    )
-                                    
-                                    # Mark as sent
-                                    supabase.table('lead_follow_ups') \
-                                        .update({
-                                            'status': 'sent',
-                                            'sent_at': datetime.utcnow().isoformat()
-                                        }) \
-                                        .eq('lead_id', lead_id) \
-                                        .eq('sequence_step', 0) \
-                                        .execute()
+                                # Send the email
+                                send_email_smtp(
+                                    smtp_email,
+                                    app_password,
+                                    lead['email'],
+                                    "Follow-up from your inquiry",
+                                    follow_up_content,
+                                    smtp_host=smtp_host
+                                )
+                                
+                                # Mark as sent
+                                supabase.table('lead_follow_ups') \
+                                    .update({
+                                        'status': 'sent',
+                                        'sent_at': datetime.utcnow().isoformat()
+                                    }) \
+                                    .eq('lead_id', lead_id) \
+                                    .eq('sequence_step', 0) \
+                                    .execute()
                     
                     except Exception as e:
                         app.logger.error(f"Error sending immediate follow-up: {str(e)}")
@@ -1772,7 +1768,6 @@ def import_leads():
         except Exception as e:
             app.logger.error(f"Error importing leads: {str(e)}")
             return jsonify({"error": "Failed to import leads. Please check the file format."}), 500
-
 
 #------------------------------------------------------------------------------------------------------------------
 def generate_follow_up_content(lead_id, sequence_step):
