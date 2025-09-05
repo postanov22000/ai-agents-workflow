@@ -1,0 +1,50 @@
+<table class="leads-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Email</th>
+      <th>Brokerage</th>
+      <th>Service</th>
+      <th>City</th>
+      <th>Status</th>
+      <th>Last Contact</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for lead in leads %}
+    <tr>
+      <td>{{ lead.first_name }} {{ lead.last_name }}</td>
+      <td>{{ lead.email }}</td>
+      <td>{{ lead.brokerage }}</td>
+      <td>{{ lead.service }}</td>
+      <td>{{ lead.city }}</td>
+      <td>
+        <span class="lead-status status-{{ lead.status or 'new' }}">
+          {{ (lead.status or 'new')|title }}
+        </span>
+      </td>
+      <td>{{ lead.last_contacted_at or 'Never' }}</td>
+      <td>
+        <button class="btn btn-sm btn-primary" 
+                hx-get="/dashboard/leads/{{ lead.id }}/view?user_id={{ user_id }}"
+                hx-target="body"
+                hx-swap="beforeend">
+          <i class="fas fa-eye"></i> View
+        </button>
+      </td>
+    </tr>
+    {% else %}
+    <tr>
+      <td colspan="8" style="text-align: center; padding: 30px;">
+        No leads found. <a href="/import_leads?user_id={{ user_id }}">Import some leads</a> to get started.
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<script>
+  // Update funnel visualization with counts from server
+  updateFunnel({{ counts | tojson }});
+</script>
