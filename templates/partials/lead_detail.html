@@ -1,0 +1,143 @@
+<div class="chart-container" style="max-width: 800px; margin: 20px auto;">
+  <div class="chart-header">
+    <div class="chart-title">Lead Details: {{ lead.first_name }} {{ lead.last_name }}</div>
+    <button class="btn btn-sm btn-secondary" onclick="this.closest('.chart-container').remove()">
+      <i class="fas fa-times"></i> Close
+    </button>
+  </div>
+  
+  <div class="lead-details">
+    <div class="detail-row">
+      <strong>Email:</strong> {{ lead.email }}
+    </div>
+    <div class="detail-row">
+      <strong>Brokerage:</strong> {{ lead.brokerage }}
+    </div>
+    <div class="detail-row">
+      <strong>Service:</strong> {{ lead.service }}
+    </div>
+    <div class="detail-row">
+      <strong>City:</strong> {{ lead.city }}
+    </div>
+    <div class="detail-row">
+      <strong>Status:</strong> 
+      <span class="lead-status status-{{ lead.status or 'new' }}">
+        {{ (lead.status or 'new')|title }}
+      </span>
+    </div>
+    <div class="detail-row">
+      <strong>Imported:</strong> {{ lead.email_sent|format_date }}
+    </div>
+    
+    <div class="detail-actions">
+      <form hx-post="/dashboard/leads/{{ lead.id }}/update-status?user_id={{ user_id }}" hx-trigger="change" hx-target="this" hx-swap="outerHTML">
+        <label for="status">Update Status:</label>
+        <select name="status" id="status">
+          <option value="new" {% if lead.status == 'new' %}selected{% endif %}>New</option>
+          <option value="contacted" {% if lead.status == 'contacted' %}selected{% endif %}>Contacted</option>
+          <option value="proposal" {% if lead.status == 'proposal' %}selected{% endif %}>Proposal Sent</option>
+          <option value="closed" {% if lead.status == 'closed' %}selected{% endif %}>Closed</option>
+        </select>
+      </form>
+    </div>
+  </div>
+  
+  <div class="follow-up-history">
+    <h3>Follow-up History</h3>
+    {% if follow_ups %}
+      <div class="timeline">
+        {% for follow_up in follow_ups %}
+        <div class="timeline-item">
+          <div class="timeline-date">{{ follow_up.scheduled_at|format_date }}</div>
+          <div class="timeline-content">
+            <strong>{{ follow_up.sequence_step }}: {{ follow_up.status|title }}</strong>
+            {% if follow_up.generated_content %}
+              <p>{{ follow_up.generated_content|truncate(100) }}</p>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p>No follow-ups scheduled yet.</p>
+    {% endif %}
+  </div>
+  
+  <div class="notes-section">
+    <h3>Notes</h3>
+    <form hx-post="/dashboard/leads/{{ lead.id }}/add-note?user_id={{ user_id }}" hx-target="#notes-list" hx-swap="beforeend">
+      <textarea name="note" placeholder="Add a note about this lead..." rows="3"></textarea>
+      <button type="submit" class="btn btn-primary">Add Note</button>
+    </form>
+    <div id="notes-list">
+      <!-- Notes will be loaded here -->
+    </div>
+  </div>
+</div>
+
+<style>
+  .lead-details {
+    margin-bottom: 20px;
+  }
+  
+  .detail-row {
+    margin-bottom: 10px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+  }
+  
+  .detail-actions {
+    margin-top: 15px;
+    padding: 15px;
+    background: rgba(100, 255, 218, 0.1);
+    border-radius: 8px;
+  }
+  
+  .detail-actions select {
+    background: rgba(16, 36, 64, 0.8);
+    color: white;
+    border: 1px solid rgba(100, 255, 218, 0.3);
+    padding: 8px;
+    border-radius: 4px;
+    margin-left: 10px;
+  }
+  
+  .follow-up-history, .notes-section {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(100, 255, 218, 0.2);
+  }
+  
+  .timeline {
+    margin-top: 15px;
+  }
+  
+  .timeline-item {
+    display: flex;
+    margin-bottom: 15px;
+  }
+  
+  .timeline-date {
+    min-width: 120px;
+    font-size: 0.85rem;
+    color: #8892b0;
+  }
+  
+  .timeline-content {
+    flex: 1;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+  }
+  
+  .notes-section textarea {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(100, 255, 218, 0.2);
+    border-radius: 6px;
+    color: white;
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+</style>
