@@ -504,6 +504,7 @@ def dashboard_leads():
     user_id = _require_user()
     return render_template("partials/leads_funnel.html", user_id=user_id)
 
+# Fix for the search error - update the leads_list function
 @app.route("/dashboard/leads/list")
 def leads_list():
     user_id = _require_user()
@@ -516,16 +517,13 @@ def leads_list():
     if filter_type != "all":
         query = query.eq("status", filter_type)
     
-    if search_query:   # ✅ correctly indented
+    if search_query:
+        # Use the correct syntax for OR conditions in Supabase
         search_pattern = f"%{search_query}%"
-        query = query.or_(
-            f"first_name.ilike.{search_pattern},"
-            f"last_name.ilike.{search_pattern},"
-            f"email.ilike.{search_pattern},"
-            f"brokerage.ilike.{search_pattern}"
-        )
-
-
+        # Create individual filters and combine them
+        query = query.or_(f"first_name.ilike.{search_pattern},last_name.ilike.{search_pattern},email.ilike.{search_pattern},brokerage.ilike.{search_pattern}")
+    
+    # Execute query
     try:
         result = query.execute()
         leads = result.data or []
@@ -533,8 +531,16 @@ def leads_list():
         app.logger.error(f"Error fetching leads: {str(e)}")
         leads = []
     
-    counts = {"new": 0, "contacted": 0, "proposal": 0, "closed": 0}
+    # Calculate funnel counts
+    counts = {
+        "new": 0,
+        "contacted": 0,
+        "proposal": 0,
+        "closed": 0
+    }
+    
     try:
+        # Get counts for each status
         for status in counts.keys():
             count_result = supabase.table("leads").select("id", count="exact").eq("user_id", user_id).eq("status", status).execute()
             counts[status] = count_result.count or 0
@@ -585,6 +591,7 @@ def update_lead_status(lead_id):
         app.logger.error(f"Error updating lead status: {str(e)}")
         return jsonify({"error": "Failed to update status"}), 500
 
+# Fix for the lead notes error - update the add_lead_note function
 @app.route("/dashboard/leads/<lead_id>/add-note", methods=["POST"])
 def add_lead_note(lead_id):
     user_id = _require_user()
@@ -594,7 +601,7 @@ def add_lead_note(lead_id):
         return jsonify({"error": "Note content is required"}), 400
     
     try:
-        # Add note to lead
+        # Add note to lead - make sure the table and column names match your database
         supabase.table("lead_notes").insert({
             "lead_id": lead_id,
             "user_id": user_id,
@@ -604,8 +611,9 @@ def add_lead_note(lead_id):
         
         return "", 204
     except Exception as e:
-        app.logger.error(f"Error adding lead note: {str(e)}")
+        app.logger.error(f"Error adding lead note: {str(e)}", exc_info=True)  # Added exc_info for full traceback
         return jsonify({"error": "Failed to add note"}), 500
+
 
 @app.route("/dashboard/leads/export")
 def export_leads():
