@@ -516,17 +516,15 @@ def leads_list():
     if filter_type != "all":
         query = query.eq("status", filter_type)
     
-if search_query:
-    # Use the correct syntax for OR conditions
-    search_pattern = f"%{search_query}%"
-    query = query.or_(
-        f"first_name.ilike.{search_pattern}",
-        f"last_name.ilike.{search_pattern}", 
-        f"email.ilike.{search_pattern}",
-        f"brokerage.ilike.{search_pattern}"
-    )
+    if search_query:   # ✅ correctly indented
+        search_pattern = f"%{search_query}%"
+        query = query.or_(
+            f"first_name.ilike.{search_pattern}",
+            f"last_name.ilike.{search_pattern}", 
+            f"email.ilike.{search_pattern}",
+            f"brokerage.ilike.{search_pattern}"
+        )
     
-    # Execute query
     try:
         result = query.execute()
         leads = result.data or []
@@ -534,16 +532,8 @@ if search_query:
         app.logger.error(f"Error fetching leads: {str(e)}")
         leads = []
     
-    # Calculate funnel counts - handle each count separately to avoid errors
-    counts = {
-        "new": 0,
-        "contacted": 0,
-        "proposal": 0,
-        "closed": 0
-    }
-    
+    counts = {"new": 0, "contacted": 0, "proposal": 0, "closed": 0}
     try:
-        # Get counts for each status
         for status in counts.keys():
             count_result = supabase.table("leads").select("id", count="exact").eq("user_id", user_id).eq("status", status).execute()
             counts[status] = count_result.count or 0
@@ -551,6 +541,7 @@ if search_query:
         app.logger.error(f"Error counting leads by status: {str(e)}")
     
     return render_template("partials/leads_list.html", leads=leads, counts=counts, user_id=user_id)
+
 
 @app.route("/dashboard/leads/search")
 def search_leads():
