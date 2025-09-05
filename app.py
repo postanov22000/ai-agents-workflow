@@ -519,13 +519,13 @@ def leads_list():
     
     # Replace the problematic search query section with this:
     if search_query:
-    search_pattern = f"%{search_query}%"
-    # Use the correct syntax for OR conditions
-    query = query.filter('or', 
-        f"first_name.ilike.{search_pattern}",
-        f"last_name.ilike.{search_pattern}",
-        f"email.ilike.{search_pattern}",
-        f"brokerage.ilike.{search_pattern}"
+        search_pattern = f"%{search_query}%"
+   
+        query = query.filter('or', 
+            f"first_name.ilike.{search_pattern}",
+            f"last_name.ilike.{search_pattern}",
+            f"email.ilike.{search_pattern}",
+            f"brokerage.ilike.{search_pattern}"
     )
     
     # Execute query
