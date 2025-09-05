@@ -517,8 +517,15 @@ def leads_list():
         query = query.eq("status", filter_type)
     
     if search_query:
-        # Use the correct syntax for OR conditions in Supabase Python client
-        query = query.or_(f"first_name.ilike.%{search_query}%,last_name.ilike.%{search_query}%,email.ilike.%{search_query}%,brokerage.ilike.%{search_query}%")
+    if search_query:
+    # Use the correct syntax for OR conditions
+    search_pattern = f"%{search_query}%"
+    query = query.or_(
+        f"first_name.ilike.{search_pattern}",
+        f"last_name.ilike.{search_pattern}", 
+        f"email.ilike.{search_pattern}",
+        f"brokerage.ilike.{search_pattern}"
+    )
     
     # Execute query
     try:
@@ -565,7 +572,7 @@ def view_lead(lead_id):
         return render_template("partials/lead_detail.html", lead=lead, follow_ups=follow_ups, user_id=user_id)
     except Exception as e:
         app.logger.error(f"Error fetching lead details: {str(e)}")
-        return "<div class='error'>Error loading lead details</div>", 500
+        return "<div class='error'>Error loading lead details: Missing required database columns</div>", 500
 
 @app.route("/dashboard/leads/<lead_id>/update-status", methods=["POST"])
 def update_lead_status(lead_id):
