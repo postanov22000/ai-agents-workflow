@@ -984,7 +984,14 @@ input:checked + .slider:before {
   <i class="fas fa-reply-all"></i> Responded Emails
 </div>
 
-  
+<div
+    class="nav-item"
+    hx-get="/dashboard/leads?user_id={{ user_id }}"
+    hx-target=".main-content"
+    hx-swap="innerHTML"
+  >
+    <i class="fas fa-funnel-dollar"></i> Leads Funnel
+  </div>  
 
 <div
         class="nav-item"
