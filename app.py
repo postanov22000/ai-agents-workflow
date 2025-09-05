@@ -520,7 +520,7 @@ def leads_list():
     if search_query:
         # Use the correct syntax for OR conditions in Supabase
         search_pattern = f"%{search_query}%"
-        # Create individual filters and combine them using the correct syntax
+        # Create individual filters and combine them
         query = query.or_(f"first_name.ilike.{search_pattern},last_name.ilike.{search_pattern},email.ilike.{search_pattern},brokerage.ilike.{search_pattern}")
     
     # Execute query
