@@ -525,6 +525,7 @@ def leads_list():
             f"brokerage.ilike.{search_pattern}"
         )
 
+
     try:
         result = query.execute()
         leads = result.data or []
