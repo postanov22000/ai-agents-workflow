@@ -1639,8 +1639,8 @@ from openpyxl import load_workbook
 @check_rate_limit('leads')
 def import_leads():
     # Decrement leads count
-    ip = request.remote_addr
-    demo_rate_limits[ip]['leads'] -= 1
+    #ip = request.remote_addr
+    #demo_rate_limits[ip]['leads'] -= 1
     
     user_id = _require_user()
     if request.method == "GET":
