@@ -519,12 +519,12 @@ def leads_list():
     if search_query:   # ✅ correctly indented
         search_pattern = f"%{search_query}%"
         query = query.or_(
-            f"first_name.ilike.{search_pattern}",
-            f"last_name.ilike.{search_pattern}", 
-            f"email.ilike.{search_pattern}",
+            f"first_name.ilike.{search_pattern},"
+            f"last_name.ilike.{search_pattern},"
+            f"email.ilike.{search_pattern},"
             f"brokerage.ilike.{search_pattern}"
         )
-    
+
     try:
         result = query.execute()
         leads = result.data or []
