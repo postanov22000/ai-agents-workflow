@@ -517,11 +517,16 @@ def leads_list():
     if filter_type != "all":
         query = query.eq("status", filter_type)
     
-    if search_query:
-        # Use the correct syntax for OR conditions in Supabase
-        search_pattern = f"%{search_query}%"
-        # Create individual filters and combine them
-        query = query.or_(f"first_name.ilike.{search_pattern},last_name.ilike.{search_pattern},email.ilike.{search_pattern},brokerage.ilike.{search_pattern}")
+    # Replace the problematic search query section with this:
+if search_query:
+    search_pattern = f"%{search_query}%"
+    # Create individual filters for each field
+    query = query.or_(
+        f"first_name.ilike.{search_pattern}",
+        f"last_name.ilike.{search_pattern}",
+        f"email.ilike.{search_pattern}",
+        f"brokerage.ilike.{search_pattern}"
+    )
     
     # Execute query
     try:
