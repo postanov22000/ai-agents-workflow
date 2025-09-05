@@ -184,6 +184,22 @@ def call_edge(endpoint_path: str, payload: dict, return_response: bool = False):
 
 # ── Routes ──
 #-----------------------------------------------
+
+
+# Add this near the top of your app.py after creating the Flask app
+@app.template_filter('format_date')
+def format_date_filter(value):
+    if not value:
+        return ""
+    try:
+        # Try to parse the date string
+        date_obj = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        return date_obj.strftime("%b %d, %Y %I:%M %p")
+    except:
+        return value
+
+
+
 # Add this function near your other helper functions
 def verify_smtp_connection(user_id: str) -> dict:
     """
