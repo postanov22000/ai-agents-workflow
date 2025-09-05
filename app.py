@@ -501,23 +501,141 @@ def leads_list():
         query = query.eq("status", filter_type)
     
     if search_query:
+        # Use the correct syntax for OR conditions in Supabase Python client
         query = query.or_(f"first_name.ilike.%{search_query}%,last_name.ilike.%{search_query}%,email.ilike.%{search_query}%,brokerage.ilike.%{search_query}%")
     
-    leads = query.execute().data or []
+    # Execute query
+    try:
+        result = query.execute()
+        leads = result.data or []
+    except Exception as e:
+        app.logger.error(f"Error fetching leads: {str(e)}")
+        leads = []
     
-    # Calculate funnel counts
+    # Calculate funnel counts - handle each count separately to avoid errors
     counts = {
-        "new": supabase.table("leads").select("id", count="exact").eq("user_id", user_id).eq("status", "new").execute().count or 0,
-        "contacted": supabase.table("leads").select("id", count="exact").eq("user_id", user_id).eq("status", "contacted").execute().count or 0,
-        "proposal": supabase.table("leads").select("id", count="exact").eq("user_id", user_id).eq("status", "proposal").execute().count or 0,
-        "closed": supabase.table("leads").select("id", count="exact").eq("user_id", user_id).eq("status", "closed").execute().count or 0
+        "new": 0,
+        "contacted": 0,
+        "proposal": 0,
+        "closed": 0
     }
     
-    return render_template("partials/leads_list.html", leads=leads, counts=counts)
+    try:
+        # Get counts for each status
+        for status in counts.keys():
+            count_result = supabase.table("leads").select("id", count="exact").eq("user_id", user_id).eq("status", status).execute()
+            counts[status] = count_result.count or 0
+    except Exception as e:
+        app.logger.error(f"Error counting leads by status: {str(e)}")
+    
+    return render_template("partials/leads_list.html", leads=leads, counts=counts, user_id=user_id)
 
 @app.route("/dashboard/leads/search")
 def search_leads():
-    return leads_list()  # Reuse the same logic
+    # Reuse the leads_list function but with search parameters
+    return leads_list()
+
+@app.route("/dashboard/leads/<lead_id>/view")
+def view_lead(lead_id):
+    user_id = _require_user()
+    
+    try:
+        # Get lead details
+        lead = supabase.table("leads").select("*").eq("id", lead_id).eq("user_id", user_id).single().execute().data
+        
+        # Get follow-up history
+        follow_ups = supabase.table("lead_follow_ups").select("*").eq("lead_id", lead_id).order("scheduled_at").execute().data or []
+        
+        return render_template("partials/lead_detail.html", lead=lead, follow_ups=follow_ups, user_id=user_id)
+    except Exception as e:
+        app.logger.error(f"Error fetching lead details: {str(e)}")
+        return "<div class='error'>Error loading lead details</div>", 500
+
+@app.route("/dashboard/leads/<lead_id>/update-status", methods=["POST"])
+def update_lead_status(lead_id):
+    user_id = _require_user()
+    new_status = request.form.get("status")
+    
+    if not new_status:
+        return jsonify({"error": "Status is required"}), 400
+    
+    try:
+        # Update lead status
+        supabase.table("leads").update({
+            "status": new_status,
+            "last_updated": datetime.now(timezone.utc).isoformat()
+        }).eq("id", lead_id).eq("user_id", user_id).execute()
+        
+        return "", 204
+    except Exception as e:
+        app.logger.error(f"Error updating lead status: {str(e)}")
+        return jsonify({"error": "Failed to update status"}), 500
+
+@app.route("/dashboard/leads/<lead_id>/add-note", methods=["POST"])
+def add_lead_note(lead_id):
+    user_id = _require_user()
+    note_content = request.form.get("note")
+    
+    if not note_content:
+        return jsonify({"error": "Note content is required"}), 400
+    
+    try:
+        # Add note to lead
+        supabase.table("lead_notes").insert({
+            "lead_id": lead_id,
+            "user_id": user_id,
+            "content": note_content,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }).execute()
+        
+        return "", 204
+    except Exception as e:
+        app.logger.error(f"Error adding lead note: {str(e)}")
+        return jsonify({"error": "Failed to add note"}), 500
+
+@app.route("/dashboard/leads/export")
+def export_leads():
+    user_id = _require_user()
+    filter_type = request.args.get("filter", "all")
+    
+    try:
+        # Build query
+        query = supabase.table("leads").select("*").eq("user_id", user_id)
+        
+        if filter_type != "all":
+            query = query.eq("status", filter_type)
+        
+        leads = query.execute().data or []
+        
+        # Create CSV
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow(["First Name", "Last Name", "Email", "Brokerage", "Service", "City", "Status", "Last Contact"])
+        
+        # Write data
+        for lead in leads:
+            writer.writerow([
+                lead.get("first_name", ""),
+                lead.get("last_name", ""),
+                lead.get("email", ""),
+                lead.get("brokerage", ""),
+                lead.get("service", ""),
+                lead.get("city", ""),
+                lead.get("status", "new"),
+                lead.get("last_contacted_at", "")
+            ])
+        
+        # Prepare response
+        response = make_response(output.getvalue())
+        response.headers["Content-Disposition"] = f"attachment; filename=leads_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        response.headers["Content-type"] = "text/csv"
+        
+        return response
+    except Exception as e:
+        app.logger.error(f"Error exporting leads: {str(e)}")
+        return jsonify({"error": "Failed to export leads"}), 500
 #------------------------------------------------------------------------------------------------------------
 @app.route("/dashboard/new_transaction")
 def dashboard_new_transaction():
