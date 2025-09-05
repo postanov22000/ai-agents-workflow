@@ -519,7 +519,7 @@ def leads_list():
     
     # Replace the problematic search query section with this:
     if search_query:
-    search_pattern = f"%{search_query}%"
+        search_pattern = f"%{search_query}%"
     # Create individual filters for each field
     query = query.or_(
         f"first_name.ilike.{search_pattern}",
