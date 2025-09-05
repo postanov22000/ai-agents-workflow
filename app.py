@@ -482,7 +482,43 @@ def dashboard():
         revenue=revenue,
         revenue_change=revenue_change
     )
+#--------------------------------------------------------------------------------------------------------------
+@app.route("/dashboard/leads")
+def dashboard_leads():
+    user_id = _require_user()
+    return render_template("partials/leads_funnel.html", user_id=user_id)
 
+@app.route("/dashboard/leads/list")
+def leads_list():
+    user_id = _require_user()
+    filter_type = request.args.get("filter", "all")
+    search_query = request.args.get("q", "")
+    
+    # Build query based on filters
+    query = supabase.table("leads").select("*").eq("user_id", user_id)
+    
+    if filter_type != "all":
+        query = query.eq("status", filter_type)
+    
+    if search_query:
+        query = query.or_(f"first_name.ilike.%{search_query}%,last_name.ilike.%{search_query}%,email.ilike.%{search_query}%,brokerage.ilike.%{search_query}%")
+    
+    leads = query.execute().data or []
+    
+    # Calculate funnel counts
+    counts = {
+        "new": supabase.table("leads").select("id", count="exact").eq("user_id", user_id).eq("status", "new").execute().count or 0,
+        "contacted": supabase.table("leads").select("id", count="exact").eq("user_id", user_id).eq("status", "contacted").execute().count or 0,
+        "proposal": supabase.table("leads").select("id", count="exact").eq("user_id", user_id).eq("status", "proposal").execute().count or 0,
+        "closed": supabase.table("leads").select("id", count="exact").eq("user_id", user_id).eq("status", "closed").execute().count or 0
+    }
+    
+    return render_template("partials/leads_list.html", leads=leads, counts=counts)
+
+@app.route("/dashboard/leads/search")
+def search_leads():
+    return leads_list()  # Reuse the same logic
+#------------------------------------------------------------------------------------------------------------
 @app.route("/dashboard/new_transaction")
 def dashboard_new_transaction():
     user_id = request.args.get("user_id") or abort(401)
