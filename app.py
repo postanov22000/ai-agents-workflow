@@ -102,6 +102,7 @@ RETRY_BACKOFF_BASE = 2
 
 # Define follow-up sequence (days after initial contact)
 FOLLOW_UP_SEQUENCE = [
+    {"delay_days": 0, "name": "Immediate Follow-up"},
     {"delay_days": 1, "name": "Day 1 Follow-up"},
     {"delay_days": 3, "name": "Day 3 Follow-up"},
     {"delay_days": 7, "name": "Day 7 Follow-up"},
@@ -1638,8 +1639,8 @@ from openpyxl import load_workbook
 @check_rate_limit('leads')
 def import_leads():
     # Decrement leads count
-#    ip = request.remote_addr
- #   demo_rate_limits[ip]['leads'] -= 1
+    ip = request.remote_addr
+    demo_rate_limits[ip]['leads'] -= 1
     
     user_id = _require_user()
     if request.method == "GET":
@@ -1706,17 +1707,65 @@ def import_leads():
                 response = supabase.table('leads').insert(lead_data).execute()
                 if response.data:
                     lead_id = response.data[0]['id']
-                    # Schedule follow-up emails
-            # Schedule follow-up emails
-            for step, seq in enumerate(FOLLOW_UP_SEQUENCE):
-                scheduled_at = email_sent + timedelta(days=seq['delay_days'])
-                follow_up_data = {
-                    'lead_id': lead_id,
-                    'sequence_step': step,
-                    'scheduled_at': scheduled_at.isoformat(),
-                    'status': 'pending'
-                }
-                supabase.table('lead_follow_ups').insert(follow_up_data).execute()
+                    
+                    # Send immediate follow-up (step 0)
+                    try:
+                        # Generate immediate follow-up content
+                        success = generate_follow_up_content(lead_id, 0)  # 0 for immediate follow-up
+                        
+                        if success:
+                            # Get the generated content
+                            follow_up_resp = supabase.table('lead_follow_ups') \
+                                .select('generated_content') \
+                                .eq('lead_id', lead_id) \
+                                .eq('sequence_step', 0) \
+                                .single() \
+                                .execute()
+                            
+                            if follow_up_resp.data:
+                                # Send the email immediately
+                                lead = supabase.table('leads').select('*').eq('id', lead_id).single().execute().data
+                                
+                                # Get user's email credentials
+                                smtp_email, app_password = get_smtp_creds(user_id)
+                                if smtp_email and app_password:
+                                    # Get SMTP server details
+                                    prof_resp = supabase.from_("profiles").select("smtp_host").eq("id", user_id).single().execute()
+                                    smtp_host = prof_resp.data.get("smtp_host", "smtp.gmail.com") if prof_resp.data else "smtp.gmail.com"
+                                    
+                                    # Send the email
+                                    send_email_smtp(
+                                        smtp_email,
+                                        app_password,
+                                        lead['email'],
+                                        "Follow-up from your inquiry",
+                                        follow_up_resp.data['generated_content'],
+                                        smtp_host=smtp_host
+                                    )
+                                    
+                                    # Mark as sent
+                                    supabase.table('lead_follow_ups') \
+                                        .update({
+                                            'status': 'sent',
+                                            'sent_at': datetime.utcnow().isoformat()
+                                        }) \
+                                        .eq('lead_id', lead_id) \
+                                        .eq('sequence_step', 0) \
+                                        .execute()
+                    
+                    except Exception as e:
+                        app.logger.error(f"Error sending immediate follow-up: {str(e)}")
+                    
+                    # Schedule the rest of the follow-up sequence
+                    for step, seq in enumerate(FOLLOW_UP_SEQUENCE[1:], start=1):  # Start from 1 to skip immediate
+                        scheduled_at = email_sent + timedelta(days=seq['delay_days'])
+                        follow_up_data = {
+                            'lead_id': lead_id,
+                            'sequence_step': step,
+                            'scheduled_at': scheduled_at.isoformat(),
+                            'status': 'pending'
+                        }
+                        supabase.table('lead_follow_ups').insert(follow_up_data).execute()
             
             return jsonify({"message": "Leads imported successfully"}), 200
         
