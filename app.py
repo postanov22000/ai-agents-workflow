@@ -517,37 +517,22 @@ def leads_list():
     if filter_type != "all":
         query = query.eq("status", filter_type)
     
-    # Replace the problematic search query section with this:
-    if search_query:
-        search_pattern = f"%{search_query}%"
-        query = query.filter('or', 
-            f"first_name.ilike.{search_pattern}",
-            f"last_name.ilike.{search_pattern}",
-            f"email.ilike.{search_pattern}",
-            f"brokerage.ilike.{search_pattern}"
-    )
-    
-    # Execute query
+    # Execute query first to get all results
     try:
         result = query.execute()
         leads = result.data or []
     except Exception as e:
         app.logger.error(f"Error fetching leads: {str(e)}")
-        # Fallback: fetch all and filter in Python
-        try:
-            all_leads = supabase.table("leads").select("*").eq("user_id", user_id).execute().data or []
-            if search_query:
-                search_lower = search_query.lower()
-                leads = [lead for lead in all_leads if 
-                        (lead.get("first_name", "").lower().find(search_lower) != -1 or
-                         lead.get("last_name", "").lower().find(search_lower) != -1 or
-                         lead.get("email", "").lower().find(search_lower) != -1 or
-                         lead.get("brokerage", "").lower().find(search_lower) != -1)]
-            else:
-                leads = all_leads
-        except Exception as e2:
-            app.logger.error(f"Error with fallback lead fetching: {str(e2)}")
-            leads = []
+        leads = []
+    
+    # Apply search filter in Python
+    if search_query:
+        search_lower = search_query.lower()
+        leads = [lead for lead in leads if 
+                (lead.get("first_name", "").lower().find(search_lower) != -1 or
+                 lead.get("last_name", "").lower().find(search_lower) != -1 or
+                 lead.get("email", "").lower().find(search_lower) != -1 or
+                 lead.get("brokerage", "").lower().find(search_lower) != -1)]
     
     # Calculate funnel counts
     counts = {
