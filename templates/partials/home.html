@@ -83,27 +83,27 @@
       <div class="action-buttons">
         <form method="POST" action="/disconnect_gmail">
           <input type="hidden" name="user_id" value="{{ user_id }}" />
-          <button type="submit" class="btn btn-danger">
+         <!-- <button type="submit" class="btn btn-danger">
             <i class="fas fa-unlink"></i> Disconnect Gmail
-          </button>
+          </button>      -->
         </form>
 
         {% if show_reconnect %}
         <form action="/connect_gmail" method="GET">
-          <button class="btn btn-primary">
+        <!--  <button class="btn btn-primary">
             <i class="fas fa-link"></i> Reconnect Gmail
-          </button>
+          </button>   -->
         </form>
         {% endif %}
 
-        <a href="#" class="btn btn-warning">
+        <a href="upgrade.html" class="btn btn-warning">
           <i class="fas fa-rocket"></i> Upgrade Plan
         </a>
       </div>
     </div>
 <!-------->
 <!-- Add this where you want the link -->
-<a href="/import_leads?user_id={{ user_id }}" class="btn">Import Leads</a>
+<!--<a href="/import_leads?user_id={{ user_id }}" class="btn">Import Leads</a>  -->
     <div class="action-card">
 <!-------->
     <div class="action-card">
