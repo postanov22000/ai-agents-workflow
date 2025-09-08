@@ -1846,78 +1846,149 @@ from openpyxl import load_workbook
 @check_rate_limit('leads')
 def import_leads():
     user_id = _require_user()
+    
     if request.method == "GET":
         return render_template("import_leads.html", user_id=user_id)
-    else:
+    
+    # Handle POST request
+    try:
+        # Debug logging
+        app.logger.info(f"Import leads request received: {request.files}")
+        
         if 'file' not in request.files:
+            app.logger.error("No file in request")
             return jsonify({"error": "No file uploaded"}), 400
         
         file = request.files['file']
         if file.filename == '':
+            app.logger.error("Empty filename")
             return jsonify({"error": "No file selected"}), 400
         
-        try:
-            # Check file extension
-            if file.filename.endswith('.csv'):
-                # Process CSV file
-                csv_file = TextIOWrapper(file, encoding='utf-8')
-                reader = csv.DictReader(csv_file)
-                rows = list(reader)
-            elif file.filename.endswith(('.xlsx', '.xls')):
-                # Process Excel file
-                wb = load_workbook(file)
-                ws = wb.active
-                
-                # Get headers
-                headers = [cell.value for cell in ws[1]]
-                
-                # Get data rows
-                rows = []
-                for row in ws.iter_rows(min_row=2, values_only=True):
-                    rows.append(dict(zip(headers, row)))
-            else:
-                return jsonify({"error": "Invalid file type. Please upload CSV or Excel."}), 400
+        # Check file extension
+        if file.filename.endswith('.csv'):
+            # Process CSV file
+            csv_file = TextIOWrapper(file, encoding='utf-8')
+            reader = csv.DictReader(csv_file)
+            rows = list(reader)
+            app.logger.info(f"CSV columns: {reader.fieldnames}")
+        elif file.filename.endswith(('.xlsx', '.xls')):
+            # Process Excel file
+            wb = load_workbook(file)
+            ws = wb.active
             
-            # Check required columns
-            required_columns = ['name', 'Last name', 'Recipient', 'city', 'brokerage', 'service', 'Email Sent']
-            if not all(col in rows[0].keys() for col in required_columns):
-                return jsonify({"error": "Missing required columns. Ensure file has: name, Last name, Recipient, city, brokerage, service, Email Sent"}), 400
+            # Get headers
+            headers = [cell.value for cell in ws[1] if cell.value]
             
-            # Process each row
-            for row in rows:
+            # Get data rows
+            rows = []
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                row_data = dict(zip(headers, row))
+                # Remove None values
+                rows.append({k: v for k, v in row_data.items() if v is not None})
+            
+            app.logger.info(f"Excel columns: {headers}")
+        else:
+            app.logger.error(f"Invalid file type: {file.filename}")
+            return jsonify({"error": "Invalid file type. Please upload CSV or Excel."}), 400
+        
+        # Check if we have any rows
+        if not rows:
+            app.logger.error("No data rows found in file")
+            return jsonify({"error": "No data found in file"}), 400
+        
+        # Check required columns (more flexible approach)
+        required_columns = ['name', 'Last name', 'Recipient', 'city', 'brokerage', 'service', 'Email Sent']
+        available_columns = list(rows[0].keys())
+        
+        app.logger.info(f"Available columns: {available_columns}")
+        app.logger.info(f"Required columns: {required_columns}")
+        
+        missing_columns = [col for col in required_columns if col not in available_columns]
+        if missing_columns:
+            app.logger.error(f"Missing columns: {missing_columns}")
+            return jsonify({
+                "error": f"Missing required columns: {', '.join(missing_columns)}. "
+                        f"Available columns: {', '.join(available_columns)}"
+            }), 400
+        
+        # Process each row
+        success_count = 0
+        error_count = 0
+        imported_leads = []
+        
+        for i, row in enumerate(rows):
+            try:
                 # Parse email_sent date
                 email_sent_str = row.get('Email Sent', '')
+                email_sent = None
+                
                 try:
                     if email_sent_str:
-                        email_sent = datetime.strptime(str(email_sent_str), '%Y-%m-%d %H:%M:%S')
+                        # Try different date formats
+                        if isinstance(email_sent_str, str):
+                            try:
+                                email_sent = datetime.strptime(email_sent_str, '%Y-%m-%d %H:%M:%S')
+                            except ValueError:
+                                try:
+                                    email_sent = datetime.strptime(email_sent_str, '%Y-%m-%d')
+                                except ValueError:
+                                    # Try to parse Excel serial date numbers
+                                    try:
+                                        if isinstance(email_sent_str, (int, float)):
+                                            email_sent = datetime(1899, 12, 30) + timedelta(days=email_sent_str)
+                                        else:
+                                            email_sent = datetime.utcnow()
+                                    except:
+                                        email_sent = datetime.utcnow()
+                        else:
+                            # Assume it's already a datetime object
+                            email_sent = email_sent_str
                     else:
                         email_sent = datetime.utcnow()
-                except ValueError:
+                except Exception as e:
+                    app.logger.warning(f"Error parsing date {email_sent_str}: {e}")
                     email_sent = datetime.utcnow()
                 
+                # Prepare lead data
                 lead_data = {
                     'user_id': user_id,
-                    'first_name': row.get('name'),
-                    'last_name': row.get('Last name'),
-                    'email': row.get('Recipient'),
-                    'city': row.get('city'),
-                    'brokerage': row.get('brokerage'),
-                    'service': row.get('service'),
-                    'email_sent': email_sent.isoformat()
+                    'first_name': str(row.get('name', '')).strip(),
+                    'last_name': str(row.get('Last name', '')).strip(),
+                    'email': str(row.get('Recipient', '')).strip().lower(),
+                    'city': str(row.get('city', '')).strip(),
+                    'brokerage': str(row.get('brokerage', '')).strip(),
+                    'service': str(row.get('service', '')).strip(),
+                    'status': 'new',
+                    'email_sent': email_sent.isoformat() if hasattr(email_sent, 'isoformat') else email_sent,
+                    'created_at': datetime.utcnow().isoformat()
                 }
+                
+                # Validate required fields
+                if not lead_data['email'] or '@' not in lead_data['email']:
+                    app.logger.warning(f"Row {i+1}: Invalid email address '{lead_data['email']}'")
+                    error_count += 1
+                    continue
+                
+                if not lead_data['first_name'] and not lead_data['last_name']:
+                    app.logger.warning(f"Row {i+1}: Missing both first and last name")
+                    error_count += 1
+                    continue
                 
                 # Insert lead
                 response = supabase.table('leads').insert(lead_data).execute()
+                
                 if response.data:
+                    success_count += 1
                     lead_id = response.data[0]['id']
+                    imported_leads.append(lead_id)
                     
-                    # Send immediate follow-up (step 0)
+                    # Schedule follow-ups
                     try:
-                        # Generate immediate follow-up content and get it directly
-                        follow_up_content = generate_follow_up_content(lead_id, 0)  # 0 for immediate follow-up
+                        # Send immediate follow-up (step 0)
+                        follow_up_content = generate_follow_up_content(lead_id, 0)
                         
                         if follow_up_content:
-                            # Send the email immediately
+                            # Get lead details
                             lead = supabase.table('leads').select('*').eq('id', lead_id).single().execute().data
                             
                             # Get user's email credentials
@@ -1937,21 +2008,21 @@ def import_leads():
                                     smtp_host=smtp_host
                                 )
                                 
-                                # Mark as sent
-                                supabase.table('lead_follow_ups') \
-                                    .update({
-                                        'status': 'sent',
-                                        'sent_at': datetime.utcnow().isoformat()
-                                    }) \
-                                    .eq('lead_id', lead_id) \
-                                    .eq('sequence_step', 0) \
-                                    .execute()
+                                # Create follow-up record
+                                follow_up_data = {
+                                    'lead_id': lead_id,
+                                    'sequence_step': 0,
+                                    'generated_content': follow_up_content,
+                                    'status': 'sent',
+                                    'sent_at': datetime.utcnow().isoformat()
+                                }
+                                supabase.table('lead_follow_ups').insert(follow_up_data).execute()
                     
                     except Exception as e:
-                        app.logger.error(f"Error sending immediate follow-up: {str(e)}")
+                        app.logger.error(f"Error sending immediate follow-up for lead {lead_id}: {str(e)}")
                     
                     # Schedule the rest of the follow-up sequence
-                    for step, seq in enumerate(FOLLOW_UP_SEQUENCE[1:], start=1):  # Start from 1 to skip immediate
+                    for step, seq in enumerate(FOLLOW_UP_SEQUENCE[1:], start=1):
                         scheduled_at = email_sent + timedelta(days=seq['delay_days'])
                         follow_up_data = {
                             'lead_id': lead_id,
@@ -1960,13 +2031,27 @@ def import_leads():
                             'status': 'pending'
                         }
                         supabase.table('lead_follow_ups').insert(follow_up_data).execute()
+                
+                else:
+                    error_count += 1
+                    app.logger.error(f"Failed to insert lead: {response}")
             
-            return jsonify({"message": "Leads imported successfully"}), 200
+            except Exception as e:
+                error_count += 1
+                app.logger.error(f"Error processing row {i+1}: {e}", exc_info=True)
         
-        except Exception as e:
-            app.logger.error(f"Error importing leads: {str(e)}")
-            return jsonify({"error": "Failed to import leads. Please check the file format."}), 500
-
+        # Log summary
+        app.logger.info(f"Import completed: {success_count} succeeded, {error_count} failed")
+        
+        return jsonify({
+            "message": f"Leads imported successfully. {success_count} succeeded, {error_count} failed.",
+            "imported_count": success_count,
+            "failed_count": error_count
+        }), 200
+    
+    except Exception as e:
+        app.logger.error(f"Error importing leads: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Failed to import leads: {str(e)}"}), 500
 #------------------------------------------------------------------------------------------------------------------
 def generate_follow_up_content(lead_id, sequence_step):
     """Generate follow-up content using AI with context of previous communications"""
