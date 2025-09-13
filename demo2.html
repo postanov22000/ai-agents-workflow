@@ -536,7 +536,7 @@
           const email = document.getElementById('demo-email')?.value; // You'll need to add this field
           if (email) {
            try {
-                await fetch('/api/record-ai-usage', {
+                await fetch('https://website-1-f6l8.onrender.com/api/record-ai-usage', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ email: email })
