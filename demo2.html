@@ -438,10 +438,15 @@
 <!-- Include Supabase JS -->
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script>
+    const initializeApp = function() {
     // Supabase Configuration
     const supabaseUrl = 'https://skxzfkudduqrubtgtodp.supabase.co';
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODAwNzMsImV4cCI6MjA2MTE1NjA3M30.Wj3V5-swysAz8xAbA4lKmo-NNu_mv1UW_X4BgFNq0ag';
-    const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+    window.supabase = supabase.createClient(supabaseUrl, supabaseKey);
+    
+    // Now initialize the rest of the application
+    initApplication();
+  };
     
     // Initialize variables
     let demoCount = 3;
