@@ -70,6 +70,10 @@
     .demo-input {width:100%;min-height:120px;background:rgba(10,25,47,0.7);border:1px solid rgba(100,255,218,0.3);border-radius:8px;padding:1.5rem;color:#fff;margin-bottom:1.5rem;font-size:1rem;resize:vertical;}
     .demo-input:focus {outline:none;border-color:#64ffda;box-shadow:0 0 0 3px rgba(100,255,218,.2);}
     
+    /* Trial Counter */
+    .trial-counter{background:rgba(100,255,218,0.1);border-radius:50px;padding:.8rem 1.5rem;display:inline-flex;align-items:center;gap:.8rem;margin-bottom:1.5rem;font-size:1rem;border:1px solid rgba(100,255,218,0.2);}
+    .counter-number{font-weight:700;color:#64ffda;font-size:1.2rem;}
+    
     /* Response Container */
     .response-container {display:none;max-width:800px;margin:2rem auto 0;}
     .response-header {display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;}
@@ -232,6 +236,10 @@
         <div class="demo-title">Paste a Lead Message</div>
         <div style="color: #64ffda; font-size: 0.9rem;">Try your own or use our example</div>
       </div>
+      
+      <!-- Added trial counter -->
+      <div class="trial-counter"><i class="fas fa-gift"></i> Free uses remaining: <span class="counter-number" id="ai-counter">3</span></div>
+      
       <textarea class="demo-input" id="demo-input" placeholder="Paste a lead message here...">Hi, I saw your sign at 123 Elm St. Is the open house still this Sunday? What time? - Jennifer</textarea>
       <button class="cta-button" style="width: 100%;" id="generate-btn">
         <i class="fas fa-robot"></i> Generate AI Response
@@ -396,7 +404,7 @@
     const initializeApp = function() {
       // Supabase Configuration
       const supabaseUrl = 'https://skxzfkudduqrubtgtodp.supabase.co';
-      const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODAwNzMsImV4cCI6MjA2MTE1NjA3M30.Wj3V5-swysAz8xAbA4lKmo-NNu_mv1UW_X4BgFNq0ag';
+      const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhbmFzZSIsInJlZiI6InNreHpma3VkZHVxcnVidGd0b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODAwNzMsImV4cCI6MjA2MTE1NjA3M30.Wj3V5-swysAz8xAbA4lKmo-NNu_mv1UW_X4BgFNq0ag';
       window.supabase = supabase.createClient(supabaseUrl, supabaseKey);
       
       // Now initialize the rest of the application
@@ -405,8 +413,58 @@
 
     // Main application initialization
     const initApplication = function() {
+      // Cookie-based rate limiting functions (from demooff.html)
+      function setCookie(name, value, days) {
+        let expires = "";
+        if (days) {
+          const date = new Date();
+          date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+          expires = "; expires=" + date.toUTCString();
+        }
+        document.cookie = name + "=" + (value || "") + expires + "; path=/; SameSite=Lax";
+      }
+
+      function getCookie(name) {
+        const nameEQ = name + "=";
+        const ca = document.cookie.split(';');
+        for(let i = 0; i < ca.length; i++) {
+          let c = ca[i];
+          while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+          if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+        }
+        return null;
+      }
+
+      // Initialize rate limiting for AI responses
+      let aiCount;
+
+      function initRateLimiting() {
+        const trialsCookie = getCookie('free_trials');
+        
+        if (trialsCookie) {
+          const trials = JSON.parse(trialsCookie);
+          aiCount = trials.ai;
+        } else {
+          // First visit - set initial values
+          aiCount = 3;
+          updateTrialsCookie();
+        }
+        
+        // Update UI
+        document.getElementById('ai-counter').textContent = aiCount;
+      }
+
+      function updateTrialsCookie() {
+        const trials = {
+          ai: aiCount,
+        };
+        setCookie('free_trials', JSON.stringify(trials), 7); // Expires in 7 days
+      }
+
+      // Initialize rate limiting on page load
+      initRateLimiting();
+
       // Initialize variables
-      let demoCount = 3;
       let slotsLeft = 5;
       
       // Update urgency counter dynamically
@@ -439,12 +497,18 @@
           return;
         }
         
-        // Check if user has demo tries left
-        if (demoCount <= 0) {
-          alert('You\'ve used all your demo responses. Sign up for a free trial to continue.');
+        // Check if user has demo tries left using cookie-based rate limiting
+        if (aiCount <= 0) {
+          alert('No more free AI responses. Please sign up for a full account.');
           responseContainer.style.display = 'none';
+          document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
           return;
         }
+        
+        // Decrement count and update cookie
+        aiCount--;
+        updateTrialsCookie();
+        document.getElementById('ai-counter').textContent = aiCount;
         
         // Show loading state
         generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
@@ -469,9 +533,6 @@
           const data = await response.json();
           aiResponse.textContent = data.reply || data;
           
-          // Decrement demo count
-          demoCount--;
-          
         } catch (error) {
           console.error('Error generating response:', error);
           // Fallback response if API fails
@@ -483,6 +544,14 @@
           
           // Scroll to response
           responseContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // If out of tries, show message after a delay
+        if (aiCount === 0) {
+          setTimeout(() => {
+            alert("You've used your free AI responses! Sign up now for unlimited access.");
+            document.querySelector('#trial').scrollIntoView({ behavior: 'smooth' });
+          }, 1000);
         }
       }
       
@@ -549,6 +618,11 @@
           
           // Reset form
           this.reset();
+          
+          // Reset trial counters
+          aiCount = 3;
+          updateTrialsCookie();
+          document.getElementById('ai-counter').textContent = '3';
           
           // Redirect after successful signup (optional)
            window.location.href = '/signin?user_id=' + data.user.id;
@@ -618,5 +692,20 @@
     // Start the application initialization
     initializeApp();
   </script>
+  <script>
+  function copyResponse() {
+    const responseEl = document.getElementById("ai-response");
+    if (!responseEl) return;
+
+    const text = responseEl.innerText;
+
+    navigator.clipboard.writeText(text).then(() => {
+      alert("Response copied to clipboard!");
+    }).catch(err => {
+      console.error("Failed to copy: ", err);
+    });
+  }
+</script>
+
 </body>
 </html>
