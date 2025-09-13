@@ -533,6 +533,19 @@
           const data = await response.json();
           aiResponse.textContent = data.reply || data;
           
+          const email = document.getElementById('demo-email')?.value; // You'll need to add this field
+          if (email) {
+           try {
+                await fetch('/api/record-ai-usage', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email: email })
+                               });
+         } catch (error) {
+                 console.error('Error recording AI usage:', error);
+                  }
+                }
+          
         } catch (error) {
           console.error('Error generating response:', error);
           // Fallback response if API fails
