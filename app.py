@@ -83,6 +83,11 @@ def check_rate_limit(resource):
 def signin():
     user_id = request.args.get("user_id", "")
     return render_template("signin.html", user_id=user_id)
+    
+@app.route("/signin2")
+def signin():
+    user_id = request.args.get("user_id", "")
+    return render_template("signin2.html", user_id=user_id)
 #--------------------------------------------------------------
 app.register_blueprint(autopilot_bp, url_prefix="/autopilot")
 app.register_blueprint(public_bp)
