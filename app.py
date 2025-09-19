@@ -1154,6 +1154,13 @@ def oauth2callback():
             app.logger.error("OAuth2 callback missing state parameter")
             return "<h1>Authentication Failed</h1><p>Missing state parameter</p>", 400
         
+        # Validate user_id is a proper UUID
+        try:
+            uuid.UUID(user_id)
+        except ValueError:
+            app.logger.error(f"Invalid user_id format: {user_id}")
+            return "<h1>Authentication Failed</h1><p>Invalid user ID format</p>", 400
+
         flow = Flow.from_client_config(
             {
                 "web": {
@@ -1166,9 +1173,7 @@ def oauth2callback():
             },
             scopes=[
                 "https://www.googleapis.com/auth/gmail.send",
-                "https://www.googleapis.com/auth/gmail.readonly",
                 "https://www.googleapis.com/auth/userinfo.email",
-                "https://www.googleapis.com/auth/gmail.compose",
                 "openid"
             ],
             state=user_id
