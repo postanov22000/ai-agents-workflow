@@ -1147,6 +1147,14 @@ def connect_gmail():
 
 import uuid
 
+def is_valid_uuid(val: str) -> bool:
+    try:
+        uuid.UUID(str(val))
+        return True
+    except ValueError:
+        return False
+
+
 @app.route("/oauth2callback")
 def oauth2callback():
     """Handles OAuth2 callback from Google"""
@@ -1156,13 +1164,17 @@ def oauth2callback():
         if not user_id:
             app.logger.error("OAuth2 callback missing state parameter")
             return "<h1>Authentication Failed</h1><p>Missing state parameter</p>", 400
-        
-        # Check if user exists in our database, regardless of UUID format
-        try:
-            user_check = supabase.table("profiles").select("id").eq("id", user_id).execute()
-            if not user_check.data:
-                app.logger.error(f"User not found: {user_id}")
-                return "<h1>Authentication Failed</h1><p>User not found</p>", 400
+
+        # ✅ Validate UUID format before querying Supabase
+        if not is_valid_uuid(user_id):
+            app.logger.error(f"Invalid user_id format in state: {user_id}")
+            return "<h1>Authentication Failed</h1><p>Invalid user ID format</p>", 400
+
+        # Now it's safe to query Supabase (id is a UUID)
+        user_check = supabase.table("profiles").select("id").eq("id", user_id).execute()
+        if not user_check.data:
+            app.logger.error(f"User not found: {user_id}")
+            return "<h1>Authentication Failed</h1><p>User not found</p>", 400
         except Exception as e:
             app.logger.error(f"Error checking user: {str(e)}")
             return "<h1>Authentication Failed</h1><p>Error validating user</p>", 500
