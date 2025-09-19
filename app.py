@@ -1176,7 +1176,7 @@ def oauth2callback():
             app.logger.error(f"User not found: {user_id}")
             return "<h1>Authentication Failed</h1><p>User not found</p>", 400
             
-        except Exception as e:
+    except Exception as e:
             app.logger.error(f"Error checking user: {str(e)}")
             return "<h1>Authentication Failed</h1><p>Error validating user</p>", 500
         
