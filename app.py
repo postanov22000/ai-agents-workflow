@@ -1144,6 +1144,9 @@ def connect_gmail():
     )
     return redirect(authorization_url)
 
+
+import uuid
+
 @app.route("/oauth2callback")
 def oauth2callback():
     """Handles OAuth2 callback from Google"""
