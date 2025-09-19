@@ -1157,13 +1157,16 @@ def oauth2callback():
             app.logger.error("OAuth2 callback missing state parameter")
             return "<h1>Authentication Failed</h1><p>Missing state parameter</p>", 400
         
-        # Validate user_id is a proper UUID
+        # Check if user exists in our database, regardless of UUID format
         try:
-            uuid.UUID(user_id)
-        except ValueError:
-            app.logger.error(f"Invalid user_id format: {user_id}")
-            return "<h1>Authentication Failed</h1><p>Invalid user ID format</p>", 400
-
+            user_check = supabase.table("profiles").select("id").eq("id", user_id).execute()
+            if not user_check.data:
+                app.logger.error(f"User not found: {user_id}")
+                return "<h1>Authentication Failed</h1><p>User not found</p>", 400
+        except Exception as e:
+            app.logger.error(f"Error checking user: {str(e)}")
+            return "<h1>Authentication Failed</h1><p>Error validating user</p>", 500
+        
         flow = Flow.from_client_config(
             {
                 "web": {
@@ -1176,7 +1179,9 @@ def oauth2callback():
             },
             scopes=[
                 "https://www.googleapis.com/auth/gmail.send",
+                "https://www.googleapis.com/auth/gmail.readonly",
                 "https://www.googleapis.com/auth/userinfo.email",
+                "https://www.googleapis.com/auth/gmail.compose",
                 "openid"
             ],
             state=user_id
@@ -1195,9 +1200,9 @@ def oauth2callback():
         if not email:
             raise ValueError("No email found in Google ID token")
 
-        # Upsert gmail tokens
+        # Upsert gmail tokens - handle potential UUID format issues
         creds_payload = {
-            "user_id": user_id,
+            "user_id": user_id,  # Use the original user_id regardless of format
             "user_email": email,
             "credentials": {
                 "token": credentials.token,
@@ -1208,7 +1213,20 @@ def oauth2callback():
                 "scopes": credentials.scopes
             }
         }
-        supabase.table("gmail_tokens").upsert(creds_payload).execute()
+        
+        # Try to upsert, but handle potential database errors
+        try:
+            supabase.table("gmail_tokens").upsert(creds_payload).execute()
+        except Exception as db_error:
+            app.logger.error(f"Database error during token upsert: {str(db_error)}")
+            # Check if it's a UUID format error and try alternative approach
+            if "uuid" in str(db_error).lower() and "format" in str(db_error).lower():
+                # Create a mapping table or alternative storage for non-UUID user_ids
+                app.logger.warning(f"Non-UUID user_id detected: {user_id}")
+                # You might need to implement an alternative storage method here
+                return "<h1>Authentication Failed</h1><p>User ID format issue. Please contact support.</p>", 400
+            else:
+                raise db_error
 
         # Update user profile
         full_name = id_info.get("name") or email.split("@")[0]
