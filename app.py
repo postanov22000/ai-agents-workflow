@@ -1170,13 +1170,16 @@ def oauth2callback():
             app.logger.error("OAuth2 callback missing state parameter")
             return "<h1>Authentication Failed</h1><p>Missing state parameter</p>", 400
 
-        # Check if user exists regardless of UUID format
+        # ✅ Validate UUID format before querying Supabase
+        if not is_valid_uuid(user_id):
+            app.logger.error(f"Invalid user_id format in state: {user_id}")
+            return "<h1>Authentication Failed</h1><p>Invalid user ID format</p>", 400
+
+        # Check if user exists in Supabase
         try:
             user_check = supabase.table("profiles").select("id").eq("id", user_id).execute()
             if not user_check.data:
-                # If not found by ID, try to find by email or other identifier
-                app.logger.warning(f"User not found by ID: {user_id}, trying alternative lookup...")
-                # Add alternative lookup logic here if needed
+                app.logger.error(f"User not found: {user_id}")
                 return "<h1>Authentication Failed</h1><p>User not found</p>", 400
         except Exception as e:
             app.logger.error(f"Error checking user: {str(e)}")
