@@ -1123,6 +1123,11 @@ def connect_gmail():
     """
     Initiates Gmail OAuth flow.
     """
+    user_id = request.args.get("user_id")
+    if not user_id or not is_valid_uuid(user_id):
+        app.logger.error(f"Missing or invalid user_id in connect_gmail: {user_id}")
+        return "Missing or invalid user ID", 400
+
     flow = Flow.from_client_config(
         {
             "web": {
@@ -1142,13 +1147,17 @@ def connect_gmail():
         ]
     )
     flow.redirect_uri = os.environ["REDIRECT_URI"]
+
+    # ✅ now user_id is safely defined
     authorization_url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
-        state=user_id   # ✅ pass UUID here
+        state=user_id
     )
+
     return redirect(authorization_url)
+
 
 
 import uuid
