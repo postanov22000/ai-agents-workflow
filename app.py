@@ -1146,6 +1146,7 @@ def connect_gmail():
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent"
+        state=user_id   # ✅ pass UUID here
     )
     return redirect(authorization_url)
 
