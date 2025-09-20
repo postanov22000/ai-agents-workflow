@@ -79,10 +79,7 @@ def check_rate_limit(resource):
     return decorator
 
 #--------------------------------------------------------------
-@app.route("/signin")
-def signin():
-    user_id = request.args.get("user_id", "")
-    return render_template("signin.html", user_id=user_id)
+
     
 @app.route("/signin2")
 def signin():
