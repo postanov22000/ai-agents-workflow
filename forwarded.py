@@ -24,6 +24,7 @@ def check_dedicated_gmail_account():
     processing_active = True
     
     try:
+        with app.app_context():
         # Get dedicated account credentials from environment
         dedicated_email = os.environ.get("DEDICATED_GMAIL_EMAIL")
         dedicated_password = os.environ.get("DEDICATED_GMAIL_PASSWORD")
