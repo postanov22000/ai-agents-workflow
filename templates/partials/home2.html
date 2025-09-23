@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReplyZe AI - Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Base Dashboard Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+
+        body {
+            background: #0a192f;
+            color: #ffffff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .main-content {
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 2rem;
+            color: #64ffda;
+        }
+
+        h1 span {
+            color: #ffffff;
+        }
+
+        /* Metrics Grid */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .metric-card {
+            background: rgba(16, 36, 64, 0.4);
+            border-radius: 10px;
+            padding: 1.5rem;
+            border: 1px solid rgba(100, 255, 218, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(10, 25, 47, 0.4);
+        }
+
+        .metric-icon {
+            font-size: 2rem;
+            color: #64ffda;
+            margin-bottom: 1rem;
+        }
+
+        .metric-card h3 {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            color: #8892b0;
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            color: #64ffda;
+        }
+
+        .progress-container {
+            margin-top: 1rem;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: rgba(100, 255, 218, 0.2);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #64ffda;
+            border-radius: 4px;
+            transition: width 0.8s ease;
+        }
+
+        .trend {
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .trend.up {
+            color: #64ffda;
+        }
+
+        .trend.down {
+            color: #f72585;
+        }
+
+        .status.active {
+            color: #64ffda;
+        }
+
+        .status.inactive {
+            color: #f72585;
+        }
+
+        /* Action Grid */
+        .action-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .action-card {
+            background: rgba(16, 36, 64, 0.4);
+            border-radius: 10px;
+            padding: 1.5rem;
+            border: 1px solid rgba(100, 255, 218, 0.2);
+        }
+
+        .action-card h3 {
+            margin-bottom: 1.5rem;
+            color: #64ffda;
+        }
+
+        .action-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.8rem 1.5rem;
+            border-radius: 5px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #64ffda 0%, #52d1b8 100%);
+            color: #0a192f;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(100, 255, 218, 0.3);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f8961e 0%, #f3722c 100%);
+            color: white;
+        }
+
+        .btn-warning:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(248, 150, 30, 0.3);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #f72585 0%, #b5179e 100%);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(247, 37, 133, 0.3);
+        }
+
+        /* Modal Overlay */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        /* Modal Content */
+        .modal-content {
+            background: #0a192f;
+            border-radius: 15px;
+            width: 100%;
+            max-width: 900px;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(100, 255, 218, 0.2);
+        }
+
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid rgba(100, 255, 218, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            background: #0a192f;
+            z-index: 10;
+            border-radius: 15px 15px 0 0;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #64ffda;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #8892b0;
+            transition: color 0.3s;
+        }
+
+        .close-modal:hover {
+            color: #ff4d4d;
+        }
+
+        .modal-body {
+            padding: 0;
+        }
+
+        /* Popup-specific styles */
+        .popup-hero {
+            padding: 2rem 2rem 1rem;
+            text-align: center;
+            background: linear-gradient(-45deg, #0a192f, #112240, #1a2f4b, #233554);
+            background-size: 400% 400%;
+            animation: gradientBG 25s ease infinite;
+            color: #ffffff;
+        }
+
+        .popup-hero h1 {
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+            color: #64ffda;
+        }
+
+        .popup-hero p {
+            color: #8892b0;
+            margin-bottom: 1.5rem;
+        }
+
+        .popup-connection-steps {
+            display: flex;
+            justify-content: space-between;
+            padding: 1.5rem 2rem;
+            position: relative;
+            background: #0a192f;
+            color: white;
+        }
+
+        .popup-step {
+            text-align: center;
+            width: 30%;
+            position: relative;
+            z-index: 2;
+        }
+
+        .popup-step-number {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(100, 255, 218, 0.1);
+            border: 2px solid #64ffda;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin: 0 auto 1rem;
+            color: #64ffda;
+        }
+
+        .popup-step-title {
+            color: #64ffda;
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+        }
+
+        .popup-step-description {
+            color: #8892b0;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+
+        .popup-connection-line {
+            position: absolute;
+            top: 40px;
+            left: 15%;
+            width: 70%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #64ffda, transparent);
+            z-index: 1;
+        }
+
+        .popup-setup-container {
+            padding: 1.5rem 2rem;
+        }
+
+        .popup-provider-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            overflow-x: auto;
+            padding-bottom: 0.5rem;
+        }
+
+        .popup-provider-tab {
+            padding: 0.8rem 1.2rem;
+            background: rgba(10, 25, 47, 0.6);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(100, 255, 218, 0.2);
+            white-space: nowrap;
+            font-size: 0.9rem;
+            color: #8892b0;
+        }
+
+        .popup-provider-tab.active {
+            background: rgba(100, 255, 218, 0.1);
+            border-color: #64ffda;
+            color: #64ffda;
+            font-weight: bold;
+        }
+
+        .popup-instructions {
+            background: rgba(16, 36, 64, 0.4);
+            border-radius: 10px;
+            padding: 1.5rem;
+            border: 1px solid rgba(100, 255, 218, 0.2);
+        }
+
+        .popup-instruction-step {
+            margin-bottom: 1.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid rgba(100, 255, 218, 0.1);
+        }
+
+        .popup-instruction-step:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .popup-instruction-title {
+            color: #64ffda;
+            margin-bottom: 0.8rem;
+            font-size: 1.1rem;
+        }
+
+        .popup-instruction-content {
+            color: #8892b0;
+            line-height: 1.5;
+            font-size: 0.9rem;
+        }
+
+        .popup-instruction-content ol {
+            padding-left: 1.5rem;
+            margin: 0.8rem 0;
+        }
+
+        .popup-instruction-content li {
+            margin-bottom: 0.5rem;
+        }
+
+        .popup-highlight {
+            background: rgba(100, 255, 218, 0.1);
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            color: #64ffda;
+            font-weight: bold;
+        }
+
+        .popup-footer {
+            padding: 1rem 2rem;
+            text-align: center;
+            border-top: 1px solid rgba(100, 255, 218, 0.1);
+            background: rgba(10, 25, 47, 0.8);
+            border-radius: 0 0 15px 15px;
+        }
+
+        .popup-footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            margin-bottom: 0.8rem;
+            flex-wrap: wrap;
+        }
+
+        .popup-footer-link {
+            color: #64ffda;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .popup-footer-link:hover {
+            text-decoration: underline;
+        }
+
+        .popup-copyright {
+            color: #8892b0;
+            font-size: 0.8rem;
+        }
+
+        /* Animations */
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .modal-content {
+            animation: modalFadeIn 0.3s ease;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .main-content {
+                padding: 1rem;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .action-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .popup-connection-steps {
+                flex-direction: column;
+                align-items: center;
+                gap: 1.5rem;
+            }
+            
+            .popup-step {
+                width: 100%;
+                max-width: 250px;
+            }
+            
+            .popup-connection-line {
+                display: none;
+            }
+            
+            .popup-provider-tabs {
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-content">
+        <h1>Welcome back, <span>{{ name }}</span> 👋</h1>
+
+        <!-- Email Connection Status Card -->
+        <div class="metric-card">
+            <i class="fas fa-envelope metric-icon"></i>
+            <h3>Email Connection</h3>
+            <div class="metric-value" id="email-status">
+                <span id="status-text">Checking...</span>
+                <div id="status-icon"></div>
+            </div>
+            <div class="progress-container">
+                <div id="reverify-btn" style="display: none; margin-top: 10px;">
+                    <button class="btn btn-warning" onclick="verifyEmailConnection()">
+                        <i class="fas fa-sync-alt"></i> Re-verify
+                    </button>
+                </div>
+                <div style="margin-top: 10px;">
+                    <button class="btn btn-primary" id="openModalBtn">
+                        <i class="fas fa-cog"></i> Setup Forwarding
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metrics Grid -->
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <i class="fas fa-paper-plane metric-icon"></i>
+                <h3>Emails Sent</h3>
+                <div class="metric-value" id="emails-sent">{{ emails_sent }}</div>
+                <div class="progress-container">
+                    <div class="progress-bar"><div class="progress-fill" id="email-progress"></div></div>
+                    <div class="trend up"><i class="fas fa-arrow-up"></i>
+                        <span>{{ 20 - emails_sent }} remaining</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <i class="fas fa-clock metric-icon"></i>
+                <h3>Time Saved</h3>
+                <div class="metric-value" id="time-saved">{{ time_saved }} min</div>
+                <div class="trend up"><i class="fas fa-arrow-up"></i>
+                    <span>{{ (time_saved//60)|default(0) }} hours saved</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <i class="fas fa-brain metric-icon"></i>
+                <h3>AI Responder</h3>
+                <div class="metric-value">
+                    {% if ai_enabled %}
+                        <span class="status active"><i class="fas fa-check-circle"></i> Active</span>
+                    {% else %}
+                        <span class="status inactive"><i class="fas fa-exclamation-circle"></i> Inactive</span>
+                    {% endif %}
+                </div>
+                <div class="trend {% if ai_enabled %}up{% else %}down{% endif %}">
+                    {% if ai_enabled %}
+                        <i class="fas fa-check-circle"></i> All systems operational
+                    {% else %}
+                        <i class="fas fa-exclamation-circle"></i> Service paused
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Kits Generated (replaces Monthly Revenue) -->
+            <div class="metric-card">
+                <i class="fas fa-box metric-icon"></i>
+                <h3>Kits Generated</h3>
+                <div class="metric-value" id="kits-generated">
+                    {{ kits_generated }}
+                </div>
+                <div class="trend up">
+                    <i class="fas fa-check-circle"></i>
+                    <span>{{ kits_generated }} this session</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Section -->
+        <div class="action-grid">
+            <div class="action-card">
+                <h3>Account Actions</h3>
+                <div class="action-buttons">
+                    <form method="POST" action="/disconnect_gmail">
+                        <input type="hidden" name="user_id" value="{{ user_id }}" />
+                        <!-- <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-unlink"></i> Disconnect Gmail
+                        </button> -->
+                    </form>
+
+                    {% if show_reconnect %}
+                    <form action="/connect_gmail" method="GET">
+                        <!-- <button class="btn btn-primary">
+                            <i class="fas fa-link"></i> Reconnect Gmail
+                        </button> -->
+                    </form>
+                    {% endif %}
+
+                    <a href="upgrade.html" class="btn btn-warning">
+                        <i class="fas fa-rocket"></i> Upgrade Plan
+                    </a>
+                </div>
+            </div>
+
+            <div class="action-card">
+                <h3>Outreach Engine</h3>
+                <a href="/import_leads?user_id={{ user_id }}" class="btn btn-primary">
+                    <i class="fas fa-file-contract"></i> Import leads
+                </a>
+                <small style="color:#ccc; display:block; margin-top:8px;">
+                    Click to import your leads for outreach.
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Popup -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Email Forwarding Setup</h2>
+                <button class="close-modal" id="closeModalBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Popup Content -->
+                <section class="popup-hero">
+                    <h1>Forward Emails to AI-Powered Replies</h1>
+                    <p>Set up email forwarding to replyzeai@gmail.com and let our AI handle your email responses efficiently and professionally.</p>
+                </section>
+                
+                <section class="popup-connection-steps">
+                    <div class="popup-connection-line"></div>
+                    <div class="popup-step">
+                        <div class="popup-step-number">1</div>
+                        <h3 class="popup-step-title">Set Up Forwarding</h3>
+                        <p class="popup-step-description">Configure your email client to forward messages to replyzeai@gmail.com</p>
+                    </div>
+                    <div class="popup-step">
+                        <div class="popup-step-number">2</div>
+                        <h3 class="popup-step-title">AI Processes Emails</h3>
+                        <p class="popup-step-description">Our AI analyzes and crafts intelligent responses to your forwarded emails</p>
+                    </div>
+                    <div class="popup-step">
+                        <div class="popup-step-number">3</div>
+                        <h3 class="popup-step-title">Receive Smart Replies</h3>
+                        <p class="popup-step-description">Get AI-generated responses that you can review and send instantly</p>
+                    </div>
+                </section>
+                
+                <div class="popup-setup-container">
+                    <h2 style="text-align: center; margin-bottom: 1.5rem; color: #64ffda;">How to Set Up Email Forwarding</h2>
+                    
+                    <div class="popup-provider-tabs">
+                        <div class="popup-provider-tab active" data-provider="gmail">Gmail</div>
+                        <div class="popup-provider-tab" data-provider="outlook">Outlook</div>
+                        <div class="popup-provider-tab" data-provider="apple">Apple Mail</div>
+                        <div class="popup-provider-tab" data-provider="yahoo">Yahoo Mail</div>
+                    </div>
+                    
+                    <div class="popup-instructions">
+                        <!-- Gmail Instructions -->
+                        <div class="popup-instruction-content" id="gmail-instructions">
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 1: Open Gmail Settings</h3>
+                                <p>Click the gear icon in the top right corner of Gmail and select <span class="popup-highlight">"See all settings"</span>.</p>
+                            </div>
+                            
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 2: Go to Forwarding Tab</h3>
+                                <p>Click on the <span class="popup-highlight">"Forwarding and POP/IMAP"</span> tab in the settings menu.</p>
+                            </div>
+                            
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 3: Add Forwarding Address</h3>
+                                <p>Click <span class="popup-highlight">"Add a forwarding address"</span> and enter: <span class="popup-highlight">replyzeai@gmail.com</span></p>
+                            </div>
+                            
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 4: Verify Forwarding</h3>
+                                <p>Check your email for a verification code from Gmail and enter it to confirm the forwarding address.</p>
+                            </div>
+                            
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 5: Enable Forwarding</h3>
+                                <p>Select <span class="popup-highlight">"Forward a copy of incoming mail to"</span> and choose <span class="popup-highlight">replyzeai@gmail.com</span> from the dropdown menu.</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Outlook Instructions (initially hidden) -->
+                        <div class="popup-instruction-content" id="outlook-instructions" style="display: none;">
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 1: Open Outlook Settings</h3>
+                                <p>Click the gear icon in the top right corner to open Settings.</p>
+                            </div>
+                            
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 2: Navigate to Mail Forwarding</h3>
+                                <p>Type <span class="popup-highlight">"forwarding"</span> in the search box and select <span class="popup-highlight">"Forwarding"</span> from the results.</p>
+                            </div>
+                            
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 3: Enable Forwarding</h3>
+                                <p>Check <span class="popup-highlight">"Enable forwarding"</span> and enter <span class="popup-highlight">replyzeai@gmail.com</span> as the forwarding address.</p>
+                            </div>
+                            
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 4: Save Changes</h3>
+                                <p>Click <span class="popup-highlight">"Save"</span> at the top of the page to apply your changes.</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Apple Mail Instructions (initially hidden) -->
+                        <div class="popup-instruction-content" id="apple-instructions" style="display: none;">
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 1: Open Apple Mail Preferences</h3>
+                                <p>Click <span class="popup-highlight">"Mail"</span> in the menu bar and select <span class="popup-highlight">"Preferences"</span>.</p>
+                            </div>
+                            
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 2: Go to Rules Tab</h3>
+                                <p>Click on the <span class="popup-highlight">"Rules"</span> tab and then click <span class="popup-highlight">"Add Rule"</span>.</p>
+                            </div>
+                            
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 3: Create a New Rule</h3>
+                                <p>Name your rule (e.g., "Forward to ReplyZe AI"). Set the conditions to apply to all messages.</p>
+                            </div>
+                            
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 4: Set Up Forwarding Action</h3>
+                                <p>Select <span class="popup-highlight">"Forward Message"</span> from the actions, and enter <span class="popup-highlight">replyzeai@gmail.com</span> as the recipient.</p>
+                            </div>
+                            
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 5: Save the Rule</h3>
+                                <p>Click <span class="popup-highlight">"OK"</span> to save the rule and start forwarding emails.</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Yahoo Instructions (initially hidden) -->
+                        <div class="popup-instruction-content" id="yahoo-instructions" style="display: none;">
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 1: Open Yahoo Mail Settings</h3>
+                                <p>Click the gear icon and select <span class="popup-highlight">"More Settings"</span>.</p>
+                            </div>
+                            
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 2: Go to Mailboxes</h3>
+                                <p>Select <span class="popup-highlight">"Mailboxes"</span> from the left sidebar, then click on your email address.</p>
+                            </div>
+                            
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 3: Set Up Forwarding</h3>
+                                <p>Click <span class="popup-highlight">"Add forwarding address"</span> and enter <span class="popup-highlight">replyzeai@gmail.com</span>.</p>
+                            </div>
+                            
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 4: Verify Forwarding Address</h3>
+                                <p>Check your email for a verification code and confirm the forwarding address.</p>
+                            </div>
+                            
+                            <div class="popup-instruction-step">
+                                <h3 class="popup-instruction-title">Step 5: Enable Forwarding</h3>
+                                <p>Toggle on <span class="popup-highlight">"Forwarding"</span> and select the newly added address.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="popup-footer">
+                    <div class="popup-footer-links">
+                        <a href="#" class="popup-footer-link">Privacy Policy</a>
+                        <a href="#" class="popup-footer-link">Terms of Service</a>
+                        <a href="#" class="popup-footer-link">Support</a>
+                        <a href="#" class="popup-footer-link">Contact</a>
+                    </div>
+                    <p class="popup-copyright">© 2023 ReplyZe AI. All rights reserved.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Animation function
+        function safeAnimate(id, end, duration) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            animateValue(id, 0, end, duration);
+        }
+
+        // Initialize dashboard values
+        const emails = {{ emails_sent }};
+        const estimated = {{ estimated_saved }};
+        const kits = {{ kits_generated }};
+        document.getElementById('email-progress').style.width = `${(emails/20)*100}%`;
+        safeAnimate('emails-sent', emails, 800);
+        safeAnimate('time-saved', emails*5.5 + estimated, 800);
+        safeAnimate('kits-generated', kits, 800);
+
+        // Email connection status check
+        function checkEmailStatus() {
+            const userId = "{{ user_id }}";
+            if (!userId) return;
+            
+            fetch(`/check_smtp_status?user_id=${userId}`)
+                .then(response => response.json())
+                .then(data => {
+                    const statusText = document.getElementById('status-text');
+                    const statusIcon = document.getElementById('status-icon');
+                    const reverifyBtn = document.getElementById('reverify-btn');
+                    
+                    statusIcon.innerHTML = '';
+                    reverifyBtn.style.display = 'none';
+                    
+                    if (data.status === 'valid') {
+                        statusText.innerHTML = 'Connected';
+                        statusIcon.innerHTML = '<i class="fas fa-check-circle" style="color: #64ffda; margin-left: 5px;"></i>';
+                    } else if (data.status === 'partial') {
+                        statusText.innerHTML = 'Partial';
+                        statusIcon.innerHTML = '<i class="fas fa-exclamation-triangle" style="color: #f8961e; margin-left: 5px;"></i>';
+                        reverifyBtn.style.display = 'block';
+                    } else {
+                        statusText.innerHTML = 'Not Connected';
+                        statusIcon.innerHTML = '<i class="fas fa-times-circle" style="color: #f72585; margin-left: 5px;"></i>';
+                        reverifyBtn.style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking email status:', error);
+                    document.getElementById('status-text').innerHTML = 'Error checking';
+                    document.getElementById('status-icon').innerHTML = '<i class="fas fa-times-circle" style="color: #f72585; margin-left: 5px;"></i>';
+                    document.getElementById('reverify-btn').style.display = 'block';
+                });
+        }
+
+        // Function to reverify connection
+        function verifyEmailConnection() {
+            const statusText = document.getElementById('status-text');
+            const statusIcon = document.getElementById('status-icon');
+            const reverifyBtn = document.getElementById('reverify-btn');
+            
+            statusText.innerHTML = 'Testing...';
+            statusIcon.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-left: 5px;"></i>';
+            reverifyBtn.style.display = 'none';
+            
+            // Call the check again
+            checkEmailStatus();
+        }
+
+        // Modal functionality
+        const modalOverlay = document.getElementById('modalOverlay');
+        const openModalBtn = document.getElementById('openModalBtn');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+
+        // Open modal when button is clicked
+        openModalBtn.addEventListener('click', () => {
+            modalOverlay.classList.add('active');
+            document.body.style.overflow = 'hidden'; // Prevent background scrolling
+        });
+
+        // Close modal when close button is clicked
+        closeModalBtn.addEventListener('click', () => {
+            modalOverlay.classList.remove('active');
+            document.body.style.overflow = 'auto'; // Restore scrolling
+        });
+
+        // Close modal when clicking outside the content
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) {
+                modalOverlay.classList.remove('active');
+                document.body.style.overflow = 'auto'; // Restore scrolling
+            }
+        });
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && modalOverlay.classList.contains('active')) {
+                modalOverlay.classList.remove('active');
+                document.body.style.overflow = 'auto'; // Restore scrolling
+            }
+        });
+
+        // Tab switching for email providers
+        document.querySelectorAll('.popup-provider-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                // Remove active class from all tabs
+                document.querySelectorAll('.popup-provider-tab').forEach(t => {
+                    t.classList.remove('active');
+                });
+                
+                // Add active class to clicked tab
+                tab.classList.add('active');
+                
+                // Hide all instruction sections
+                document.querySelectorAll('.popup-instruction-content').forEach(content => {
+                    content.style.display = 'none';
+                });
+                
+                // Show the selected instruction section
+                const provider = tab.getAttribute('data-provider');
+                document.getElementById(`${provider}-instructions`).style.display = 'block';
+            });
+        });
+
+        // Check email status on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Wait a moment for the page to load fully
+            setTimeout(checkEmailStatus, 1000);
+        });
+    </script>
+</body>
+</html>
