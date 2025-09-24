@@ -2749,7 +2749,138 @@ def email_forwarding_setup():
         user_email=user_email,
         forwarding_email=forwarding_email
     )
+#---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# app.py - Add these routes
+import os
+import base64
+import json
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
+# Gmail API setup
+SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+
+def get_gmail_service():
+    """Authenticate and return Gmail service"""
+    creds = None
+    if os.path.exists('token.json'):
+        creds = Credentials.from_authorized_file('token.json', SCOPES)
+    
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'credentials.json', SCOPES)
+            creds = flow.run_local_server(port=0)
+        
+        with open('token.json', 'w') as token:
+            token.write(creds.to_json())
+    
+    return build('gmail', 'v1', credentials=creds)
+
+@app.route('/check_inbound_emails')
+def check_inbound_emails():
+    """Check for new emails in replyzeai.inbound@gmail.com"""
+    try:
+        service = get_gmail_service()
+        
+        # Search for unread emails
+        results = service.users().messages().list(
+            userId='me',
+            q='is:unread label:inbox'
+        ).execute()
+        
+        messages = results.get('messages', [])
+        processed_emails = []
+        
+        for message in messages:
+            msg = service.users().messages().get(
+                userId='me', 
+                id=message['id'],
+                format='full'
+            ).execute()
+            
+            email_data = process_email_message(msg)
+            if email_data:
+                processed_emails.append(email_data)
+                
+                # Mark as read
+                service.users().messages().modify(
+                    userId='me',
+                    id=message['id'],
+                    body={'removeLabelIds': ['UNREAD']}
+                ).execute()
+        
+        return jsonify({
+            'status': 'success',
+            'processed': len(processed_emails),
+            'emails': processed_emails
+        })
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+def process_email_message(msg):
+    """Extract relevant data from email message"""
+    try:
+        headers = msg['payload'].get('headers', [])
+        subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
+        from_email = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown Sender')
+        to_email = next((h['value'] for h in headers if h['name'] == 'To'), 'Unknown Recipient')
+        
+        # Extract body
+        body = extract_email_body(msg['payload'])
+        
+        # Parse original recipient from forwarded email
+        original_recipient = extract_original_recipient(body, from_email)
+        
+        return {
+            'id': msg['id'],
+            'subject': subject,
+            'from': from_email,
+            'to': to_email,
+            'original_recipient': original_recipient,
+            'body': body[:500],  # First 500 chars
+            'timestamp': msg['internalDate']
+        }
+    except Exception as e:
+        print(f"Error processing email: {e}")
+        return None
+
+def extract_email_body(payload):
+    """Extract email body from payload"""
+    if 'parts' in payload:
+        for part in payload['parts']:
+            if part['mimeType'] == 'text/plain':
+                data = part['body']['data']
+                return base64.urlsafe_b64decode(data).decode('utf-8')
+    elif 'body' in payload and 'data' in payload['body']:
+        data = payload['body']['data']
+        return base64.urlsafe_b64decode(data).decode('utf-8')
+    
+    return "No body content"
+
+def extract_original_recipient(body, from_email):
+    """Extract original recipient from forwarded email body"""
+    # Look for common forwarding patterns
+    patterns = [
+        r'Original-recipient:\s*rfc822;(.+)',
+        r'To:\s*([^\s]+@[^\s]+)',
+        r'Originally sent to:\s*([^\s]+@[^\s]+)'
+    ]
+    
+    import re
+    for pattern in patterns:
+        match = re.search(pattern, body, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+    
+    # If no pattern found, return the from email (assuming it's the original sender)
+    return from_email 
 
 # ── Final entry point ──
 if __name__ == "__main__":
