@@ -1588,57 +1588,7 @@ def extract_domain(email):
     return None
 
 
-@app.route("/check_smtp_status")
-def check_smtp_status():
-    user_id = request.args.get("user_id")
-    if not user_id:
-        return jsonify({"status": "error", "message": "Missing user_id"}), 400
-    
-    # Get SMTP credentials
-    smtp_email, app_password = get_smtp_creds(user_id)
-    if not smtp_email or not app_password:
-        return jsonify({"status": "invalid", "message": "No SMTP credentials found"})
-    
-    # Get SMTP server details from profile
-    resp = supabase.from_("profiles").select("smtp_host, imap_host").eq("id", user_id).single().execute()
-    if not resp.data:
-        return jsonify({"status": "error", "message": "Could not retrieve server details"}), 500
-    
-    server_details = resp.data
-    smtp_host = server_details.get("smtp_host", "smtp.gmail.com")
-    smtp_port =  587
-    imap_host = server_details.get("imap_host", "imap.gmail.com")
-    imap_port = 993
-    
-    # Test SMTP connection
-    smtp_working = False
-    imap_working = False
-    
-    try:
-        # Test SMTP
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
-            server.starttls()
-            server.login(smtp_email, app_password)
-            smtp_working = True
-    except Exception as e:
-        app.logger.error(f"SMTP test failed for {user_id}: {str(e)}")
-    
-    try:
-        # Test IMAP
-        with imaplib.IMAP4_SSL(imap_host, imap_port) as server:
-            server.login(smtp_email, app_password)
-            imap_working = True
-    except Exception as e:
-        app.logger.error(f"IMAP test failed for {user_id}: {str(e)}")
-    
-    if smtp_working and imap_working:
-        return jsonify({"status": "valid", "message": "SMTP and IMAP connections successful"})
-    elif smtp_working:
-        return jsonify({"status": "partial", "message": "SMTP working but IMAP failed"})
-    else:
-        return jsonify({"status": "invalid", "message": "Both SMTP and IMAP failed"})
-def check_smtp_status_alias():
-    return check_email_connection()
+
 
 #-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
