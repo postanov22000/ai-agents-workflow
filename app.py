@@ -1774,23 +1774,15 @@ def import_leads():
                             # Get lead details
                             lead = supabase.table('leads').select('*').eq('id', lead_id).single().execute().data
                             
-                            # Get user's email credentials
-                            smtp_email, app_password = get_smtp_creds(user_id)
-                            if smtp_email and app_password:
-                                # Get SMTP server details
-                                prof_resp = supabase.from_("profiles").select("smtp_host").eq("id", user_id).single().execute()
-                                smtp_host = prof_resp.data.get("smtp_host", "smtp.gmail.com") if prof_resp.data else "smtp.gmail.com"
-                                
-                                # Send the email
-                                send_email_smtp(
-                                    smtp_email,
-                                    app_password,
-                                    lead['email'],
-                                    "Follow-up from your inquiry",
-                                    follow_up_content,
-                                    smtp_host=smtp_host
-                                )
-                                
+                            # Send the email using Gmail API
+                            success, result = send_email_gmail(
+                                user_id,
+                                lead['email'],
+                                "Follow-up from your inquiry",
+                                follow_up_content
+                            )
+                            
+                            if success:
                                 # Create follow-up record
                                 follow_up_data = {
                                     'lead_id': lead_id,
@@ -1800,6 +1792,8 @@ def import_leads():
                                     'sent_at': datetime.utcnow().isoformat()
                                 }
                                 supabase.table('lead_follow_ups').insert(follow_up_data).execute()
+                            else:
+                                app.logger.error(f"Failed to send follow-up email: {result}")
                     
                     except Exception as e:
                         app.logger.error(f"Error sending immediate follow-up for lead {lead_id}: {str(e)}")
@@ -1817,14 +1811,9 @@ def import_leads():
                 
                 else:
                     error_count += 1
-                    app.logger.error(f"Failed to insert lead: {response}")
             
             except Exception as e:
                 error_count += 1
-                app.logger.error(f"Error processing row {i+1}: {e}", exc_info=True)
-        
-        # Log summary
-        app.logger.info(f"Import completed: {success_count} succeeded, {error_count} failed")
         
         return jsonify({
             "message": f"Leads imported successfully. {success_count} succeeded, {error_count} failed.",
