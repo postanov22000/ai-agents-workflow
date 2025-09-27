@@ -1599,18 +1599,6 @@ def create_transaction():
 # Add this to your main app file (e.g., app.py)
 # Add these imports at the top of your app.py
 import re
-import dns.resolver
-
-# Add this route to your app.py
-
-
-def extract_domain(email):
-    """Extract domain from email address"""
-    pattern = r'@([\w\.-]+)'
-    match = re.search(pattern, email)
-    if match:
-        return match.group(1).lower()
-    return None
 
 
 
