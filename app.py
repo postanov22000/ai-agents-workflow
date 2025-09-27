@@ -2,7 +2,6 @@ import os
 import time
 import base64
 import requests
-import smtplib
 import imaplib
 import ssl
 import io
@@ -16,7 +15,7 @@ from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 import google.auth.transport.requests as grequests
-from fimap import send_email_smtp, fetch_emails_imap
+from fimap import fetch_emails_imap  # Remove send_email_smtp import
 from flask_cors import CORS  
 from cryptography.fernet import Fernet
 from transaction_autopilot import bp as autopilot_bp
@@ -38,7 +37,6 @@ CORS(app, resources={r"/connect-smtp": {"origins": "https://replyzeai.vercel.app
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
 
 # Rate limiting storage
-# Rate limiting storage - fix structure and initialization
 demo_rate_limits = defaultdict(lambda: {
     'emails': {'remaining': 20, 'last_reset': datetime.now()},
     'kits': {'remaining': 20, 'last_reset': datetime.now()},
@@ -114,33 +112,68 @@ FOLLOW_UP_SEQUENCE = [
 ]
 
 #----------------------------------------------------------------------------
-def get_smtp_creds(user_id: str):
-    """Return decrypted (email, app_password) or (None, None)."""
+def get_gmail_service(user_id: str):
+    """Return Gmail service object for the user"""
     try:
-        resp = supabase.from_("profiles").select("smtp_email, smtp_enc_password").eq("id", user_id).single().execute()
+        # Get Gmail tokens from database
+        resp = supabase.from_("gmail_tokens").select("credentials").eq("user_id", user_id).single().execute()
         
-        # Check if response has data
         if not resp.data:
-            app.logger.warning(f"No SMTP credentials found for user {user_id}")
-            return None, None
+            app.logger.warning(f"No Gmail credentials found for user {user_id}")
+            return None
             
-        # Check if password exists
-        if not resp.data.get("smtp_enc_password"):
-            app.logger.warning(f"No SMTP password found for user {user_id}")
-            return None, None
+        # Create credentials object
+        cd = resp.data["credentials"]
+        creds = Credentials(
+            token=cd["token"],
+            refresh_token=cd["refresh_token"],
+            token_uri=cd["token_uri"],
+            client_id=cd["client_id"],
+            client_secret=cd["client_secret"],
+            scopes=cd["scopes"],
+        )
+        
+        # Refresh token if expired
+        if creds.expired and creds.refresh_token:
+            creds.refresh(GoogleRequest())
             
-        enc_pwd = resp.data["smtp_enc_password"].encode()
-        try:
-            pwd = fernet.decrypt(enc_pwd).decode()
-        except Exception as e:
-            app.logger.error(f"Failed to decrypt password for user {user_id}: {str(e)}")
-            return None, None
-            
-        return resp.data["smtp_email"], pwd
+        # Build Gmail service
+        service = build("gmail", "v1", credentials=creds, cache_discovery=False)
+        return service
         
     except Exception as e:
-        app.logger.error(f"Error retrieving SMTP credentials for user {user_id}: {str(e)}")
-        return None, None
+        app.logger.error(f"Error retrieving Gmail service for user {user_id}: {str(e)}")
+        return None
+
+def send_email_gmail(user_id: str, to_addr: str, subject: str, body_html: str, draft=False):
+    """Send email using Gmail API"""
+    try:
+        service = get_gmail_service(user_id)
+        if not service:
+            return False, "Gmail service not available"
+        
+        # Create message
+        message = MIMEText(body_html, "html")
+        message["to"] = to_addr
+        message["from"] = "me"  # Gmail API uses 'me' for authenticated user
+        message["subject"] = subject
+        
+        # Encode message
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        
+        if draft:
+            # Create draft
+            draft_body = {"message": {"raw": raw_message}}
+            draft = service.users().drafts().create(userId="me", body=draft_body).execute()
+            return True, f"Draft created: {draft['id']}"
+        else:
+            # Send message
+            message = service.users().messages().send(userId="me", body={"raw": raw_message}).execute()
+            return True, f"Message sent: {message['id']}"
+            
+    except Exception as e:
+        app.logger.error(f"Error sending email via Gmail API: {str(e)}")
+        return False, str(e)
 
 # ---------------------------------------------------------------------------
 def call_edge(endpoint_path: str, payload: dict, return_response: bool = False):
@@ -188,7 +221,6 @@ def call_edge(endpoint_path: str, payload: dict, return_response: bool = False):
 # ── Routes ──
 #-----------------------------------------------
 
-
 # Add this near the top of your app.py after creating the Flask app
 @app.template_filter('format_date')
 def format_date_filter(value):
@@ -203,182 +235,55 @@ def format_date_filter(value):
 
 
 
-# Add this function near your other helper functions
-def verify_smtp_connection(user_id: str) -> dict:
+# Remove SMTP verification function and replace with Gmail verification
+def verify_gmail_connection(user_id: str) -> dict:
     """
-    Test SMTP/IMAP connection and return status
+    Test Gmail connection and return status
     Returns: {"status": "valid"|"invalid", "message": str}
     """
     try:
-        # Get SMTP credentials
-        smtp_email, app_password = get_smtp_creds(user_id)
-        if not smtp_email or not app_password:
-            return {"status": "invalid", "message": "No SMTP credentials found"}
+        service = get_gmail_service(user_id)
+        if not service:
+            return {"status": "invalid", "message": "No Gmail credentials found"}
         
-        # Get server details
-        resp = supabase.from_("profiles").select(
-            "smtp_host, imap_host"
-        ).eq("id", user_id).single().execute()
+        # Test Gmail connection by getting profile
+        profile = service.users().getProfile(userId="me").execute()
+        email_address = profile.get("emailAddress", "")
         
-        if not resp.data:  # Changed from: if resp.error or not resp.data:
-            return {"status": "invalid", "message": "Could not retrieve server details"}
-        
-        server_details = resp.data
-        smtp_host = server_details.get("smtp_host", "smtp.gmail.com")
-        smtp_port = 587
-        imap_host = server_details.get("imap_host", "imap.gmail.com")
-        imap_port = 993
-        
-        # Test SMTP connection
-        smtp_working = False
-        imap_working = False
-        smtp_error = None
-        imap_error = None
-        
-        try:
-            context = ssl.create_default_context()
-            with smtplib.SMTP(smtp_host, smtp_port) as server:
-                server.ehlo()
-                server.starttls(context=context)
-                server.ehlo()
-                server.login(smtp_email, app_password)
-                smtp_working = True
-        except Exception as e:
-            smtp_error = str(e)
-            app.logger.error(f"SMTP test failed for {user_id}: {smtp_error}")
-        
-        # Test IMAP connection
-        try:
-            with imaplib.IMAP4_SSL(imap_host, imap_port) as server:
-                server.login(smtp_email, app_password)
-                imap_working = True
-        except Exception as e:
-            imap_error = str(e)
-            app.logger.error(f"IMAP test failed for {user_id}: {imap_error}")
-        
-        # Update database with connection status
-        status = "valid" if smtp_working and imap_working else "invalid"
-        supabase.table("profiles").update({
-            "email_connection_status": status,
-            "connection_checked_at": datetime.now(timezone.utc).isoformat()
-        }).eq("id", user_id).execute()
-        
-        if smtp_working and imap_working:
-            return {"status": "valid", "message": "SMTP and IMAP connections successful"}
-        elif smtp_working:
-            return {"status": "partial", "message": f"SMTP working but IMAP failed: {imap_error}"}
-        elif imap_working:
-            return {"status": "partial", "message": f"IMAP working but SMTP failed: {smtp_error}"}
+        if email_address:
+            # Update database with connection status
+            supabase.table("profiles").update({
+                "email_connection_status": "valid",
+                "connection_checked_at": datetime.now(timezone.utc).isoformat()
+            }).eq("id", user_id).execute()
+            
+            return {"status": "valid", "message": "Gmail connection successful"}
         else:
-            return {"status": "invalid", "message": f"Both SMTP and IMAP failed. SMTP: {smtp_error}, IMAP: {imap_error}"}
+            return {"status": "invalid", "message": "Failed to get Gmail profile"}
     
     except Exception as e:
-        app.logger.error(f"Verification error for {user_id}: {str(e)}")
-        return {"status": "invalid", "message": f"Verification error: {str(e)}"}
+        app.logger.error(f"Gmail verification error for {user_id}: {str(e)}")
+        return {"status": "invalid", "message": f"Gmail verification error: {str(e)}"}
 
+# Remove detect_email_settings and related functions since we're using Gmail API only
 
-@app.route('/detect_email_settings', methods=['GET', 'POST'])
-def detect_email_settings():
-    if request.method == 'GET':
-        # Handle GET request (for testing or direct browser access)
-        email = request.args.get('email')
-    else:
-        # Handle POST request
-        email = request.form.get('email')
-    
-    if not email:
-        return jsonify({"error": "Email is required"}), 400
-    
-    try:
-        settings = detect_email_provider(email)
-        return jsonify(settings)
-    except Exception as e:
-        app.logger.error(f"Error detecting email settings: {e}")
-        # Fall back to Gmail settings
-        return jsonify({
-            "smtp_host": "smtp.gmail.com",
-            "smtp_port": 465,
-            "imap_host": "imap.gmail.com",
-            "imap_port": 993
-        })
-
-
-
-def detect_email_provider(email):
-    """
-    Detect email provider based on domain without network calls
-    """
-    domain = email.split('@')[-1].lower()
-    
-    provider_map = {
-        "gmail.com": {
-            "smtp_host": "smtp.gmail.com",
-            "smtp_port": 465,
-            "imap_host": "imap.gmail.com",
-            "imap_port": 993
-        },
-        "outlook.com": {
-            "smtp_host": "smtp-mail.outlook.com",
-            "smtp_port": 587,
-            "imap_host": "outlook.office365.com",
-            "imap_port": 993
-        },
-        "yahoo.com": {
-            "smtp_host": "smtp.mail.yahoo.com",
-            "smtp_port": 465,
-            "imap_host": "imap.mail.yahoo.com",
-            "imap_port": 993
-        },
-        "aol.com": {
-            "smtp_host": "smtp.aol.com",
-            "smtp_port": 465,
-            "imap_host": "imap.aol.com",
-            "imap_port": 993
-        },
-        # Add more providers as needed
-    }
-    
-    # Return settings for known providers, or default to Gmail
-    return provider_map.get(domain, provider_map["gmail.com"])
-
-# Add this route for checking connection status
+# Remove check_email_connection route and replace with Gmail version
 @app.route("/check_email_connection")
 def check_email_connection():
     user_id = request.args.get("user_id")
     if not user_id:
         return jsonify({"status": "error", "message": "Missing user_id"}), 400
     
-    result = verify_smtp_connection(user_id)
+    result = verify_gmail_connection(user_id)
     return jsonify(result)
 
-# Add this function to check connection before allowing email features
+# Update require_valid_email_connection to use Gmail only
 def require_valid_email_connection(user_id):
-    """Check if user has valid email connection, abort if not"""
-    # First check if they have Gmail OAuth
-    try:
-        toks = supabase.table("gmail_tokens").select("credentials").eq("user_id", user_id).execute().data
-        if toks and toks[0]:
-            cd = toks[0]["credentials"]
-            creds = Credentials(
-                token=cd["token"],
-                refresh_token=cd["refresh_token"],
-                token_uri=cd["token_uri"],
-                client_id=cd["client_id"],
-                client_secret=cd["client_secret"],
-                scopes=cd["scopes"],
-            )
-            if not creds.expired or (creds.expired and creds.refresh_token):
-                return True  # Gmail OAuth is valid
-    except Exception:
-        pass
-    
-    # Check SMTP/IMAP connection
-    smtp_status = verify_smtp_connection(user_id)
-    if smtp_status["status"] != "valid":
-        abort(403, "Email connection not verified. Please check your settings.")
-    
+    """Check if user has valid Gmail connection, abort if not"""
+    result = verify_gmail_connection(user_id)
+    if result["status"] != "valid":
+        abort(403, "Gmail connection not verified. Please reconnect Gmail.")
     return True
-
 
 #-------------------------------------------------
 from flask import url_for
@@ -808,65 +713,7 @@ import json
 import json
 from urllib.parse import unquote
 
-@app.route('/connect_smtp_form', methods=['GET', 'POST'])
-def connect_smtp_form():
-    if request.method == 'POST':
-        # Handle POST request (if needed)
-        pass
-    
-    # Handle GET request
-    user_id = request.args.get('user_id')
-    
-    # Get and decode the email parameter
-    email_param = request.args.get('email', '')
-    email = unquote(email_param) if email_param else ''
-    
-    # Initialize with default values
-    smtp_host = "smtp.gmail.com"
-    imap_host = "imap.gmail.com"
-    smtp_port = 587
-    imap_port = 993
-    
-    # Try to get detected settings from the request
-    settings_param = request.args.get('settings')
-    print(f"Raw settings parameter: {settings_param}")  # Debug
-    
-    if settings_param:
-        try:
-            # URL decode the settings parameter first
-            decoded_settings = unquote(settings_param)
-            print(f"Decoded settings: {decoded_settings}")  # Debug
-            
-            settings = json.loads(decoded_settings)
-            smtp_host = settings.get('smtp_host', smtp_host)
-            imap_host = settings.get('imap_host', imap_host)
-            smtp_port = settings.get('smtp_port', smtp_port)
-            imap_port = settings.get('imap_port', imap_port)
-            print(f"Using detected settings: {settings}")  # For debugging
-        except (json.JSONDecodeError, TypeError) as e:
-            print(f"Error parsing settings: {e}")  # For debugging
-            # If JSON parsing fails, fall back to defaults
-            pass
-    
-    print(f"Final values - Email: {email}, SMTP: {smtp_host}:{smtp_port}, IMAP: {imap_host}:{imap_port}")  # For debugging
-    
-    return render_template('partials/connect_smtp_form.html', 
-                         user_id=user_id, 
-                         email=email,
-                         smtp_host=smtp_host,
-                         imap_host=imap_host,
-                         smtp_port=smtp_port,
-                         imap_port=imap_port)
 
-def disconnect_smtp():
-    user_id = request.form.get("user_id")
-    supabase.table("profiles").update({
-        "smtp_email": None,
-        "smtp_enc_password": None,
-        "smtp_host": None,
-        "imap_host": None
-    }).eq("id", user_id).execute()
-    return redirect(f"/dashboard/signin?user_id={user_id}")
 
 @app.route("/dashboard/home")
 def dashboard_home():
@@ -997,64 +844,7 @@ def reconnect_gmail():
     )
     return redirect(authorization_url)
   
-@app.route("/connect-smtp", methods=["POST"])
-def route_connect_smtp():
-    try:
-        # Get form data
-        user_id = request.form.get("user_id")
-        smtp_email = request.form.get("smtp_email")
-        smtp_password = request.form.get("smtp_password")
-        smtp_host = request.form.get("smtp_host")
-        imap_host = request.form.get("imap_host")
 
-        # Debug - log all received form data
-        app.logger.info(f"Received form data: {dict(request.form)}")
-
-        # Validate required fields
-        missing = []
-        if not user_id: missing.append("user_id")
-        if not smtp_email: missing.append("smtp_email")
-        if not smtp_password: missing.append("smtp_password")
-        if not smtp_host: missing.append("smtp_host")
-        if not imap_host: missing.append("imap_host")
-
-        if missing:
-            return jsonify({
-                "status": "error",
-                "message": f"Missing fields: {', '.join(missing)}"
-            }), 400
-
-        # Encrypt the SMTP password
-        token = fernet.encrypt(smtp_password.encode()).decode()
-
-        # Upsert into Supabase
-        resp = supabase.table("profiles").upsert({
-            "id": user_id,
-            "smtp_email": smtp_email,
-            "smtp_enc_password": token,
-            "smtp_host": smtp_host,
-            "imap_host": imap_host
-        }, on_conflict="id").execute()
-
-        # Check for empty or failed response
-        if not resp.data:
-            app.logger.error(f"Supabase upsert failed: {resp}")
-            return jsonify({
-                "status": "error",
-                "message": "Failed to save credentials to database"
-            }), 500
-
-        # --- 5) On success, send HX-Redirect so HTMX navigates for us ---
-        hxr = make_response("", 204)
-        hxr.headers["HX-Redirect"] = url_for("complete_profile", user_id=user_id)
-        return hxr
-
-    except Exception as e:
-        app.logger.error("connect-smtp error", exc_info=True)
-        return jsonify({
-            "status": "error", 
-            "message": "Internal server error"
-        }), 500
 
 
 
@@ -1076,14 +866,13 @@ def send_email():
     subject = data["subject"]
     body = data["body"]
 
-    smtp_email, app_password = get_smtp_creds(user_id)
-    if smtp_email and app_password:
-        # Use SMTP fallback
-        send_email_smtp(smtp_email, app_password, to, subject, body)
-        return jsonify({"method": "smtp", "status": "sent"}), 200
-        return jsonify({"method": "gmail", "messages": []}), 200
-    # else: your existing Gmail API flow
-    return send_via_gmail_api(data)
+    # Use Gmail API instead of SMTP
+    success, result = send_email_gmail(user_id, to, subject, body)
+    
+    if success:
+        return jsonify({"method": "gmail", "status": "sent", "message_id": result}), 200
+    else:
+        return jsonify({"error": result}), 500
 
 # Update your fetch_mail function to require valid connection
 @app.route("/fetch", methods=["GET"])
@@ -1598,39 +1387,6 @@ def trigger_process():
             }).eq("id", em_id).execute()
             failed.append(em_id)
             continue
-
-        # 1) SMTP fallback
-        prof = supabase.table("profiles") \
-                       .select("smtp_email,smtp_enc_password,smtp_host") \
-                       .eq("id", uid).single().execute().data or {}
-        if prof.get("smtp_email") and prof.get("smtp_enc_password"):
-            smtp_email = prof["smtp_email"]
-            smtp_pass  = fernet.decrypt(prof["smtp_enc_password"].encode()).decode()
-            smtp_host  = prof.get("smtp_host", "smtp.gmail.com")
-            try:
-                send_email_smtp(
-                    smtp_email,
-                    smtp_pass,
-                    to_addr,
-                    "Lease Agreement Draft" if lease_flag else f"RE: {rec.get('subject', 'Your Email')}",  # Modified subject,
-                    full_html,
-                    smtp_host=smtp_host
-                )
-                supabase.table("emails").update({
-                    "status":  "sent",
-                    "sent_at": datetime.utcnow().isoformat()
-                }).eq("id", em_id).execute()
-                emails_sent_today[uid] = emails_sent_today.get(uid, 0) + 1
-                sent.append(em_id)
-                app.logger.info(f"SMTP send succeeded for email {em_id} (user {uid})")
-            except Exception as e:
-                app.logger.error(f"SMTP send failed for email {em_id} (user {uid})", exc_info=True)
-                supabase.table("emails").update({
-                    "status":        "error",
-                    "error_message": str(e)
-                }).eq("id", em_id).execute()
-                failed.append(em_id)
-            continue  # next `rec`
 
         # 2) Gmail API fallback
         try:
