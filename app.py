@@ -882,13 +882,42 @@ def fetch_mail():
     # Check email connection before proceeding
     require_valid_email_connection(user_id)
     
-    smtp_email, app_password = get_smtp_creds(user_id)
-    if smtp_email and app_password:
-        messages = fetch_emails_imap(smtp_email, app_password)
-        return jsonify({"method": "imap", "messages": messages}), 200
-        return jsonify({"method": "gmail", "messages": []}), 200
-    # else: your existing Gmail-API‐based fetch
-    return fetch_via_gmail_api(user_id)
+    # Use Gmail API for fetching emails
+    try:
+        service = get_gmail_service(user_id)
+        if not service:
+            return jsonify({"error": "Gmail service not available"}), 400
+        
+        # Get recent messages
+        results = service.users().messages().list(userId='me', maxResults=10).execute()
+        messages = results.get('messages', [])
+        
+        email_list = []
+        for message in messages:
+            msg = service.users().messages().get(userId='me', id=message['id']).execute()
+            payload = msg['payload']
+            headers = payload.get('headers', [])
+            
+            email_data = {
+                'id': msg['id'],
+                'threadId': msg['threadId']
+            }
+            
+            for header in headers:
+                if header['name'] == 'Subject':
+                    email_data['subject'] = header['value']
+                if header['name'] == 'From':
+                    email_data['from'] = header['value']
+                if header['name'] == 'Date':
+                    email_data['date'] = header['value']
+            
+            email_list.append(email_data)
+        
+        return jsonify({"method": "gmail", "messages": email_list}), 200
+        
+    except Exception as e:
+        app.logger.error(f"Error fetching emails via Gmail API: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 # Add this route to update the connection status in the database
 @app.route("/update_connection_status", methods=["POST"])
