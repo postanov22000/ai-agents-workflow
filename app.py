@@ -2,8 +2,6 @@ import os
 import time
 import base64
 import requests
-import imaplib
-import ssl
 import io
 from flask import abort, Flask, render_template, request, redirect, jsonify, make_response, url_for
 from datetime import date, datetime, timezone, timedelta
@@ -15,7 +13,6 @@ from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 import google.auth.transport.requests as grequests
-from fimap import fetch_emails_imap  # Remove send_email_smtp import
 from flask_cors import CORS  
 from cryptography.fernet import Fernet
 from transaction_autopilot import bp as autopilot_bp
@@ -24,7 +21,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 import re
-import dns.resolver
 import csv
 from io import TextIOWrapper
 from openpyxl import load_workbook
