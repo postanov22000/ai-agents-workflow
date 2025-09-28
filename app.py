@@ -826,38 +826,38 @@ def reconnect_gmail():
 
 #------------------------------------------
 # Update your send_email function to require valid connection
-@app.route("/send", methods=["POST"])
-def send_email():
-    data = request.get_json()
-    user_id = data["user_id"]
-    
-    # Check email connection before proceeding
-    require_valid_email_connection(user_id)
-    
-    # Rest of your send logic...
-    to = data["to"]
-    subject = data["subject"]
-    body = data["body"]
-
-    # else: your existing Gmail-API‐based fetch
-    return fetch_via_gmail_api(user_id)
+#@app.route("/send", methods=["POST"])
+#def send_email():
+#    data = request.get_json()
+#    user_id = data["user_id"]
+#    
+#    # Check email connection before proceeding
+#    require_valid_email_connection(user_id)
+#    
+#    # Rest of your send logic...
+#    to = data["to"]
+#    subject = data["subject"]
+#    body = data["body"]
+#
+#    # else: your existing Gmail-API‐based fetch
+#    return fetch_via_gmail_api(user_id)
 
 # Add this route to update the connection status in the database
-@app.route("/update_connection_status", methods=["POST"])
-def update_connection_status():
-    user_id = request.form.get("user_id")
-    status = request.form.get("status")  # "valid" or "invalid"
-    
-    if not user_id or not status:
-        return jsonify({"status": "error", "message": "Missing parameters"}), 400
-    
-    # Update the connection status in the database
-    supabase.table("profiles").update({
-        "email_connection_status": status,
-        "connection_checked_at": datetime.now(timezone.utc).isoformat()
-    }).eq("id", user_id).execute()
-    
-    return jsonify({"status": "success"})
+#@app.route("/update_connection_status", methods=["POST"])
+#def update_connection_status():
+#    user_id = request.form.get("user_id")
+#    status = request.form.get("status")  # "valid" or "invalid"
+#    
+#    if not user_id or not status:
+#        return jsonify({"status": "error", "message": "Missing parameters"}), 400
+#    
+#    # Update the connection status in the database
+#    supabase.table("profiles").update({
+#        "email_connection_status": status,
+#        "connection_checked_at": datetime.now(timezone.utc).isoformat()
+#    }).eq("id", user_id).execute()
+#    
+#    return jsonify({"status": "success"})
 #-----------------------------------------------------------------------
 @app.route("/connect_gmail")
 def connect_gmail():
