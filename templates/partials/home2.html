@@ -585,16 +585,16 @@
                 <div class="action-buttons">
                     <form method="POST" action="/disconnect_gmail">
                         <input type="hidden" name="user_id" value="{{ user_id }}" />
-                        <!-- <button type="submit" class="btn btn-danger">
+                        <button type="submit" class="btn btn-danger">
                             <i class="fas fa-unlink"></i> Disconnect Gmail
-                        </button> -->
+                        </button> 
                     </form>
 
                     {% if show_reconnect %}
                     <form action="/connect_gmail" method="GET">
-                        <!-- <button class="btn btn-primary">
+                        <button class="btn btn-primary">
                             <i class="fas fa-link"></i> Reconnect Gmail
-                        </button> -->
+                        </button> 
                     </form>
                     {% endif %}
 
