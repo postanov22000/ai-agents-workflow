@@ -21,6 +21,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 import re
+import dns.resolver
 import csv
 from io import TextIOWrapper
 from openpyxl import load_workbook
@@ -33,6 +34,7 @@ CORS(app, resources={r"/connect-smtp": {"origins": "https://replyzeai.vercel.app
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
 
 # Rate limiting storage
+# Rate limiting storage - fix structure and initialization
 demo_rate_limits = defaultdict(lambda: {
     'emails': {'remaining': 20, 'last_reset': datetime.now()},
     'kits': {'remaining': 20, 'last_reset': datetime.now()},
@@ -108,68 +110,7 @@ FOLLOW_UP_SEQUENCE = [
 ]
 
 #----------------------------------------------------------------------------
-def get_gmail_service(user_id: str):
-    """Return Gmail service object for the user"""
-    try:
-        # Get Gmail tokens from database
-        resp = supabase.from_("gmail_tokens").select("credentials").eq("user_id", user_id).single().execute()
-        
-        if not resp.data:
-            app.logger.warning(f"No Gmail credentials found for user {user_id}")
-            return None
-            
-        # Create credentials object
-        cd = resp.data["credentials"]
-        creds = Credentials(
-            token=cd["token"],
-            refresh_token=cd["refresh_token"],
-            token_uri=cd["token_uri"],
-            client_id=cd["client_id"],
-            client_secret=cd["client_secret"],
-            scopes=cd["scopes"],
-        )
-        
-        # Refresh token if expired
-        if creds.expired and creds.refresh_token:
-            creds.refresh(GoogleRequest())
-            
-        # Build Gmail service
-        service = build("gmail", "v1", credentials=creds, cache_discovery=False)
-        return service
-        
-    except Exception as e:
-        app.logger.error(f"Error retrieving Gmail service for user {user_id}: {str(e)}")
-        return None
 
-def send_email_gmail(user_id: str, to_addr: str, subject: str, body_html: str, draft=False):
-    """Send email using Gmail API"""
-    try:
-        service = get_gmail_service(user_id)
-        if not service:
-            return False, "Gmail service not available"
-        
-        # Create message
-        message = MIMEText(body_html, "html")
-        message["to"] = to_addr
-        message["from"] = "me"  # Gmail API uses 'me' for authenticated user
-        message["subject"] = subject
-        
-        # Encode message
-        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
-        
-        if draft:
-            # Create draft
-            draft_body = {"message": {"raw": raw_message}}
-            draft = service.users().drafts().create(userId="me", body=draft_body).execute()
-            return True, f"Draft created: {draft['id']}"
-        else:
-            # Send message
-            message = service.users().messages().send(userId="me", body={"raw": raw_message}).execute()
-            return True, f"Message sent: {message['id']}"
-            
-    except Exception as e:
-        app.logger.error(f"Error sending email via Gmail API: {str(e)}")
-        return False, str(e)
 
 # ---------------------------------------------------------------------------
 def call_edge(endpoint_path: str, payload: dict, return_response: bool = False):
@@ -217,6 +158,7 @@ def call_edge(endpoint_path: str, payload: dict, return_response: bool = False):
 # ── Routes ──
 #-----------------------------------------------
 
+
 # Add this near the top of your app.py after creating the Flask app
 @app.template_filter('format_date')
 def format_date_filter(value):
@@ -231,55 +173,7 @@ def format_date_filter(value):
 
 
 
-# Remove SMTP verification function and replace with Gmail verification
-def verify_gmail_connection(user_id: str) -> dict:
-    """
-    Test Gmail connection and return status
-    Returns: {"status": "valid"|"invalid", "message": str}
-    """
-    try:
-        service = get_gmail_service(user_id)
-        if not service:
-            return {"status": "invalid", "message": "No Gmail credentials found"}
-        
-        # Test Gmail connection by getting profile
-        profile = service.users().getProfile(userId="me").execute()
-        email_address = profile.get("emailAddress", "")
-        
-        if email_address:
-            # Update database with connection status
-            supabase.table("profiles").update({
-                "email_connection_status": "valid",
-                "connection_checked_at": datetime.now(timezone.utc).isoformat()
-            }).eq("id", user_id).execute()
-            
-            return {"status": "valid", "message": "Gmail connection successful"}
-        else:
-            return {"status": "invalid", "message": "Failed to get Gmail profile"}
-    
-    except Exception as e:
-        app.logger.error(f"Gmail verification error for {user_id}: {str(e)}")
-        return {"status": "invalid", "message": f"Gmail verification error: {str(e)}"}
 
-# Remove detect_email_settings and related functions since we're using Gmail API only
-
-# Remove check_email_connection route and replace with Gmail version
-@app.route("/check_email_connection")
-def check_email_connection():
-    user_id = request.args.get("user_id")
-    if not user_id:
-        return jsonify({"status": "error", "message": "Missing user_id"}), 400
-    
-    result = verify_gmail_connection(user_id)
-    return jsonify(result)
-
-# Update require_valid_email_connection to use Gmail only
-def require_valid_email_connection(user_id):
-    """Check if user has valid Gmail connection, abort if not"""
-    result = verify_gmail_connection(user_id)
-    if result["status"] != "valid":
-        abort(403, "Gmail connection not verified. Please reconnect Gmail.")
-    return True
 
 #-------------------------------------------------
 from flask import url_for
@@ -641,11 +535,11 @@ def dashboard_billing():
     user_id = _require_user()
     return render_template("partials/billing.html", user_id=user_id)
 
+# Update the settings route to remove SMTP references
 @app.route("/dashboard/settings", methods=["GET", "POST"])
 def dashboard_settings():
     user_id = _require_user()
 
-    # ─── Handle Profile POST ────────────────────────────────
     if request.method == "POST":
         section = request.form.get("section")
         if section == "profile":
@@ -656,9 +550,9 @@ def dashboard_settings():
                 "signature": new_signature
             }).eq("id", user_id).execute()
 
-    # ─── Fetch profile & flags ──────────────────────────────
+    # Fetch profile & flags
     profile_resp = supabase.table("profiles") \
-                           .select("display_name, signature, ai_enabled, smtp_email") \
+                           .select("display_name, signature, ai_enabled") \
                            .eq("id", user_id) \
                            .single() \
                            .execute()
@@ -666,36 +560,28 @@ def dashboard_settings():
     profile = profile_resp.data or {
         "display_name": "",
         "signature": "",
-        "ai_enabled": False,
-        "smtp_email": None
+        "ai_enabled": False
     }
 
-    # ▶ Determine Gmail connection status
+    # Check Gmail connection status
     gmail_connected = False
     show_reconnect = False
     
     try:
-        toks = supabase.table("gmail_tokens") \
-                       .select("credentials") \
-                       .eq("user_id", user_id) \
-                       .single() \
-                       .execute().data
-        if toks:
+        service = get_gmail_service(user_id)
+        if service:
             gmail_connected = True
-            creds_payload = toks["credentials"]
-            creds = Credentials(
-                token=creds_payload["token"],
-                refresh_token=creds_payload["refresh_token"],
-                token_uri=creds_payload["token_uri"],
-                client_id=creds_payload["client_id"],
-                client_secret=creds_payload["client_secret"],
-                scopes=creds_payload["scopes"],
-            )
-            show_reconnect = creds.expired
+            # Check if token needs refresh by trying a simple operation
+            # If it fails, show reconnect button
+            try:
+                # Simple check to see if service works
+                service.users().getProfile(userId='me').execute()
+            except Exception:
+                show_reconnect = True
     except Exception:
         app.logger.warning(f"settings: could not check Gmail token for {user_id}")
 
-    # ▶ Render template
+    # Render template
     return render_template(
         "partials/settings.html",
         profile=profile,
@@ -703,11 +589,6 @@ def dashboard_settings():
         gmail_connected=gmail_connected,
         show_reconnect=show_reconnect
     )
-
-import json
-
-import json
-from urllib.parse import unquote
 
 
 
@@ -841,9 +722,6 @@ def reconnect_gmail():
     return redirect(authorization_url)
   
 
-
-
-
 #------------------------------------------ 
 
 
@@ -862,58 +740,8 @@ def send_email():
     subject = data["subject"]
     body = data["body"]
 
-    # Use Gmail API instead of SMTP
-    success, result = send_email_gmail(user_id, to, subject, body)
-    
-    if success:
-        return jsonify({"method": "gmail", "status": "sent", "message_id": result}), 200
-    else:
-        return jsonify({"error": result}), 500
-
-# Update your fetch_mail function to require valid connection
-@app.route("/fetch", methods=["GET"])
-def fetch_mail():
-    user_id = request.args.get("user_id")
-    
-    # Check email connection before proceeding
-    require_valid_email_connection(user_id)
-    
-    # Use Gmail API for fetching emails
-    try:
-        service = get_gmail_service(user_id)
-        if not service:
-            return jsonify({"error": "Gmail service not available"}), 400
-        
-        # Get recent messages
-        results = service.users().messages().list(userId='me', maxResults=10).execute()
-        messages = results.get('messages', [])
-        
-        email_list = []
-        for message in messages:
-            msg = service.users().messages().get(userId='me', id=message['id']).execute()
-            payload = msg['payload']
-            headers = payload.get('headers', [])
-            
-            email_data = {
-                'id': msg['id'],
-                'threadId': msg['threadId']
-            }
-            
-            for header in headers:
-                if header['name'] == 'Subject':
-                    email_data['subject'] = header['value']
-                if header['name'] == 'From':
-                    email_data['from'] = header['value']
-                if header['name'] == 'Date':
-                    email_data['date'] = header['value']
-            
-            email_list.append(email_data)
-        
-        return jsonify({"method": "gmail", "messages": email_list}), 200
-        
-    except Exception as e:
-        app.logger.error(f"Error fetching emails via Gmail API: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    # else: your existing Gmail-API‐based fetch
+    return fetch_via_gmail_api(user_id)
 
 # Add this route to update the connection status in the database
 @app.route("/update_connection_status", methods=["POST"])
@@ -1599,6 +1427,18 @@ def create_transaction():
 # Add this to your main app file (e.g., app.py)
 # Add these imports at the top of your app.py
 import re
+import dns.resolver
+
+# Add this route to your app.py
+
+
+def extract_domain(email):
+    """Extract domain from email address"""
+    pattern = r'@([\w\.-]+)'
+    match = re.search(pattern, email)
+    if match:
+        return match.group(1).lower()
+    return None
 
 
 
@@ -1758,15 +1598,15 @@ def import_leads():
                             # Get lead details
                             lead = supabase.table('leads').select('*').eq('id', lead_id).single().execute().data
                             
-                            # Send the email using Gmail API
-                            success, result = send_email_gmail(
+                            # Send email using Gmail API
+                            success, message = send_email_gmail(
                                 user_id,
                                 lead['email'],
                                 "Follow-up from your inquiry",
                                 follow_up_content
                             )
-                            
-                            if success:
+                                
+                                if success:
                                 # Create follow-up record
                                 follow_up_data = {
                                     'lead_id': lead_id,
@@ -1777,12 +1617,12 @@ def import_leads():
                                 }
                                 supabase.table('lead_follow_ups').insert(follow_up_data).execute()
                             else:
-                                app.logger.error(f"Failed to send follow-up email: {result}")
+                                app.logger.error(f"Failed to send immediate follow-up for lead {lead_id}: {message}")
                     
                     except Exception as e:
                         app.logger.error(f"Error sending immediate follow-up for lead {lead_id}: {str(e)}")
                     
-                    # Schedule the rest of the follow-up sequence
+                    # Schedule the rest of the follow-up sequence (unchanged)
                     for step, seq in enumerate(FOLLOW_UP_SEQUENCE[1:], start=1):
                         scheduled_at = email_sent + timedelta(days=seq['delay_days'])
                         follow_up_data = {
@@ -1795,9 +1635,14 @@ def import_leads():
                 
                 else:
                     error_count += 1
+                    app.logger.error(f"Failed to insert lead: {response}")
             
             except Exception as e:
                 error_count += 1
+                app.logger.error(f"Error processing row {i+1}: {e}", exc_info=True)
+        
+        # Log summary
+        app.logger.info(f"Import completed: {success_count} succeeded, {error_count} failed")
         
         return jsonify({
             "message": f"Leads imported successfully. {success_count} succeeded, {error_count} failed.",
@@ -1901,9 +1746,10 @@ def generate_follow_up_content(lead_id, sequence_step):
 #-------------------------------------------------------------------------------------------------------------------------------------------------
 
 
+# Update the process_follow_ups route to use Gmail API
 @app.route("/process_follow_ups", methods=["GET"])
 def process_follow_ups():
-    # Check for secret token (similar to your /process endpoint)
+    # Check for secret token
     token = request.args.get("token")
     if token != os.environ.get("PROCESS_SECRET_TOKEN"):
         return jsonify({"error": "Unauthorized"}), 401
@@ -1922,16 +1768,44 @@ def process_follow_ups():
         for follow_up in due_follow_ups:
             try:
                 # Generate content using AI
-                if generate_follow_up_content(follow_up["lead_id"], follow_up["sequence_step"]):
-                    # Update status
-                    supabase.table("lead_follow_ups") \
-                        .update({"status": "processed", "processed_at": now}) \
-                        .eq("id", follow_up["id"]) \
-                        .execute()
-                    results["processed"].append(follow_up["id"])
+                content = generate_follow_up_content(follow_up["lead_id"], follow_up["sequence_step"])
+                if content:
+                    # Get user_id from lead
+                    user_id = follow_up["leads"]["user_id"]
+                    lead_email = follow_up["leads"]["email"]
+                    
+                    # Send using Gmail API
+                    subject = f"Follow-up: {follow_up['leads'].get('first_name', '')} {follow_up['leads'].get('last_name', '')}"
+                    success, message = send_email_gmail(
+                        user_id,
+                        lead_email,
+                        subject,
+                        content
+                    )
+                    
+                    if success:
+                        # Update status
+                        supabase.table("lead_follow_ups") \
+                            .update({
+                                "status": "sent", 
+                                "generated_content": content,
+                                "sent_at": now
+                            }) \
+                            .eq("id", follow_up["id"]) \
+                            .execute()
+                        results["processed"].append(follow_up["id"])
+                    else:
+                        supabase.table("lead_follow_ups") \
+                            .update({
+                                "status": "failed", 
+                                "error_message": message
+                            }) \
+                            .eq("id", follow_up["id"]) \
+                            .execute()
+                        results["failed"].append(follow_up["id"])
                 else:
                     supabase.table("lead_follow_ups") \
-                        .update({"status": "failed", "processed_at": now}) \
+                        .update({"status": "failed", "error_message": "Failed to generate content"}) \
                         .eq("id", follow_up["id"]) \
                         .execute()
                     results["failed"].append(follow_up["id"])
@@ -2087,508 +1961,30 @@ def rate_limit_status():
         'leads_reset': (demo_rate_limits[ip]['leads']['last_reset'] + timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S')
     })
 #-----------------------------------------------------------------------------------------------------------------------------------------
-
-
-
-
-# Add to imports section
-import email
-from email import policy
-from email.parser import BytesParser
-import quopri
-import html
-import re
-
-# Add a new table for email processing rules
-def init_email_routing_table():
-    """Initialize the email routing table if it doesn't exist"""
+# Add a new route to test Gmail connection
+@app.route("/test_gmail_connection", methods=["POST"])
+def test_gmail_connection():
+    user_id = _require_user()
+    
     try:
-        # This would typically be done via database migration
-        # For now, we'll just define the structure
-        pass
-    except Exception as e:
-        app.logger.error(f"Error initializing email routing table: {str(e)}")
-
-# Call this function during app startup
-init_email_routing_table()
-
-@app.route("/incoming-email", methods=["POST"])
-def handle_incoming_email():
-    """
-    Handle emails forwarded to this endpoint via email forwarding
-    This version works with Gmail's forwarding to an existing email address
-    """
-    try:
-        # Check for authentication token
-        auth_token = request.headers.get('X-API-Key') or request.args.get('token')
-        if auth_token != os.environ.get("EMAIL_FORWARDING_TOKEN"):
-            app.logger.warning("Unauthorized email forwarding attempt")
-            return jsonify({"error": "Unauthorized"}), 401
-
-        # Parse the incoming email
-        content_type = request.headers.get('Content-Type', '')
+        service = get_gmail_service(user_id)
+        if not service:
+            return jsonify({"success": False, "message": "Gmail service not available"})
         
-        if 'application/json' in content_type:
-            # JSON format from email processing services
-            data = request.get_json()
-            if not data:
-                return jsonify({"error": "No JSON data received"}), 400
-                
-            parsed_email = parse_json_email(data)
-        else:
-            # Raw email format (direct from email)
-            raw_email = request.get_data()
-            if not raw_email:
-                return jsonify({"error": "No email data received"}), 400
-                
-            parsed_email = parse_raw_email(raw_email)
-        
-        if not parsed_email:
-            return jsonify({"error": "Failed to parse email"}), 400
-        
-        # Extract relevant information
-        from_email = parsed_email.get('from')
-        to_email = parsed_email.get('to')
-        subject = parsed_email.get('subject')
-        body = parsed_email.get('body')
-        headers = parsed_email.get('headers', {})
-        
-        if not from_email or not to_email:
-            return jsonify({"error": "Missing from/to addresses"}), 400
-        
-        app.logger.info(f"Received forwarded email from {from_email} to {to_email}")
-        
-        # Extract the original recipient from the email body (for Gmail forwarding)
-        original_recipient = extract_original_recipient(body, headers, to_email)
-        
-        if not original_recipient:
-            app.logger.warning(f"Could not determine original recipient for email from {from_email}")
-            return jsonify({"error": "Could not determine original recipient"}), 400
-        
-        # Find the user based on the original recipient email
-        user_resp = supabase.table("profiles") \
-            .select("id, email, ai_enabled, full_name") \
-            .eq("email", original_recipient) \
-            .single() \
-            .execute()
-            
-        if not user_resp.data:
-            app.logger.warning(f"No user found for email: {original_recipient}")
-            return jsonify({"error": "User not found"}), 404
-            
-        user = user_resp.data
-        user_id = user["id"]
-        
-        if not user.get("ai_enabled", False):
-            app.logger.info(f"AI not enabled for user {user_id}")
-            return jsonify({"status": "ignored", "reason": "AI not enabled"}), 200
-        
-        # Check if this is an auto-reply to avoid loops
-        auto_submitted = headers.get('Auto-Submitted', '').lower()
-        precedence = headers.get('Precedence', '').lower()
-        if auto_submitted and auto_submitted != 'no' or precedence == 'bulk' or precedence == 'auto_reply':
-            app.logger.info(f"Ignoring auto-submitted email from {from_email}")
-            return jsonify({"status": "ignored", "reason": "Auto-submitted email"}), 200
-        
-        # Check if we've already processed this email (using Message-ID header)
-        message_id = headers.get('Message-ID')
-        if message_id:
-            existing = supabase.table("emails") \
-                .select("id") \
-                .eq("message_id", message_id) \
-                .execute()
-                
-            if existing.data:
-                app.logger.info(f"Already processed email with Message-ID: {message_id}")
-                return jsonify({"status": "ignored", "reason": "Duplicate email"}), 0
-        
-        # Clean the subject (remove Fwd:, RE:, etc.)
-        clean_subject = clean_email_subject(subject)
-        
-        # Extract the original message from forwarded email
-        original_body = extract_original_message(body, from_email, original_recipient)
-        
-        # Insert into emails table for processing
-        email_data = {
-            "user_id": user_id,
-            "sender_email": from_email,
-            "original_content": original_body,
-            "subject": clean_subject,
-            "status": "processing",
-            "source": "forwarded",
-            "message_id": message_id,
-            "received_at": datetime.now(timezone.utc).isoformat()
-        }
-        
-        result = supabase.table("emails").insert(email_data).execute()
-        
-        if not result.data:
-            app.logger.error("Failed to insert forwarded email into database")
-            return jsonify({"error": "Database insertion failed"}), 500
-            
-        email_id = result.data[0]["id"]
-        app.logger.info(f"Forwarded email stored with ID: {email_id}")
-        
-        # Immediately trigger processing for this email
-        if call_edge("/functions/v1/clever-service/generate-response", {"email_ids": [email_id]}):
-            app.logger.info(f"Successfully triggered processing for email {email_id}")
-        else:
-            app.logger.error(f"Failed to trigger processing for email {email_id}")
-        
-        return jsonify({"status": "success", "email_id": email_id}), 200
-        
-    except Exception as e:
-        app.logger.error(f"Error processing forwarded email: {str(e)}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
-
-def extract_original_recipient(body, headers, to_email):
-    """
-    Extract the original recipient from a forwarded email
-    Gmail forwarding typically includes the original recipient in the body
-    """
-    try:
-        # Check Delivered-To header first
-        delivered_to = headers.get('Delivered-To') or headers.get('X-Original-To')
-        if delivered_to:
-            return delivered_to.strip()
-        
-        # Look for the original recipient in the email body
-        # Common patterns in Gmail forwarded emails
-        patterns = [
-            r"Originally sent to:?[\s]*([^\s@]+@[^\s@]+\.[^\s@]+)",
-            r"Original Recipient:?[\s]*([^\s@]+@[^\s@]+\.[^\s@]+)",
-            r"To:?[\s]*([^\s@]+@[^\s@]+\.[^\s@]+)",
-            r"begin.*forwarded.*message.*\n.*To:?[\s]*([^\s@]+@[^\s@]+\.[^\s@]+)",
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, body, re.IGNORECASE | re.MULTILINE)
-            if match:
-                return match.group(1).strip()
-        
-        # If no pattern matched, check if the to_email is a known user email
-        user_resp = supabase.table("profiles") \
-            .select("id") \
-            .eq("email", to_email) \
-            .execute()
-            
-        if user_resp.data:
-            return to_email
-            
-        return None
-        
-    except Exception as e:
-        app.logger.error(f"Error extracting original recipient: {str(e)}")
-        return None
-
-def clean_email_subject(subject):
-    """
-    Clean email subject by removing common forwarding prefixes
-    """
-    if not subject:
-        return "No Subject"
-    
-    # Remove common forwarding prefixes
-    prefixes = ["Fwd:", "Fw:", "RE:", "Re:", "VS:"]
-    for prefix in prefixes:
-        if subject.startswith(prefix):
-            subject = subject[len(prefix):].strip()
-    
-    return subject
-
-def extract_original_message(body, from_email, original_recipient):
-    """
-    Extract the original message from a forwarded email body
-    """
-    try:
-        # Common patterns that indicate the start of the original message
-        patterns = [
-            r"[-]+.*Forwarded message.*[-]+(.*)",
-            r"begin.*forwarded.*message(.*)",
-            r"[-]+.*Original Message.*[-]+(.*)",
-            r"On.*wrote:(.*)",
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, body, re.IGNORECASE | re.MULTILINE | re.DOTALL)
-            if match:
-                return match.group(1).strip()
-        
-        # If no pattern matched, try to find where the forwarded content begins
-        lines = body.split('\n')
-        original_start = -1
-        
-        for i, line in enumerate(lines):
-            if re.search(r"forwarded|original.*message|on.*wrote", line, re.IGNORECASE):
-                original_start = i + 1
-                break
-                
-        if original_start >= 0:
-            return '\n'.join(lines[original_start:]).strip()
-        
-        # If all else fails, return the entire body
-        return body
-        
-    except Exception as e:
-        app.logger.error(f"Error extracting original message: {str(e)}")
-        return body
-
-# Add these helper functions to the existing ones
-def parse_json_email(data):
-    """Parse email data from JSON format"""
-    try:
-        # Handle different JSON formats from various email services
-        from_email = data.get('from') or data.get('sender') or data.get('envelope', {}).get('from')
-        
-        # Handle cases where from is an object with email/name
-        if isinstance(from_email, dict):
-            from_email = from_email.get('email') or from_email.get('address')
-        
-        to_email = data.get('to') or data.get('recipient') or data.get('envelope', {}).get('to')
-        
-        if isinstance(to_email, dict):
-            to_email = to_email.get('email') or to_email.get('address')
-        elif isinstance(to_email, list):
-            to_email = to_email[0] if to_email else None
-            if isinstance(to_email, dict):
-                to_email = to_email.get('email') or to_email.get('address')
-        
-        subject = data.get('subject', '')
-        
-        # Extract body - try different possible fields
-        body = data.get('text') or data.get('body') or data.get('body-plain') or ''
-        
-        # If HTML only, extract text from HTML
-        if not body and data.get('html'):
-            import re
-            body = re.sub('<[^<]+?>', '', data.get('html'))
-        
-        headers = {}
-        if data.get('headers'):
-            headers = {k.lower(): v for k, v in data.get('headers', {}).items()}
-        
-        return {
-            "from": from_email,
-            "to": to_email,
-            "subject": subject,
-            "body": body,
-            "headers": headers
-        }
-    except Exception as e:
-        app.logger.error(f"Error parsing JSON email: {str(e)}")
-        return None
-
-def parse_raw_email(raw_email):
-    """Parse raw MIME email data"""
-    try:
-        # Parse the raw email
-        msg = BytesParser(policy=policy.default).parsebytes(raw_email)
-        
-        # Extract from and to addresses
-        from_email = msg['from']
-        to_email = msg['to']
-        
-        # Extract subject
-        subject = msg['subject'] or ''
-        
-        # Extract headers
-        headers = {}
-        for key, value in msg.items():
-            headers[key.lower()] = value
-        
-        # Extract body text
-        body = ""
-        if msg.is_multipart():
-            for part in msg.iter_parts():
-                if part.get_content_type() == 'text/plain':
-                    payload = part.get_payload(decode=True)
-                    if payload:
-                        charset = part.get_content_charset() or 'utf-8'
-                        body = payload.decode(charset, errors='replace')
-                        break
-        else:
-            payload = msg.get_payload(decode=True)
-            if payload:
-                charset = msg.get_content_charset() or 'utf-8'
-                body = payload.decode(charset, errors='replace')
-        
-        # Handle quoted-printable encoding
-        if 'quoted-printable' in msg.get('content-transfer-encoding', '').lower():
-            try:
-                body = quopri.decodestring(body).decode('utf-8', errors='replace')
-            except:
-                pass
-        
-        return {
-            "from": from_email,
-            "to": to_email,
-            "subject": subject,
-            "body": body,
-            "headers": headers
-        }
-    except Exception as e:
-        app.logger.error(f"Error parsing raw email: {str(e)}")
-        return None
-
-# Add a route to setup instructions
-@app.route("/email-forwarding-setup")
-def email_forwarding_setup():
-    """Provide instructions for setting up email forwarding"""
-    user_id = request.args.get("user_id")
-    if not user_id:
-        return "Missing user_id", 400
-    
-    # Get user's email
-    user_resp = supabase.table("profiles") \
-        .select("email") \
-        .eq("id", user_id) \
-        .single() \
-        .execute()
-    
-    if not user_resp.data:
-        return "User not found", 404
-    
-    user_email = user_resp.data["email"]
-    forwarding_email = os.environ.get("FORWARDING_EMAIL", "inbound@yourdomain.com")
-    
-    return render_template(
-        "email_forwarding_setup.html",
-        user_id=user_id,
-        user_email=user_email,
-        forwarding_email=forwarding_email
-    )
-#---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-# app.py - Add these routes
-import os
-import base64
-import json
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-
-# Gmail API setup
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
-
-def get_gmail_service():
-    """Authenticate and return Gmail service"""
-    creds = None
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_file('token.json', SCOPES)
-    
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
-        
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
-    
-    return build('gmail', 'v1', credentials=creds)
-
-@app.route('/check_inbound_emails')
-def check_inbound_emails():
-    """Check for new emails in replyzeai.inbound@gmail.com"""
-    try:
-        service = get_gmail_service()
-        
-        # Search for unread emails
-        results = service.users().messages().list(
-            userId='me',
-            q='is:unread label:inbox'
-        ).execute()
-        
-        messages = results.get('messages', [])
-        processed_emails = []
-        
-        for message in messages:
-            msg = service.users().messages().get(
-                userId='me', 
-                id=message['id'],
-                format='full'
-            ).execute()
-            
-            email_data = process_email_message(msg)
-            if email_data:
-                processed_emails.append(email_data)
-                
-                # Mark as read
-                service.users().messages().modify(
-                    userId='me',
-                    id=message['id'],
-                    body={'removeLabelIds': ['UNREAD']}
-                ).execute()
+        # Test by getting user profile
+        profile = service.users().getProfile(userId='me').execute()
+        email_address = profile.get('emailAddress')
         
         return jsonify({
-            'status': 'success',
-            'processed': len(processed_emails),
-            'emails': processed_emails
+            "success": True, 
+            "message": f"Gmail connection successful for {email_address}"
         })
         
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        app.logger.error(f"Gmail connection test failed for user {user_id}: {str(e)}")
+        return jsonify({"success": False, "message": str(e)})
 
-def process_email_message(msg):
-    """Extract relevant data from email message"""
-    try:
-        headers = msg['payload'].get('headers', [])
-        subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
-        from_email = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown Sender')
-        to_email = next((h['value'] for h in headers if h['name'] == 'To'), 'Unknown Recipient')
-        
-        # Extract body
-        body = extract_email_body(msg['payload'])
-        
-        # Parse original recipient from forwarded email
-        original_recipient = extract_original_recipient(body, from_email)
-        
-        return {
-            'id': msg['id'],
-            'subject': subject,
-            'from': from_email,
-            'to': to_email,
-            'original_recipient': original_recipient,
-            'body': body[:500],  # First 500 chars
-            'timestamp': msg['internalDate']
-        }
-    except Exception as e:
-        print(f"Error processing email: {e}")
-        return None
-
-def extract_email_body(payload):
-    """Extract email body from payload"""
-    if 'parts' in payload:
-        for part in payload['parts']:
-            if part['mimeType'] == 'text/plain':
-                data = part['body']['data']
-                return base64.urlsafe_b64decode(data).decode('utf-8')
-    elif 'body' in payload and 'data' in payload['body']:
-        data = payload['body']['data']
-        return base64.urlsafe_b64decode(data).decode('utf-8')
-    
-    return "No body content"
-
-def extract_original_recipient(body, from_email):
-    """Extract original recipient from forwarded email body"""
-    # Look for common forwarding patterns
-    patterns = [
-        r'Original-recipient:\s*rfc822;(.+)',
-        r'To:\s*([^\s]+@[^\s]+)',
-        r'Originally sent to:\s*([^\s]+@[^\s]+)'
-    ]
-    
-    import re
-    for pattern in patterns:
-        match = re.search(pattern, body, re.IGNORECASE)
-        if match:
-            return match.group(1).strip()
-    
-    # If no pattern found, return the from email (assuming it's the original sender)
-    return from_email 
+#---------------------------------------------------------------------------------------------------------------------------------------
 
 # ── Final entry point ──
 if __name__ == "__main__":
