@@ -73,7 +73,106 @@ def check_rate_limit(resource):
             return f(*args, **kwargs)
         return decorated_function
     return decorator
+#----------------------------------------------------------------------------------
+# --- Gmail API Helper Functions ---
 
+def get_gmail_service(user_id):
+    """Get Gmail service for a user"""
+    try:
+        # Get user's Gmail tokens from Supabase
+        tok = supabase.table("gmail_tokens") \
+                     .select("credentials") \
+                     .eq("user_id", user_id) \
+                     .single() \
+                     .execute()
+        
+        if not tok.data:
+            return None
+            
+        cd = tok.data[0]["credentials"]
+        creds = Credentials(
+            token=cd["token"],
+            refresh_token=cd["refresh_token"],
+            token_uri=cd["token_uri"],
+            client_id=cd["client_id"],
+            client_secret=cd["client_secret"],
+            scopes=cd["scopes"],
+        )
+        
+        # Refresh token if expired
+        if creds.expired and creds.refresh_token:
+            creds.refresh(GoogleRequest())
+            
+        # Build Gmail service
+        service = build("gmail", "v1", credentials=creds, cache_discovery=False)
+        return service
+        
+    except Exception as e:
+        app.logger.error(f"Error getting Gmail service for user {user_id}: {str(e)}")
+        return None
+
+def send_email_gmail(user_id, to_email, subject, html_content, cc_emails=None, bcc_emails=None):
+    """Send email using Gmail API"""
+    try:
+        service = get_gmail_service(user_id)
+        if not service:
+            return False, "Gmail service not available"
+
+        # Create message
+        message = MIMEText(html_content, 'html')
+        message['to'] = to_email
+        message['from'] = "me"  # Gmail API uses 'me' for authenticated user
+        message['subject'] = subject
+        
+        if cc_emails:
+            message['cc'] = ', '.join(cc_emails)
+        if bcc_emails:
+            message['bcc'] = ', '.join(bcc_emails)
+
+        # Encode message
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        
+        # Send message
+        sent_message = service.users().messages().send(
+            userId="me", 
+            body={'raw': raw_message}
+        ).execute()
+        
+        app.logger.info(f"Email sent via Gmail API, message ID: {sent_message['id']}")
+        return True, "Email sent successfully"
+        
+    except Exception as e:
+        app.logger.error(f"Error sending email via Gmail API: {str(e)}")
+        return False, str(e)
+
+def create_draft_gmail(user_id, to_email, subject, html_content):
+    """Create a draft email using Gmail API"""
+    try:
+        service = get_gmail_service(user_id)
+        if not service:
+            return False, "Gmail service not available"
+
+        # Create message
+        message = MIMEText(html_content, 'html')
+        message['to'] = to_email
+        message['from'] = "me"
+        message['subject'] = subject
+
+        # Encode message
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        
+        # Create draft
+        draft = service.users().drafts().create(
+            userId="me",
+            body={'message': {'raw': raw_message}}
+        ).execute()
+        
+        app.logger.info(f"Draft created via Gmail API, draft ID: {draft['id']}")
+        return True, "Draft created successfully"
+        
+    except Exception as e:
+        app.logger.error(f"Error creating draft via Gmail API: {str(e)}")
+        return False, str(e)
 #--------------------------------------------------------------
 
     
@@ -1605,8 +1704,9 @@ def import_leads():
                                 "Follow-up from your inquiry",
                                 follow_up_content
                             )
-                                
-                                if success:
+                            
+                            # FIXED INDENTATION: This was the main issue
+                            if success:
                                 # Create follow-up record
                                 follow_up_data = {
                                     'lead_id': lead_id,
