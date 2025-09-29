@@ -858,6 +858,152 @@ def reconnect_gmail():
 #    }).eq("id", user_id).execute()
 #    
 #    return jsonify({"status": "success"})
+#-----------------------------------------------------------------------------
+#polling gmail
+@app.route("/connect_gmail2")
+def connect_gmail2():
+    """
+    Initiates Gmail OAuth flow.
+    """
+    user_id = request.args.get("user_id")
+    if not user_id or not is_valid_uuid(user_id):
+        app.logger.error(f"Missing or invalid user_id in connect_gmail: {user_id}")
+        return "Missing or invalid user ID", 400
+
+    flow = Flow.from_client_config(
+        {
+            "web": {
+                "client_id": os.environ["GOOGLE_CLIENT_ID2"],
+                "client_secret": os.environ["GOOGLE_CLIENT_SECRET2"],
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [os.environ["REDIRECT_URI2"]]
+            }
+        },
+        scopes=[
+            "https://www.googleapis.com/auth/gmail.readonly",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "openid"
+        ]
+    )
+    flow.redirect_uri = os.environ["REDIRECT_URI2"]
+
+    # ✅ now user_id is safely defined
+    authorization_url, _ = flow.authorization_url(
+        access_type="offline",
+        include_granted_scopes="true",
+        prompt="consent",
+        state=user_id
+    )
+
+    return redirect(authorization_url)
+
+
+
+import uuid
+
+def is_valid_uuid(val: str) -> bool:
+    try:
+        uuid.UUID(str(val))
+        return True
+    except ValueError:
+        return False
+
+
+@app.route("/oauth2callback2")
+def oauth2callback2():
+    """Handles OAuth2 callback from Google"""
+    try:
+        # Extract state parameter containing user_id
+        user_id = request.args.get("state")
+        if not user_id:
+            app.logger.error("OAuth2 callback missing state parameter")
+            return "<h1>Authentication Failed</h1><p>Missing state parameter</p>", 400
+
+        # ✅ Validate UUID format before querying Supabase
+        if not is_valid_uuid(user_id):
+            app.logger.error(f"Invalid user_id format in state: {user_id}")
+            return "<h1>Authentication Failed</h1><p>Invalid user ID format</p>", 400
+
+        # Check if user exists in Supabase
+        try:
+            user_check = supabase.table("profiles").select("id").eq("id", user_id).execute()
+            if not user_check.data:
+                app.logger.error(f"User not found: {user_id}")
+                return "<h1>Authentication Failed</h1><p>User not found</p>", 400
+        except Exception as e:
+            app.logger.error(f"Error checking user: {str(e)}")
+            return "<h1>Authentication Failed</h1><p>Error validating user</p>", 500
+
+        # Continue OAuth flow
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": os.environ["GOOGLE_CLIENT_ID2"],
+                    "client_secret": os.environ["GOOGLE_CLIENT_SECRET2"],
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [os.environ["REDIRECT_URI2"]]
+                }
+            },
+            scopes=[
+                "https://www.googleapis.com/auth/gmail.readonly",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "openid"
+            ],
+            state=user_id
+        )
+        flow.redirect_uri = os.environ["REDIRECT_URI2"]
+        flow.fetch_token(authorization_response=request.url)
+        credentials = flow.credentials
+
+        # Verify ID token
+        id_info = id_token.verify_oauth2_token(
+            credentials.id_token,
+            grequests.Request(),
+            os.environ["GOOGLE_CLIENT_ID"]
+        )
+        email = id_info.get("email")
+        if not email:
+            raise ValueError("No email found in Google ID token")
+
+        # Upsert Gmail tokens
+        creds_payload = {
+            "user_id": user_id,
+            "user_email": email,
+            "credentials": {
+                "token": credentials.token,
+                "refresh_token": credentials.refresh_token,
+                "token_uri": credentials.token_uri,
+                "client_id": credentials.client_id,
+                "client_secret": credentials.client_secret,
+                "scopes": credentials.scopes
+            }
+        }
+
+        try:
+            supabase.table("gmail_tokens2").upsert(creds_payload).execute()
+        except Exception as db_error:
+            app.logger.error(f"Database error during token upsert: {str(db_error)}")
+            if "uuid" in str(db_error).lower() and "format" in str(db_error).lower():
+                app.logger.warning(f"Non-UUID user_id detected: {user_id}")
+                return "<h1>Authentication Failed</h1><p>User ID format issue. Please contact support.</p>", 400
+            else:
+                raise db_error
+
+        # Update user profile
+        full_name = id_info.get("name") or email.split("@")[0]
+        supabase.table("profiles").update({
+            "email": email,
+            "full_name": full_name,
+            "ai_enabled": True
+        }).eq("id", user_id).execute()
+
+        return redirect(f"/dashboard?user_id={user_id}")
+
+    except Exception as e:
+        app.logger.error(f"OAuth2 Callback Error: {str(e)}", exc_info=True)
+        return f"<h1>Authentication Failed</h1><p>{str(e)}</p>", 500
 #-----------------------------------------------------------------------
 @app.route("/connect_gmail")
 def connect_gmail():
