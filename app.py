@@ -1449,21 +1449,22 @@ def trigger_process():
 
         # ── 6) Send via SMTP fallback or Gmail API, enforcing 20/day cap ──
     # ── 6) Send via SMTP fallback or Gmail API, enforcing 20/day cap ──
-for rec in ready:
-    em_id = rec["id"]
-    uid = rec["user_id"]  # The user who owns this email
-    to_addr = rec["sender_email"]
-    subject = rec.get("subject", "Your Email")
+
+    for rec in ready:
+        em_id = rec["id"]
+        uid = rec["user_id"]  # The user who owns this email
+        to_addr = rec["sender_email"]
+        subject = rec.get("subject", "Your Email")
 
     # 20-email/day limit for the OWNING user
-    if emails_sent_today.get(uid, 0) >= 20:
-        app.logger.info(f"User {uid} reached daily limit, marking {em_id} error")
-        supabase.table("emails").update({
-            "status": "error",
-            "error_message": "Daily email limit reached"
-        }).eq("id", em_id).execute()
-        failed.append(em_id)
-        continue
+        if emails_sent_today.get(uid, 0) >= 20:
+            app.logger.info(f"User {uid} reached daily limit, marking {em_id} error")
+            supabase.table("emails").update({
+                "status": "error",
+                "error_message": "Daily email limit reached"
+            }).eq("id", em_id).execute()
+            failed.append(em_id)
+            continue
 
     # Find an available sending account (Gmail tokens, not Gmail tokens2)
     sending_accounts = supabase.table("gmail_tokens").select("user_id, credentials").execute().data
@@ -1551,18 +1552,14 @@ for rec in ready:
         }).eq("id", em_id).execute()
         failed.append(em_id)
 
-       
-
-  
-    # ── Summary response ──
-
-summary = {
-        "processed": all_processed,
-        "sent":      sent,
-        "drafted":   drafted,
-        "failed":    failed
-    }
-    return jsonify(summary), 200    
+# ── Summary response ──
+    summary = {
+    "processed": all_processed,
+    "sent":      sent,
+    "drafted":   drafted,
+    "failed":    failed
+}
+return jsonify(summary), 200
 
 #---------------------------------------------------------------------------------------------------------------------------
 
