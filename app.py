@@ -1362,7 +1362,7 @@ def trigger_process():
     today_iso = datetime.utcnow().date().isoformat()
     sent_rows = (
         supabase.table("emails")
-                .select("user_id, sent_at")
+                .select("original_user_id, sent_at")
                 .eq("status", "sent")
                 .execute()
                 .data or []
@@ -1371,7 +1371,7 @@ def trigger_process():
     for r in sent_rows:
         sent_at = r.get("sent_at","")
         if sent_at.startswith(today_iso):
-            uid = r["user_id"]
+            uid = r["original_user_id"]
             emails_sent_today[uid] = emails_sent_today.get(uid, 0) + 1
 
     # ── 1) Fetch the three pre‑send queues ──
@@ -1449,94 +1449,106 @@ def trigger_process():
 
         # ── 6) Send via SMTP fallback or Gmail API, enforcing 20/day cap ──
     for rec in ready:
-        em_id     = rec["id"]
-        uid       = rec["user_id"]
-        to_addr   = rec["sender_email"]
-        subject   = rec.get("subject", "Your Email")  # Get the original subject or default
+    em_id = rec["id"]
+    uid = rec["user_id"]  # The user who owns this email
+    to_addr = rec["sender_email"]
+    subject = rec.get("subject", "Your Email")
 
-        # 20-email/day limit
-        if emails_sent_today.get(uid, 0) >= 20:
-            app.logger.info(f"User {uid} reached daily limit, marking {em_id} error")
-            supabase.table("emails").update({
-                "status": "error",
-                "error_message": "Daily email limit reached"
-            }).eq("id", em_id).execute()
-            failed.append(em_id)
-            continue 
+    # 20-email/day limit for the OWNING user
+    if emails_sent_today.get(uid, 0) >= 20:
+        app.logger.info(f"User {uid} reached daily limit, marking {em_id} error")
+        supabase.table("emails").update({
+            "status": "error",
+            "error_message": "Daily email limit reached"
+        }).eq("id", em_id).execute()
+        failed.append(em_id)
+        continue
 
-        # load personalization flags & build HTML
-        lease_flag = supabase.table("profiles") \
-                             .select("generate_leases") \
-                             .eq("id", uid).single().execute().data.get("generate_leases", False)
-        body_html = (rec.get("processed_content") or "").replace("\n", "<br>")
-        prof_sig = supabase.table("profiles") \
-                           .select("display_name, signature") \
-                           .eq("id", uid).single().execute().data or {}
-        if prof_sig.get("display_name"):
-            body_html = body_html.replace("[Your Name]", prof_sig["display_name"])
-        full_html = f"<html><body><p>{body_html}</p>{prof_sig.get('signature','')}</body></html>"
+    # Find an available sending account (Gmail tokens, not Gmail tokens2)
+    sending_accounts = supabase.table("gmail_tokens").select("user_id, credentials").execute().data
+    if not sending_accounts:
+        app.logger.error("No sending accounts available")
+        supabase.table("emails").update({
+            "status": "error", 
+            "error_message": "No sending accounts available"
+        }).eq("id", em_id).execute()
+        failed.append(em_id)
+        continue
 
-        # 20-email/day limit
-        if emails_sent_today.get(uid, 0) >= 20:
-            app.logger.info(f"User {uid} reached daily limit, marking {em_id} error")
-            supabase.table("emails").update({
-                "status": "error",
-                "error_message": "Daily email limit reached"
-            }).eq("id", em_id).execute()
-            failed.append(em_id)
-            continue
+    # Use the first available sending account
+    send_account = sending_accounts[0]
+    send_user_id = send_account["user_id"]
+    
+    # Get user-specific data
+    lease_flag = supabase.table("profiles") \
+                         .select("generate_leases") \
+                         .eq("id", uid).single().execute().data.get("generate_leases", False)
+    body_html = (rec.get("processed_content") or "").replace("\n", "<br>")
+    prof_sig = supabase.table("profiles") \
+                       .select("display_name, signature") \
+                       .eq("id", uid).single().execute().data or {}
+    
+    if prof_sig.get("display_name"):
+        body_html = body_html.replace("[Your Name]", prof_sig["display_name"])
+    full_html = f"<html><body><p>{body_html}</p>{prof_sig.get('signature','')}</body></html>"
 
-        # 2) Gmail API fallback
-        try:
-            tok = supabase.table("gmail_tokens") \
-                          .select("credentials") \
-                          .eq("user_id", uid).single().execute().data
-            if not tok:
-                raise ValueError("No Gmail token found")
+    try:
+        # Use the sending account's credentials
+        cd = send_account["credentials"]
+        creds = Credentials(
+            token=cd["token"],
+            refresh_token=cd["refresh_token"],
+            token_uri=cd["token_uri"],
+            client_id=cd["client_id"],
+            client_secret=cd["client_secret"],
+            scopes=cd["scopes"],
+        )
+        if creds.expired and creds.refresh_token:
+            creds.refresh(GoogleRequest())
 
-            cd = tok["credentials"]
-            creds = Credentials(
-                token=cd["token"],
-                refresh_token=cd["refresh_token"],
-                token_uri=cd["token_uri"],
-                client_id=cd["client_id"],
-                client_secret=cd["client_secret"],
-                scopes=cd["scopes"],
-            )
-            if creds.expired and creds.refresh_token:
-                creds.refresh(GoogleRequest())
+        svc = build("gmail", "v1", credentials=creds, cache_discovery=False)
+        msg = MIMEText(full_html, "html")
+        msg["to"] = to_addr
+        msg["from"] = "me"
+        
+        # Use the original user's display name in the "from" header
+        display_name = prof_sig.get("display_name", "")
+        if display_name:
+            msg["from"] = f'"{display_name}" <me>'
+        else:
+            msg["from"] = "me"
+            
+        msg["subject"] = "Lease Agreement Draft" if lease_flag else f"RE: {rec.get('subject', 'Your Email')}"
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
-            svc = build("gmail", "v1", credentials=creds, cache_discovery=False)
-            msg = MIMEText(full_html, "html")
-            msg["to"]      = to_addr
-            msg["from"]    = "me"
-            msg["subject"] = "Lease Agreement Draft" if lease_flag else f"RE: {rec.get('subject', 'Your Email')}"  # Modified subject
-            raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+        if lease_flag:
+            svc.users().drafts().create(userId="me", body={"message": {"raw": raw}}).execute()
+            status_to = "drafted"
+            drafted.append(em_id)
+        else:
+            svc.users().messages().send(userId="me", body={"raw": raw}).execute()
+            status_to = "sent"
+            sent.append(em_id)
 
-            if lease_flag:
-                svc.users().drafts().create(userId="me", body={"message": {"raw": raw}}).execute()
-                status_to = "drafted"
-                drafted.append(em_id)
-            else:
-                svc.users().messages().send(userId="me", body={"raw": raw}).execute()
-                status_to = "sent"
-                sent.append(em_id)
+        # Update the email record with sending info
+        supabase.table("emails").update({
+            "status": status_to,
+            "sent_at": datetime.utcnow().isoformat(),
+            "sent_by_account": send_user_id,  # Track which account sent it
+            "original_user_id": uid  # Ensure we track the original user
+        }).eq("id", em_id).execute()
+        
+        # Increment count for the ORIGINAL user (uid), not the sending account
+        emails_sent_today[uid] = emails_sent_today.get(uid, 0) + 1
+        app.logger.info(f"Email {em_id} sent by account {send_user_id} for user {uid}")
 
-            supabase.table("emails").update({
-                "status":  status_to,
-                "sent_at": datetime.utcnow().isoformat()
-            }).eq("id", em_id).execute()
-            emails_sent_today[uid] = emails_sent_today.get(uid, 0) + 1
-            app.logger.info(f"Gmail API send succeeded for email {em_id} (user {uid})")
-
-        except Exception as e:
-            app.logger.error(f"Gmail API send failed for email {em_id} (user {uid})", exc_info=True)
-            supabase.table("emails").update({
-                "status":        "error",
-                "error_message": str(e)
-            }).eq("id", em_id).execute()
-            failed.append(em_id)
-
+    except Exception as e:
+        app.logger.error(f"Gmail API send failed for email {em_id}", exc_info=True)
+        supabase.table("emails").update({
+            "status": "error",
+            "error_message": str(e)
+        }).eq("id", em_id).execute()
+        failed.append(em_id)
        
 
   
