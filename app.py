@@ -1545,12 +1545,12 @@ def trigger_process():
             app.logger.info(f"Email {em_id} sent by account {send_user_id} for user {uid}")
 
         except Exception as e:
-        app.logger.error(f"Gmail API send failed for email {em_id}", exc_info=True)
-        supabase.table("emails").update({
-            "status": "error",
-            "error_message": str(e)
-        }).eq("id", em_id).execute()
-        failed.append(em_id)
+            app.logger.error(f"Gmail API send failed for email {em_id}", exc_info=True)
+            supabase.table("emails").update({
+                "status": "error",
+                "error_message": str(e)
+            }).eq("id", em_id).execute()
+            failed.append(em_id)
 
 # ── Summary response ──
     summary = {
