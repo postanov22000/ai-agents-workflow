@@ -1449,7 +1449,7 @@ def trigger_process():
 
         # ── 6) Send via SMTP fallback or Gmail API, enforcing 20/day cap ──
     for rec in ready:
-    em_id = rec["id"]
+        em_id = rec["id"]
     uid = rec["user_id"]  # The user who owns this email
     to_addr = rec["sender_email"]
     subject = rec.get("subject", "Your Email")
