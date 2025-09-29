@@ -43,15 +43,17 @@ jobs:
           python poll_gmail.py
           echo "status=gmail" >> $GITHUB_OUTPUT
 
-      - name: Run IMAP/SMTP Poller
-        id: run-imap
+      - name: Run Gmail Poller
+        id: the-real-poll-gmail
         env:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GOOGLE_CLIENT_ID:          ${{ secrets.GOOGLE_CLIENT_ID2 }}
+          GOOGLE_CLIENT_SECRET:      ${{ secrets.GOOGLE_CLIENT_SECRET2 }}
           ENCRYPTION_KEY:            ${{ secrets.ENCRYPTION_KEY }}
         run: |
-          python poll_imap_smtp.py
-          echo "status=imap" >> $GITHUB_OUTPUT
+          python poll_gmail2.py
+          echo "status=gmail" >> $GITHUB_OUTPUT
 
   trigger-processing:
     needs: poll-mail
