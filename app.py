@@ -1448,11 +1448,12 @@ def trigger_process():
     )
 
         # ── 6) Send via SMTP fallback or Gmail API, enforcing 20/day cap ──
-    for rec in ready:
-        em_id = rec["id"]
-        uid = rec["user_id"]  # The user who owns this email
-        to_addr = rec["sender_email"]
-        subject = rec.get("subject", "Your Email")
+    # ── 6) Send via SMTP fallback or Gmail API, enforcing 20/day cap ──
+for rec in ready:
+    em_id = rec["id"]
+    uid = rec["user_id"]  # The user who owns this email
+    to_addr = rec["sender_email"]
+    subject = rec.get("subject", "Your Email")
 
     # 20-email/day limit for the OWNING user
     if emails_sent_today.get(uid, 0) >= 20:
@@ -1478,7 +1479,7 @@ def trigger_process():
     # Use the first available sending account
     send_account = sending_accounts[0]
     send_user_id = send_account["user_id"]
-    
+
     # Get user-specific data
     lease_flag = supabase.table("profiles") \
                          .select("generate_leases") \
@@ -1487,7 +1488,7 @@ def trigger_process():
     prof_sig = supabase.table("profiles") \
                        .select("display_name, signature") \
                        .eq("id", uid).single().execute().data or {}
-    
+
     if prof_sig.get("display_name"):
         body_html = body_html.replace("[Your Name]", prof_sig["display_name"])
     full_html = f"<html><body><p>{body_html}</p>{prof_sig.get('signature','')}</body></html>"
@@ -1510,15 +1511,15 @@ def trigger_process():
         msg = MIMEText(full_html, "html")
         msg["to"] = to_addr
         msg["from"] = "me"
-        
+
         # Use the original user's display name in the "from" header
         display_name = prof_sig.get("display_name", "")
         if display_name:
             msg["from"] = f'"{display_name}" <me>'
         else:
             msg["from"] = "me"
-            
-        msg["subject"] = "Lease Agreement Draft" if lease_flag else f"RE: {rec.get('subject', 'Your Email')}"
+
+        msg["subject"] = "Lease Agreement Draft" if lease_flag else f"RE: {subject}"
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
         if lease_flag:
@@ -1537,7 +1538,7 @@ def trigger_process():
             "sent_by_account": send_user_id,  # Track which account sent it
             "original_user_id": uid  # Ensure we track the original user
         }).eq("id", em_id).execute()
-        
+
         # Increment count for the ORIGINAL user (uid), not the sending account
         emails_sent_today[uid] = emails_sent_today.get(uid, 0) + 1
         app.logger.info(f"Email {em_id} sent by account {send_user_id} for user {uid}")
@@ -1549,6 +1550,7 @@ def trigger_process():
             "error_message": str(e)
         }).eq("id", em_id).execute()
         failed.append(em_id)
+
        
 
   
