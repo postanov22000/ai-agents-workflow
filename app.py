@@ -961,7 +961,7 @@ def oauth2callback2():
         id_info = id_token.verify_oauth2_token(
             credentials.id_token,
             grequests.Request(),
-            os.environ["GOOGLE_CLIENT_ID"]
+            os.environ["GOOGLE_CLIENT_ID2"]
         )
         email = id_info.get("email")
         if not email:
