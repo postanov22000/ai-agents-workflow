@@ -1475,7 +1475,7 @@ def trigger_process():
             "error_message": "No sending accounts available"
         }).eq("id", em_id).execute()
         failed.append(em_id)
-        continue
+    continue
 
     # Use the first available sending account
     send_account = sending_accounts[0]
