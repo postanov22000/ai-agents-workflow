@@ -1555,13 +1555,14 @@ for rec in ready:
 
   
     # ── Summary response ──
-    summary = {
+
+summary = {
         "processed": all_processed,
         "sent":      sent,
         "drafted":   drafted,
         "failed":    failed
     }
-    return jsonify(summary), 200
+    return jsonify(summary), 200    
 
 #---------------------------------------------------------------------------------------------------------------------------
 
