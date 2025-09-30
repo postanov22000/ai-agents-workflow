@@ -77,19 +77,60 @@ def extract_gmail_verification_link(text):
 
 def extract_forwarding_email_from_confirmation(text):
     """Extract the email address that's trying to forward to us"""
-    # Look for patterns like "forward emails from user@domain.com"
+    logger.info(f"Searching for forwarding email in text: {text[:500]}...")
+    
+    # Look for patterns in the Gmail forwarding confirmation email
     patterns = [
         r'forward\s+emails\s+from\s+([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)',
         r'forwarding\s+emails\s+from\s+([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)',
         r'from\s+([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)\s+to\s+forward',
-        r'([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)\s+is\s+requesting'
+        r'([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)\s+is\s+requesting',
+        r'([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)\s+has\s+requested',
+        r'To allow\s+([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)\s+to automatically forward',
+        r'allow\s+([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)\s+to automatically forward'
     ]
     
-    for pattern in patterns:
+    for i, pattern in enumerate(patterns):
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
-            return match.group(1).lower()
+            email_found = match.group(1).lower()
+            logger.info(f"Pattern {i} matched: {email_found}")
+            return email_found
+        else:
+            logger.debug(f"Pattern {i} did not match")
+    
+    # If no pattern matched, try a more general approach
+    email_pattern = r'[\w\.-]+@[\w\.-]+\.\w+'
+    emails = re.findall(email_pattern, text)
+    logger.info(f"All emails found in text: {emails}")
+    
+    # Filter out common Google/noreply addresses and the destination email
+    excluded_domains = ['google.com', 'noreply', 'forwarding-noreply']
+    destination_email = None
+    
+    # Try to find the destination email (the one receiving forwards)
+    for email in emails:
+        if 'inbound' in email.lower() or 'replyzeai.inbound' in email.lower():
+            destination_email = email.lower()
+            break
+    
+    logger.info(f"Destination email: {destination_email}")
+    
+    # The forwarding email should be different from destination and not from excluded domains
+    for email in emails:
+        email_lower = email.lower()
+        is_excluded = any(domain in email_lower for domain in excluded_domains)
+        is_destination = email_lower == destination_email
+        
+        logger.info(f"Checking email: {email_lower}, excluded: {is_excluded}, destination: {is_destination}")
+        
+        if not is_excluded and not is_destination:
+            logger.info(f"Found potential forwarding email: {email_lower}")
+            return email_lower
+    
+    logger.warning(f"Could not extract forwarding email. All emails found: {emails}")
     return None
+    
 import re
 import requests
 from urllib.parse import unquote
