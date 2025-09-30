@@ -90,7 +90,162 @@ def extract_forwarding_email_from_confirmation(text):
         if match:
             return match.group(1).lower()
     return None
+import re
+import requests
+from urllib.parse import unquote
+from email.utils import parseaddr
 
+
+
+def click_verification_link(verification_url):
+    """Simulate clicking the Gmail verification link"""
+    try:
+        # Follow redirects and handle Google's verification process
+        session = requests.Session()
+        
+        # Set realistic headers to avoid being blocked
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        }
+        
+        response = session.get(verification_url, headers=headers, timeout=30, allow_redirects=True)
+        
+        if response.status_code == 200:
+            logger.info(f"✅ Successfully clicked verification link: {response.url}")
+            return True
+        else:
+            logger.warning(f"⚠️ Verification link returned status {response.status_code}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ Failed to click verification link: {str(e)}")
+        return False
+
+def is_user_in_database(user_email):
+    """Check if the email belongs to a registered user"""
+    try:
+        result = supabase.table("profiles") \
+            .select("id, email, full_name") \
+            .eq("email", user_email) \
+            .execute()
+        
+        return len(result.data) > 0
+    except Exception as e:
+        logger.error(f"Error checking user in database: {str(e)}")
+        return False
+
+def handle_forwarding_confirmation(email_body, email_subject, sender_email):
+    """Process Gmail forwarding confirmation emails"""
+    try:
+        # Extract the verification link
+        verification_link = extract_gmail_verification_link(email_body)
+        if not verification_link:
+            logger.info("No verification link found in email")
+            return False
+        
+        # Extract the email address that's trying to forward to us
+        forwarding_email = extract_forwarding_email_from_confirmation(email_body)
+        if not forwarding_email:
+            logger.info("Could not extract forwarding email address from confirmation")
+            return False
+        
+        logger.info(f"Found forwarding request from: {forwarding_email}")
+        logger.info(f"Verification link: {verification_link}")
+        
+        # Check if this is a registered user
+        if is_user_in_database(forwarding_email):
+            logger.info(f"✅ {forwarding_email} is a registered user - auto-verifying...")
+            
+            # Click the verification link
+            if click_verification_link(verification_link):
+                # Mark user as forwarding verified in database
+                mark_user_as_verified(forwarding_email)
+                
+                # Send confirmation to user
+                send_forwarding_setup_confirmation(forwarding_email)
+                return True
+            else:
+                logger.error(f"Failed to auto-verify {forwarding_email}")
+                return False
+        else:
+            logger.info(f"❌ {forwarding_email} is not a registered user - ignoring forwarding request")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error handling forwarding confirmation: {str(e)}")
+        return False
+
+def mark_user_as_verified(user_email):
+    """Mark user as having verified email forwarding"""
+    try:
+        result = supabase.table("profiles") \
+            .update({
+                "forwarding_verified": True,
+                "forwarding_verified_at": datetime.now(timezone.utc).isoformat()
+            }) \
+            .eq("email", user_email) \
+            .execute()
+        
+        if result.data:
+            logger.info(f"✅ Marked {user_email} as forwarding verified")
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error marking user as verified: {str(e)}")
+        return False
+
+def send_forwarding_setup_confirmation(user_email):
+    """Send email confirmation that forwarding is setup"""
+    try:
+        user_result = supabase.table("profiles") \
+            .select("id, full_name") \
+            .eq("email", user_email) \
+            .single() \
+            .execute()
+        
+        if not user_result.data:
+            return
+        
+        user = user_result.data
+        subject = "✅ Email Forwarding Successfully Setup!"
+        
+        html_content = f"""
+        <html>
+        <body>
+            <h2>Email Forwarding Activated! 🎉</h2>
+            <p>Hello {user['full_name'] or 'there'},</p>
+            <p>Your email forwarding has been automatically verified and is now active!</p>
+            <p><strong>What's next?</strong></p>
+            <ul>
+                <li>Any emails forwarded to your dedicated address will be automatically processed</li>
+                <li>You'll see AI-generated responses in your dashboard</li>
+                <li>No additional setup required - you're all set!</li>
+            </ul>
+            <p>Start forwarding client emails and watch the magic happen! ✨</p>
+        </body>
+        </html>
+        """
+        
+        # Send via Gmail API
+        success, message = send_email_gmail(
+            user['id'],
+            user_email,
+            subject,
+            html_content
+        )
+        
+        if success:
+            logger.info(f"Sent forwarding confirmation to {user_email}")
+        else:
+            logger.error(f"Failed to send forwarding confirmation: {message}")
+            
+    except Exception as e:
+        logger.error(f"Error sending forwarding confirmation: {str(e)}")
 #-----------------------------------------------------------------------------------------------------------
 def load_credentials(user_email: str) -> Optional[Credentials]:
     """Loads and optionally refreshes Gmail credentials from Supabase."""
@@ -397,160 +552,5 @@ def poll_gmail_for_user(user_email: str):
 
 
 
-import re
-import requests
-from urllib.parse import unquote
-from email.utils import parseaddr
 
-
-
-def click_verification_link(verification_url):
-    """Simulate clicking the Gmail verification link"""
-    try:
-        # Follow redirects and handle Google's verification process
-        session = requests.Session()
-        
-        # Set realistic headers to avoid being blocked
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-        }
-        
-        response = session.get(verification_url, headers=headers, timeout=30, allow_redirects=True)
-        
-        if response.status_code == 200:
-            logger.info(f"✅ Successfully clicked verification link: {response.url}")
-            return True
-        else:
-            logger.warning(f"⚠️ Verification link returned status {response.status_code}")
-            return False
-            
-    except Exception as e:
-        logger.error(f"❌ Failed to click verification link: {str(e)}")
-        return False
-
-def is_user_in_database(user_email):
-    """Check if the email belongs to a registered user"""
-    try:
-        result = supabase.table("profiles") \
-            .select("id, email, full_name") \
-            .eq("email", user_email) \
-            .execute()
-        
-        return len(result.data) > 0
-    except Exception as e:
-        logger.error(f"Error checking user in database: {str(e)}")
-        return False
-
-def handle_forwarding_confirmation(email_body, email_subject, sender_email):
-    """Process Gmail forwarding confirmation emails"""
-    try:
-        # Extract the verification link
-        verification_link = extract_gmail_verification_link(email_body)
-        if not verification_link:
-            logger.info("No verification link found in email")
-            return False
-        
-        # Extract the email address that's trying to forward to us
-        forwarding_email = extract_forwarding_email_from_confirmation(email_body)
-        if not forwarding_email:
-            logger.info("Could not extract forwarding email address from confirmation")
-            return False
-        
-        logger.info(f"Found forwarding request from: {forwarding_email}")
-        logger.info(f"Verification link: {verification_link}")
-        
-        # Check if this is a registered user
-        if is_user_in_database(forwarding_email):
-            logger.info(f"✅ {forwarding_email} is a registered user - auto-verifying...")
-            
-            # Click the verification link
-            if click_verification_link(verification_link):
-                # Mark user as forwarding verified in database
-                mark_user_as_verified(forwarding_email)
-                
-                # Send confirmation to user
-                send_forwarding_setup_confirmation(forwarding_email)
-                return True
-            else:
-                logger.error(f"Failed to auto-verify {forwarding_email}")
-                return False
-        else:
-            logger.info(f"❌ {forwarding_email} is not a registered user - ignoring forwarding request")
-            return False
-            
-    except Exception as e:
-        logger.error(f"Error handling forwarding confirmation: {str(e)}")
-        return False
-
-def mark_user_as_verified(user_email):
-    """Mark user as having verified email forwarding"""
-    try:
-        result = supabase.table("profiles") \
-            .update({
-                "forwarding_verified": True,
-                "forwarding_verified_at": datetime.now(timezone.utc).isoformat()
-            }) \
-            .eq("email", user_email) \
-            .execute()
-        
-        if result.data:
-            logger.info(f"✅ Marked {user_email} as forwarding verified")
-            return True
-        return False
-    except Exception as e:
-        logger.error(f"Error marking user as verified: {str(e)}")
-        return False
-
-def send_forwarding_setup_confirmation(user_email):
-    """Send email confirmation that forwarding is setup"""
-    try:
-        user_result = supabase.table("profiles") \
-            .select("id, full_name") \
-            .eq("email", user_email) \
-            .single() \
-            .execute()
-        
-        if not user_result.data:
-            return
-        
-        user = user_result.data
-        subject = "✅ Email Forwarding Successfully Setup!"
-        
-        html_content = f"""
-        <html>
-        <body>
-            <h2>Email Forwarding Activated! 🎉</h2>
-            <p>Hello {user['full_name'] or 'there'},</p>
-            <p>Your email forwarding has been automatically verified and is now active!</p>
-            <p><strong>What's next?</strong></p>
-            <ul>
-                <li>Any emails forwarded to your dedicated address will be automatically processed</li>
-                <li>You'll see AI-generated responses in your dashboard</li>
-                <li>No additional setup required - you're all set!</li>
-            </ul>
-            <p>Start forwarding client emails and watch the magic happen! ✨</p>
-        </body>
-        </html>
-        """
-        
-        # Send via Gmail API
-        success, message = send_email_gmail(
-            user['id'],
-            user_email,
-            subject,
-            html_content
-        )
-        
-        if success:
-            logger.info(f"Sent forwarding confirmation to {user_email}")
-        else:
-            logger.error(f"Failed to send forwarding confirmation: {message}")
-            
-    except Exception as e:
-        logger.error(f"Error sending forwarding confirmation: {str(e)}")
 
