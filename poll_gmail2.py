@@ -41,7 +41,57 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
+def is_forwarding_confirmation_email(subject, body):
+    """Check if this is a Gmail forwarding confirmation email"""
+    forwarding_keywords = [
+        'confirm your forward',
+        'forwarding confirmation',
+        'verify forwarding',
+        'confirm forwarding',
+        'forward emails from'
+    ]
+    
+    subject_lower = subject.lower()
+    body_lower = body.lower()
+    
+    for keyword in forwarding_keywords:
+        if keyword in subject_lower or keyword in body_lower:
+            return True
+    return False
 
+def extract_gmail_verification_link(text):
+    """Extract Gmail forwarding verification link from email body"""
+    # Gmail verification links typically look like:
+    # https://mail-settings.google.com/mail/...
+    patterns = [
+        r'https://mail-settings\.google\.com/mail/[^\s<>"\'()]+',
+        r'https://www\.google\.com/settings/forwarding/[^\s<>"\'()]+',
+        r'https://accounts\.google\.com/VerifyForwarding/[^\s<>"\'()]+'
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return match.group(0)
+    return None
+
+def extract_forwarding_email_from_confirmation(text):
+    """Extract the email address that's trying to forward to us"""
+    # Look for patterns like "forward emails from user@domain.com"
+    patterns = [
+        r'forward\s+emails\s+from\s+([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)',
+        r'forwarding\s+emails\s+from\s+([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)',
+        r'from\s+([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)\s+to\s+forward',
+        r'([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)\s+is\s+requesting'
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return match.group(1).lower()
+    return None
+
+#-----------------------------------------------------------------------------------------------------------
 def load_credentials(user_email: str) -> Optional[Credentials]:
     """Loads and optionally refreshes Gmail credentials from Supabase."""
     try:
@@ -352,37 +402,7 @@ import requests
 from urllib.parse import unquote
 from email.utils import parseaddr
 
-def extract_gmail_verification_link(text):
-    """Extract Gmail forwarding verification link from email body"""
-    # Gmail verification links typically look like:
-    # https://mail-settings.google.com/mail/...
-    patterns = [
-        r'https://mail-settings\.google\.com/mail/[^\s<>"\'()]+',
-        r'https://www\.google\.com/settings/forwarding/[^\s<>"\'()]+',
-        r'https://accounts\.google\.com/VerifyForwarding/[^\s<>"\'()]+'
-    ]
-    
-    for pattern in patterns:
-        match = re.search(pattern, text)
-        if match:
-            return match.group(0)
-    return None
 
-def extract_forwarding_email_from_confirmation(text):
-    """Extract the email address that's trying to forward to us"""
-    # Look for patterns like "forward emails from user@domain.com"
-    patterns = [
-        r'forward\s+emails\s+from\s+([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)',
-        r'forwarding\s+emails\s+from\s+([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)',
-        r'from\s+([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)\s+to\s+forward',
-        r'([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)\s+is\s+requesting'
-    ]
-    
-    for pattern in patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            return match.group(1).lower()
-    return None
 
 def click_verification_link(verification_url):
     """Simulate clicking the Gmail verification link"""
@@ -534,20 +554,3 @@ def send_forwarding_setup_confirmation(user_email):
     except Exception as e:
         logger.error(f"Error sending forwarding confirmation: {str(e)}")
 
-def is_forwarding_confirmation_email(subject, body):
-    """Check if this is a Gmail forwarding confirmation email"""
-    forwarding_keywords = [
-        'confirm your forward',
-        'forwarding confirmation',
-        'verify forwarding',
-        'confirm forwarding',
-        'forward emails from'
-    ]
-    
-    subject_lower = subject.lower()
-    body_lower = body.lower()
-    
-    for keyword in forwarding_keywords:
-        if keyword in subject_lower or keyword in body_lower:
-            return True
-    return False
