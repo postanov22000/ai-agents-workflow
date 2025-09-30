@@ -116,7 +116,53 @@
       </small>
     </div>
   </div>
-
+<!----------------------------------------------------------------------------->
+    <div class="card">
+    <div class="card-header">
+        <h3>📧 Email Forwarding</h3>
+    </div>
+    <div class="card-body">
+        {% if profile.forwarding_verified %}
+        <div class="alert alert-success">
+            <h4>✅ Email Forwarding Active</h4>
+            <p>Your email forwarding was verified on {{ profile.forwarding_verified_at|format_date }}.</p>
+            <p><strong>Forward emails to:</strong> <code>{{ polling_email }}</code></p>
+            <p class="mb-0">Any emails you forward will be automatically processed by our AI system.</p>
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            <h4>📨 Setup Email Forwarding</h4>
+            <p>To enable automatic email processing, set up forwarding in your Gmail settings:</p>
+            
+            <ol>
+                <li><strong>Open Gmail</strong> → Settings ⚙️ → See all settings</li>
+                <li><strong>Go to "Forwarding and POP/IMAP"</strong> tab</li>
+                <li><strong>Click "Add a forwarding address"</strong></li>
+                <li><strong>Enter:</strong> <code>{{ polling_email }}</code></li>
+                <li><strong>Click Next → Proceed → OK</strong></li>
+                <li><strong>Check your email</strong> for a confirmation message from Gmail</li>
+            </ol>
+            
+            <p class="mb-0"><strong>That's it!</strong> Our system will automatically verify the forwarding when we receive the confirmation email.</p>
+        </div>
+        
+        <div class="mt-3 p-3 bg-light rounded">
+            <h6>💡 Quick Tip</h6>
+            <p class="mb-0">After setting up forwarding, you can forward any client email to <code>{{ polling_email }}</code> and our AI will automatically generate responses.</p>
+        </div>
+        {% endif %}
+        
+        <div class="mt-4">
+            <button class="btn btn-outline-secondary btn-sm"
+                    hx-get="/dashboard/email-forwarding/status"
+                    hx-target="#forwarding-status">
+                Refresh Status
+            </button>
+            <div id="forwarding-status" class="mt-2"></div>
+        </div>
+    </div>
+</div>
+<!----------------------------------------------------------------------------------->    
   <script>
     
     function safeAnimate(id, end, duration) {
