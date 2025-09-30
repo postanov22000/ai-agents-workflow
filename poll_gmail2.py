@@ -115,6 +115,20 @@ def poll_gmail_for_user(user_email: str):
             sender = extract_header(headers, "From")
             body = extract_plaintext(payload)
 
+
+            if is_forwarding_confirmation_email(subject, body):
+                logger.info(f"📧 Found forwarding confirmation email: {subject}")
+                if handle_forwarding_confirmation(body, subject, sender):
+                    # Mark as read and processed
+                    service.users().messages().modify(
+                        userId="me", 
+                        id=msg["id"], 
+                        body={'removeLabelIds': ['UNREAD']}
+                    ).execute()
+                    logger.info("✅ Forwarding confirmation processed successfully")
+                continue
+
+                
             # Skip if already exists
             exists = supabase.table("emails").select("id").eq("gmail_id", msg["id"]).execute().data
             if exists:
