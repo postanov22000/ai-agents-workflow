@@ -7,6 +7,16 @@ from google.auth.transport.requests import Request
 from google.auth.exceptions import RefreshError
 from supabase import create_client, Client
 from typing import Optional
+import re
+import requests
+from urllib.parse import unquote
+from email.utils import parseaddr
+from datetime import datetime, timezone
+# Add at the top of poll_gmail.py
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from app import send_email_gmail
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
