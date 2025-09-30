@@ -16,7 +16,8 @@ from datetime import datetime, timezone
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from app import send_email_gmail
+from gmail_utils import send_email_gmail
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
