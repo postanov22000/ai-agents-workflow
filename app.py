@@ -2247,7 +2247,7 @@ def test_gmail_connection():
 #---------------------------------------------------------------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------
 #show forwarding status:
-@app.route("/dashboard/email-forwarding")
+@app.route("/dashboard/email_forwarding")
 def email_forwarding_settings():
     user_id = _require_user()
     
