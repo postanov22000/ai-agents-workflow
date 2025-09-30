@@ -16,12 +16,25 @@ from datetime import datetime, timezone
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from gmail_utils import send_email_gmail
+from app import send_email_gmail
+
 
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gmail_poller")
+
+import os
+from supabase import create_client, Client
+
+# Load Supabase environment vars
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+
+# Initialize clients
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+SUPABASE_SERVICE: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 # Supabase setup
 SUPABASE_URL = os.getenv("SUPABASE_URL")
