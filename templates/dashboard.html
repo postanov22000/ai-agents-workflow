@@ -1411,11 +1411,12 @@
 </script>
     <script>
 // Function to check email connection status
+// Function to check email forwarding status
 function checkEmailStatus() {
     const userId = "{{ user_id }}";
     if (!userId) return;
     
-    fetch(`/check_email_connection?user_id=${userId}`)
+    fetch(`/check_forwarding_status?user_id=${userId}`)
         .then(response => response.json())
         .then(data => {
             const statusText = document.getElementById('status-text');
@@ -1427,14 +1428,19 @@ function checkEmailStatus() {
             statusIcon.innerHTML = '';
             reverifyBtn.style.display = 'none';
             
-            if (data.status === 'valid') {
-                statusText.innerHTML = 'Connected';
+            if (data.status === 'connected') {
+                statusText.innerHTML = 'Forwarding Active';
                 statusText.style.color = '#64ffda';
                 statusIcon.innerHTML = '<i class="fas fa-check-circle" style="color: #64ffda; margin-left: 5px;"></i>';
-            } else {
-                statusText.innerHTML = 'Not Connected';
+            } else if (data.status === 'not_connected') {
+                statusText.innerHTML = 'Forwarding Not Set Up';
                 statusText.style.color = '#f72585';
                 statusIcon.innerHTML = '<i class="fas fa-times-circle" style="color: #f72585; margin-left: 5px;"></i>';
+                reverifyBtn.style.display = 'block';
+            } else {
+                statusText.innerHTML = 'Error Checking';
+                statusText.style.color = '#f8961e';
+                statusIcon.innerHTML = '<i class="fas fa-exclamation-triangle" style="color: #f8961e; margin-left: 5px;"></i>';
                 reverifyBtn.style.display = 'block';
             }
         })
@@ -1446,7 +1452,8 @@ function checkEmailStatus() {
             
             if (statusText) {
                 statusText.innerHTML = 'Error checking';
-                statusIcon.innerHTML = '<i class="fas fa-times-circle" style="color: #f72585; margin-left: 5px;"></i>';
+                statusText.style.color = '#f8961e';
+                statusIcon.innerHTML = '<i class="fas fa-exclamation-triangle" style="color: #f8961e; margin-left: 5px;"></i>';
                 reverifyBtn.style.display = 'block';
             }
         });
@@ -1458,7 +1465,8 @@ function verifyEmailConnection() {
     const statusIcon = document.getElementById('status-icon');
     const reverifyBtn = document.getElementById('reverify-btn');
     
-    statusText.innerHTML = 'Testing...';
+    statusText.innerHTML = 'Checking...';
+    statusText.style.color = '#f8961e';
     statusIcon.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-left: 5px;"></i>';
     reverifyBtn.style.display = 'none';
     
