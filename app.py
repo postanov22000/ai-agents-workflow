@@ -2259,7 +2259,7 @@ def email_forwarding_settings():
         .execute().data or {}
     
     # Your polling account email (replace with actual)
-    polling_email = "auto-reply@yourapp.com"
+    polling_email = "replyzeai.inbound@gmail.com"
     
     return render_template(
         "partials/email_forwarding.html",
@@ -2267,31 +2267,6 @@ def email_forwarding_settings():
         user_id=user_id,
         polling_email=polling_email
     )
-#Status Check Endpoint
-@app.route("/dashboard/email-forwarding/status")
-def check_forwarding_status():
-    user_id = _require_user()
-    
-    profile = supabase.table("profiles") \
-        .select("forwarding_verified, forwarding_verified_at, email") \
-        .eq("id", user_id) \
-        .single() \
-        .execute().data or {}
-    
-    if profile.get("forwarding_verified"):
-        return f"""
-        <div class="alert alert-success">
-            ✅ Forwarding verified on {profile['forwarding_verified_at'][:10]}
-            <br><small>From: {profile['email']}</small>
-        </div>
-        """
-    else:
-        return """
-        <div class="alert alert-warning">
-            ⏳ Waiting for forwarding setup...
-            <br><small>Follow the steps above to set up forwarding in your Gmail settings.</small>
-        </div>
-        """
 
 
 #------------------------------------------------------------------------------------------------------
