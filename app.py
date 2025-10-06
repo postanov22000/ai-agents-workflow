@@ -2295,6 +2295,40 @@ def check_forwarding_status():
 
 
 #------------------------------------------------------------------------------------------------------
+
+@app.route("/check_forwarding_status")
+def check_forwarding_status():
+    """Check if user has email forwarding enabled"""
+    user_id = _require_user()
+    
+    try:
+        # Get user profile with forwarding status
+        profile = supabase.table("profiles") \
+            .select("forwarding_verified, forwarding_verified_at, email") \
+            .eq("id", user_id) \
+            .single() \
+            .execute().data or {}
+        
+        if profile.get("forwarding_verified"):
+            return jsonify({
+                "status": "connected",
+                "message": f"Forwarding verified on {profile.get('forwarding_verified_at', '')[:10]}",
+                "email": profile.get("email", "")
+            })
+        else:
+            return jsonify({
+                "status": "not_connected", 
+                "message": "Email forwarding not set up",
+                "email": profile.get("email", "")
+            })
+            
+    except Exception as e:
+        app.logger.error(f"Error checking forwarding status: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": "Error checking forwarding status"
+        }), 500
+        
 # ── Final entry point ──
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
