@@ -2303,6 +2303,77 @@ def check_forwarding_status():
             "status": "error",
             "message": "Error checking forwarding status"
         }), 500
+
+#-------------------------------------------------
+#---------the manual dash--------------------
+@app.route("/dashboard/manual_email", methods=["GET", "POST"])
+def manual_email():
+    """Manual email input for users who don't want email forwarding"""
+    user_id = _require_user()
+    
+    if request.method == "POST":
+        # Process the manual email
+        email_content = request.form.get("email_content", "").strip()
+        sender_email = request.form.get("sender_email", "").strip()
+        subject = request.form.get("subject", "Inquiry") or "Inquiry"
+        
+        if not email_content:
+            return jsonify({"error": "Email content is required"}), 400
+        
+        try:
+            # Create email record for processing
+            email_data = {
+                "user_id": user_id,
+                "sender_email": sender_email or "manual@input.com",  # Fallback if no sender
+                "original_content": email_content,
+                "subject": subject,
+                "status": "processing",
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            
+            result = supabase.table("emails").insert(email_data).execute()
+            
+            if result.data:
+                return jsonify({
+                    "success": True,
+                    "message": "Email submitted for AI processing",
+                    "email_id": result.data[0]["id"]
+                })
+            else:
+                return jsonify({"error": "Failed to save email"}), 500
+                
+        except Exception as e:
+            app.logger.error(f"Error processing manual email: {str(e)}")
+            return jsonify({"error": "Failed to process email"}), 500
+    
+    # GET request - render the manual email form
+    return render_template("partials/manual_email.html", user_id=user_id)
+
+@app.route("/check_manual_email_status/<email_id>")
+def check_manual_email_status(email_id):
+    """Check status of manually submitted email"""
+    user_id = _require_user()
+    
+    try:
+        email = supabase.table("emails") \
+            .select("id, status, processed_content, error_message") \
+            .eq("id", email_id) \
+            .eq("user_id", user_id) \
+            .single() \
+            .execute().data
+        
+        if not email:
+            return jsonify({"error": "Email not found"}), 404
+            
+        return jsonify({
+            "status": email["status"],
+            "processed_content": email.get("processed_content"),
+            "error_message": email.get("error_message")
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error checking email status: {str(e)}")
+        return jsonify({"error": "Failed to check status"}), 500
         
 # ── Final entry point ──
 if __name__ == "__main__":
