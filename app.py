@@ -2321,17 +2321,18 @@ def manual_email():
             return jsonify({"error": "Email content is required"}), 400
         
         try:
-            # Create email record for processing
+            # Create email record for processing USING SERVICE ROLE to bypass RLS
             email_data = {
                 "user_id": user_id,
-                "sender_email": sender_email or "manual@input.com",  # Fallback if no sender
+                "sender_email": sender_email or "manual@input.com",
                 "original_content": email_content,
                 "subject": subject,
                 "status": "processing",
                 "created_at": datetime.now(timezone.utc).isoformat()
             }
             
-            result = supabase.table("manual_emails").insert(email_data).execute()
+            # Use SUPABASE_SERVICE (service role) instead of regular supabase client
+            result = SUPABASE_SERVICE.table("emails").insert(email_data).execute()
             
             if result.data:
                 return jsonify({
@@ -2355,15 +2356,19 @@ def check_manual_email_status(email_id):
     user_id = _require_user()
     
     try:
-        email = supabase.table("emails") \
-            .select("id, status, processed_content, error_message") \
+        # Use service role to bypass RLS for reading
+        email = SUPABASE_SERVICE.table("emails") \
+            .select("id, status, processed_content, error_message, user_id") \
             .eq("id", email_id) \
-            .eq("user_id", user_id) \
             .single() \
             .execute().data
         
         if not email:
             return jsonify({"error": "Email not found"}), 404
+            
+        # Verify the email belongs to the current user
+        if email["user_id"] != user_id:
+            return jsonify({"error": "Access denied"}), 403
             
         return jsonify({
             "status": email["status"],
