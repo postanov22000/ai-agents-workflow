@@ -262,35 +262,83 @@ document.getElementById('manualEmailForm').addEventListener('submit', async func
 });
 
 async function pollEmailStatus(emailId) {
-    const maxAttempts = 30; // 30 attempts
-    const interval = 2000; // 2 seconds
+    const maxAttempts = 30;
+    const interval = 2000;
     
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
         try {
-            const response = await fetch(`/check_manual_email_status/${emailId}?user_id={{ user_id }}`);
-            const result = await response.json();
+            console.log(`🔍 Polling attempt ${attempt + 1}/${maxAttempts} for email: ${emailId}`);
             
-            if (result.status === 'sent' || result.status === 'drafted') {
-                // Success - show response
-                showResponse(result.processed_content);
+            const response = await fetch(`/check_manual_email_status/${emailId}?user_id={{ user_id }}`);
+            
+            if (!response.ok) {
+                console.error(`HTTP error: ${response.status}`);
+                continue;
+            }
+            
+            const result = await response.json();
+            console.log('📊 Polling result:', result);
+            
+            // Check for any successful status or processed content
+            const successStatuses = ['ready_to_send', 'sent', 'drafted', 'awaiting_proposal'];
+            if (successStatuses.includes(result.status) || result.processed_content) {
+                console.log('✅ Success! Showing response...');
+                showResponse(result.processed_content || 'Response generated successfully.');
                 return;
-            } else if (result.status === 'error') {
+            }
+            
+            if (result.status === 'error') {
+                console.error('❌ Error from server:', result.error_message);
                 alert('Error generating response: ' + (result.error_message || 'Unknown error'));
                 resetButton();
                 return;
             }
             
-            // Wait before next attempt
+            console.log(`⏳ Status: ${result.status}, waiting ${interval}ms...`);
             await new Promise(resolve => setTimeout(resolve, interval));
             
         } catch (error) {
-            console.error('Error polling status:', error);
+            console.error('🚨 Polling error:', error);
         }
     }
     
-    // Timeout
-    alert('Response generation timed out. Please try again.');
+    // Final attempt after timeout
+    console.log('⏰ Timeout reached, making final check...');
+    try {
+        const finalResponse = await fetch(`/check_manual_email_status/${emailId}?user_id={{ user_id }}`);
+        const finalResult = await finalResponse.json();
+        console.log('🔍 Final check result:', finalResult);
+        
+        if (finalResult.processed_content) {
+            showResponse(finalResult.processed_content);
+        } else {
+            showDebugInfo(emailId, finalResult);
+        }
+    } catch (finalError) {
+        showDebugInfo(emailId, { error: finalError.message });
+    }
+}
+
+function showDebugInfo(emailId, result) {
+    const debugInfo = `
+Email ID: ${emailId}
+Status: ${result.status || 'unknown'}
+Processed Content: ${result.processed_content ? 'Yes' : 'No'}
+Error: ${result.error_message || 'None'}
+Original Content: ${result.original_content ? 'Yes' : 'No'}
+
+The email was submitted successfully but we couldn't retrieve the AI response.
+Please check the Responded Emails section to see if it appears there.
+    `;
+    
+    alert('Response generation may have completed. Check "Responded Emails" section.\n\nDebug info:\n' + debugInfo);
     resetButton();
+}
+
+function resetButton() {
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.innerHTML = '<i class="fas fa-robot"></i> Generate AI Response';
+    submitBtn.disabled = false;
 }
 
 function showResponse(content) {
