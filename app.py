@@ -2331,7 +2331,7 @@ def manual_email():
                 "created_at": datetime.now(timezone.utc).isoformat()
             }
             
-            result = supabase.table("emails").insert(email_data).execute()
+            result = supabase.table("manual_emails").insert(email_data).execute()
             
             if result.data:
                 return jsonify({
