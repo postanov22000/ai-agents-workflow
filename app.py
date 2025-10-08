@@ -2321,20 +2321,36 @@ def manual_email():
             return jsonify({"error": "Email content is required"}), 400
         
         try:
-            # Create email record for processing USING SERVICE ROLE to bypass RLS
+            # Get user's email to use as recipient_email
+            user_profile = supabase.table("profiles") \
+                .select("email") \
+                .eq("id", user_id) \
+                .single() \
+                .execute().data
+            
+            user_email = user_profile.get("email") if user_profile else "user@example.com"
+            
+            # Create email record with ALL required fields
             email_data = {
                 "user_id": user_id,
                 "sender_email": sender_email or "manual@input.com",
+                "recipient_email": user_email,  # REQUIRED FIELD - use user's email
                 "original_content": email_content,
                 "subject": subject,
                 "status": "processing",
-                "created_at": datetime.now(timezone.utc).isoformat()
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "original_user_id": user_id,  # Also set this for consistency
+                "is_forwarded": False  # Mark as manual email
             }
             
-            # Use SUPABASE_SERVICE (service role) instead of regular supabase client
+            # Use SUPABASE_SERVICE (service role) to bypass RLS
             result = SUPABASE_SERVICE.table("emails").insert(email_data).execute()
             
             if result.data:
+                # Trigger AI processing
+                success = call_edge("/functions/v1/clever-service/generate-response", 
+                                  {"email_ids": [result.data[0]["id"]]})
+                
                 return jsonify({
                     "success": True,
                     "message": "Email submitted for AI processing",
@@ -2345,7 +2361,7 @@ def manual_email():
                 
         except Exception as e:
             app.logger.error(f"Error processing manual email: {str(e)}")
-            return jsonify({"error": "Failed to process email"}), 500
+            return jsonify({"error": f"Failed to process email: {str(e)}"}), 500
     
     # GET request - render the manual email form
     return render_template("partials/manual_email.html", user_id=user_id)
