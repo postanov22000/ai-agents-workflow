@@ -1,0 +1,340 @@
+<div class="manual-email-section">
+    <h1>Manual Email Reply <i class="fas fa-keyboard"></i></h1>
+    <p class="subtitle">Paste email content for AI to generate responses</p>
+
+    <div class="manual-email-container">
+        <div class="email-form-card">
+            <h3><i class="fas fa-envelope"></i> Paste Email Content</h3>
+            
+            <form id="manualEmailForm" class="email-form">
+                <div class="form-group">
+                    <label for="sender_email">Sender Email (Optional)</label>
+                    <input type="email" id="sender_email" name="sender_email" 
+                           placeholder="sender@example.com" class="form-control">
+                </div>
+                
+                <div class="form-group">
+                    <label for="subject">Subject (Optional)</label>
+                    <input type="text" id="subject" name="subject" 
+                           placeholder="Email subject" class="form-control">
+                </div>
+                
+                <div class="form-group">
+                    <label for="email_content">Email Content *</label>
+                    <textarea id="email_content" name="email_content" 
+                              placeholder="Paste the email content you received from a lead or client here..."
+                              rows="12" class="form-control" required></textarea>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <i class="fas fa-robot"></i> Generate AI Response
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="clearForm()">
+                        <i class="fas fa-trash"></i> Clear
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div class="response-card" id="responseCard" style="display: none;">
+            <h3><i class="fas fa-reply"></i> AI Response</h3>
+            <div class="response-content" id="responseContent">
+                <!-- AI response will appear here -->
+            </div>
+            <div class="response-actions" id="responseActions">
+                <button class="btn btn-primary" onclick="copyResponse()">
+                    <i class="fas fa-copy"></i> Copy Response
+                </button>
+                <button class="btn btn-secondary" onclick="resetForm()">
+                    <i class="fas fa-sync"></i> New Email
+                </button>
+            </div>
+        </div>
+
+        <div class="info-card">
+            <h4><i class="fas fa-lightbulb"></i> How to use:</h4>
+            <ul>
+                <li>Copy and paste any email you receive from leads or clients</li>
+                <li>Our AI will generate a professional response instantly</li>
+                <li>Copy the response and send it through your email client</li>
+                <li>Perfect for when you don't want to set up email forwarding</li>
+            </ul>
+            
+            <div class="tip-box">
+                <strong>Pro Tip:</strong> Include the sender's name and context for better responses.
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.manual-email-section {
+    animation: fadeIn 0.5s ease;
+}
+
+.subtitle {
+    color: #8892b0;
+    margin-bottom: 2rem;
+    font-size: 1.1rem;
+}
+
+.manual-email-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    align-items: start;
+}
+
+.email-form-card,
+.response-card,
+.info-card {
+    background: rgba(16, 36, 64, 0.6);
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px solid rgba(100, 255, 218, 0.2);
+}
+
+.response-card {
+    grid-column: 1 / -1;
+}
+
+.info-card {
+    grid-column: 1 / -1;
+}
+
+.email-form-card h3,
+.response-card h3,
+.info-card h4 {
+    color: #64ffda;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #ccd6f6;
+    font-weight: 500;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem;
+    border-radius: 8px;
+    border: 1px solid rgba(100, 255, 218, 0.3);
+    background: rgba(10, 25, 47, 0.7);
+    color: #fff;
+    font-size: 1rem;
+    font-family: inherit;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #64ffda;
+    box-shadow: 0 0 0 2px rgba(100, 255, 218, 0.1);
+}
+
+textarea.form-control {
+    resize: vertical;
+    min-height: 200px;
+    font-family: inherit;
+    line-height: 1.5;
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.response-content {
+    background: rgba(10, 25, 47, 0.7);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid rgba(100, 255, 218, 0.2);
+    color: #8892b0;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    margin-bottom: 1.5rem;
+}
+
+.response-actions {
+    display: flex;
+    gap: 1rem;
+}
+
+.info-card ul {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0;
+}
+
+.info-card li {
+    padding: 0.5rem 0;
+    color: #8892b0;
+    display: flex;
+    align-items: center;
+}
+
+.info-card li:before {
+    content: "✓";
+    color: #64ffda;
+    font-weight: bold;
+    margin-right: 0.75rem;
+}
+
+.tip-box {
+    background: rgba(100, 255, 218, 0.1);
+    border: 1px solid rgba(100, 255, 218, 0.2);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-top: 1rem;
+    color: #64ffda;
+}
+
+.loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 768px) {
+    .manual-email-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .form-actions,
+    .response-actions {
+        flex-direction: column;
+    }
+}
+</style>
+
+<script>
+document.getElementById('manualEmailForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const submitBtn = document.getElementById('submitBtn');
+    const originalText = submitBtn.innerHTML;
+    
+    // Show loading state
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+    submitBtn.disabled = true;
+    
+    try {
+        const formData = new FormData(this);
+        const response = await fetch('/dashboard/manual_email?user_id={{ user_id }}', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Start polling for the AI response
+            pollEmailStatus(result.email_id);
+        } else {
+            alert('Error: ' + (result.error || 'Failed to process email'));
+            resetButton();
+        }
+        
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error submitting email. Please try again.');
+        resetButton();
+    }
+    
+    function resetButton() {
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+    }
+});
+
+async function pollEmailStatus(emailId) {
+    const maxAttempts = 30; // 30 attempts
+    const interval = 2000; // 2 seconds
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+            const response = await fetch(`/check_manual_email_status/${emailId}?user_id={{ user_id }}`);
+            const result = await response.json();
+            
+            if (result.status === 'sent' || result.status === 'drafted') {
+                // Success - show response
+                showResponse(result.processed_content);
+                return;
+            } else if (result.status === 'error') {
+                alert('Error generating response: ' + (result.error_message || 'Unknown error'));
+                resetButton();
+                return;
+            }
+            
+            // Wait before next attempt
+            await new Promise(resolve => setTimeout(resolve, interval));
+            
+        } catch (error) {
+            console.error('Error polling status:', error);
+        }
+    }
+    
+    // Timeout
+    alert('Response generation timed out. Please try again.');
+    resetButton();
+}
+
+function showResponse(content) {
+    const responseCard = document.getElementById('responseCard');
+    const responseContent = document.getElementById('responseContent');
+    const responseActions = document.getElementById('responseActions');
+    
+    responseContent.textContent = content || 'No response generated.';
+    responseCard.style.display = 'block';
+    
+    // Scroll to response
+    responseCard.scrollIntoView({ behavior: 'smooth' });
+    
+    // Reset submit button
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.innerHTML = '<i class="fas fa-robot"></i> Generate AI Response';
+    submitBtn.disabled = false;
+}
+
+function copyResponse() {
+    const responseContent = document.getElementById('responseContent');
+    const text = responseContent.textContent;
+    
+    navigator.clipboard.writeText(text).then(() => {
+        // Show temporary success message
+        const copyBtn = event.target;
+        const originalText = copyBtn.innerHTML;
+        copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+        setTimeout(() => {
+            copyBtn.innerHTML = originalText;
+        }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+        alert('Failed to copy response. Please select and copy manually.');
+    });
+}
+
+function clearForm() {
+    document.getElementById('manualEmailForm').reset();
+}
+
+function resetForm() {
+    clearForm();
+    document.getElementById('responseCard').style.display = 'none';
+    document.getElementById('manualEmailForm').scrollIntoView({ behavior: 'smooth' });
+}
+</script>
