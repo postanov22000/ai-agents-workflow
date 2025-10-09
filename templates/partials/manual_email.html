@@ -791,26 +791,28 @@ function updateResponseStatus(status) {
 }
 
 // Generate follow-ups when user clicks the button
-async function generateFollowUps() {
+function generateFollowUps() {
     const followupBtn = document.getElementById('followupBtn');
     const originalText = followupBtn.innerHTML;
     
-    followupBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+    followupBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating Dynamic Follow-ups...';
     followupBtn.disabled = true;
     
     try {
-        // Simulate API call to generate follow-ups
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Show that we're generating AI-powered follow-ups
+        showNotification('Creating personalized follow-up sequence based on lead context...', 'info');
         
-        // Show the follow-up section with generated content
-        showFollowupSection();
-        
-        showNotification('Follow-up sequence generated!', 'success');
+        // Simulate API call to generate dynamic follow-ups
+        setTimeout(() => {
+            showFollowupSection();
+            showNotification('AI-generated follow-up sequence created!', 'success');
+            followupBtn.innerHTML = originalText;
+            followupBtn.disabled = false;
+        }, 3000);
         
     } catch (error) {
         console.error('Error generating follow-ups:', error);
         showNotification('Error generating follow-ups. Please try again.', 'error');
-    } finally {
         followupBtn.innerHTML = originalText;
         followupBtn.disabled = false;
     }
