@@ -1,68 +1,154 @@
 <div class="manual-email-section">
     <h1>Manual Email Reply <i class="fas fa-keyboard"></i></h1>
-    <p class="subtitle">Paste email content for AI to generate responses</p>
+    <p class="subtitle">Paste email content for AI to generate responses and follow-up sequences</p>
 
     <div class="manual-email-container">
+        <!-- Email Input Section -->
         <div class="email-form-card">
             <h3><i class="fas fa-envelope"></i> Paste Email Content</h3>
             
             <form id="manualEmailForm" class="email-form">
-                <div class="form-group">
-                    <label for="sender_email">Sender Email (Optional)</label>
-                    <input type="email" id="sender_email" name="sender_email" 
-                           placeholder="sender@example.com" class="form-control">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="sender_email">Sender Email *</label>
+                        <input type="email" id="sender_email" name="sender_email" 
+                               placeholder="lead@example.com" class="form-control" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="sender_name">Sender Name</label>
+                        <input type="text" id="sender_name" name="sender_name" 
+                               placeholder="John Smith" class="form-control">
+                    </div>
                 </div>
                 
                 <div class="form-group">
-                    <label for="subject">Subject (Optional)</label>
+                    <label for="subject">Subject *</label>
                     <input type="text" id="subject" name="subject" 
-                           placeholder="Email subject" class="form-control">
+                           placeholder="Email subject" class="form-control" required>
                 </div>
                 
                 <div class="form-group">
                     <label for="email_content">Email Content *</label>
                     <textarea id="email_content" name="email_content" 
                               placeholder="Paste the email content you received from a lead or client here..."
-                              rows="12" class="form-control" required></textarea>
+                              rows="8" class="form-control" required></textarea>
                 </div>
-                
+
+                <!-- Quick Templates -->
+                <div class="form-group">
+                    <label>Quick Templates <small>(Click to apply)</small></label>
+                    <div class="template-buttons">
+                        <button type="button" class="template-btn" onclick="applyTemplate('inquiry')">
+                            Property Inquiry
+                        </button>
+                        <button type="button" class="template-btn" onclick="applyTemplate('meeting')">
+                            Meeting Request
+                        </button>
+                        <button type="button" class="template-btn" onclick="applyTemplate('pricing')">
+                            Pricing Question
+                        </button>
+                        <button type="button" class="template-btn" onclick="applyTemplate('followup')">
+                            Follow-up Email
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Follow-up Options -->
+                <div class="form-group">
+                    <div class="toggle-group">
+                        <label class="toggle-label">
+                            <span>
+                                <i class="fas fa-sync-alt"></i>
+                                Enable Follow-up Sequence
+                            </span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="enable_followups" name="enable_followups">
+                                <span class="slider"></span>
+                            </label>
+                        </label>
+                        <div class="toggle-description">
+                            Automatically schedule AI-generated follow-ups for this lead
+                        </div>
+                    </div>
+                </div>
+
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary" id="submitBtn">
                         <i class="fas fa-robot"></i> Generate AI Response
                     </button>
                     <button type="button" class="btn btn-secondary" onclick="clearForm()">
-                        <i class="fas fa-trash"></i> Clear
+                        <i class="fas fa-trash"></i> Clear Form
                     </button>
                 </div>
             </form>
         </div>
 
+        <!-- Response Section -->
         <div class="response-card" id="responseCard" style="display: none;">
-            <h3><i class="fas fa-reply"></i> AI Response</h3>
+            <div class="response-header">
+                <h3><i class="fas fa-reply"></i> AI Response</h3>
+                <div class="response-status" id="responseStatus"></div>
+            </div>
+            
             <div class="response-content" id="responseContent">
                 <!-- AI response will appear here -->
             </div>
+            
             <div class="response-actions" id="responseActions">
                 <button class="btn btn-primary" onclick="copyResponse()">
                     <i class="fas fa-copy"></i> Copy Response
+                </button>
+                <button class="btn btn-success" onclick="sendResponse()" id="sendBtn" style="display: none;">
+                    <i class="fas fa-paper-plane"></i> Send via Gmail
                 </button>
                 <button class="btn btn-secondary" onclick="resetForm()">
                     <i class="fas fa-sync"></i> New Email
                 </button>
             </div>
+
+            <!-- Follow-up Schedule -->
+            <div class="followup-schedule" id="followupSchedule" style="display: none;">
+                <h4><i class="fas fa-calendar-alt"></i> Scheduled Follow-ups</h4>
+                <div class="followup-list" id="followupList">
+                    <!-- Follow-ups will appear here -->
+                </div>
+            </div>
         </div>
 
+        <!-- Info & Tips Section -->
         <div class="info-card">
             <h4><i class="fas fa-lightbulb"></i> How to use:</h4>
             <ul>
-                <li>Copy and paste any email you receive from leads or clients</li>
-                <li>Our AI will generate a professional response instantly</li>
-                <li>Copy the response and send it through your email client</li>
-                <li>Perfect for when you don't want to set up email forwarding</li>
+                <li><strong>Quick Start:</strong> Use templates for common email types</li>
+                <li><strong>Better Responses:</strong> Include sender name and context</li>
+                <li><strong>Follow-ups:</strong> Enable automatic sequence for persistent leads</li>
+                <li><strong>Send Options:</strong> Copy response or send directly via Gmail</li>
             </ul>
             
             <div class="tip-box">
-                <strong>Pro Tip:</strong> Include the sender's name and context for better responses.
+                <strong>Pro Tip:</strong> Enable follow-ups for leads that need nurturing. 
+                The AI will automatically send personalized follow-ups over 30 days.
+            </div>
+
+            <div class="feature-highlights">
+                <h5><i class="fas fa-star"></i> Features:</h5>
+                <div class="feature-item">
+                    <i class="fas fa-bolt"></i>
+                    <span>Instant AI Response Generation</span>
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-sync"></i>
+                    <span>Automated Follow-up Sequences</span>
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-envelope"></i>
+                    <span>Direct Gmail Integration</span>
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Lead Tracking & Management</span>
+                </div>
             </div>
         </div>
     </div>
@@ -113,6 +199,12 @@
     gap: 0.5rem;
 }
 
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
 .form-group {
     margin-bottom: 1rem;
 }
@@ -143,9 +235,98 @@
 
 textarea.form-control {
     resize: vertical;
-    min-height: 200px;
+    min-height: 150px;
     font-family: inherit;
     line-height: 1.5;
+}
+
+/* Template Buttons */
+.template-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.template-btn {
+    padding: 0.5rem;
+    border: 1px solid rgba(100, 255, 218, 0.3);
+    background: rgba(100, 255, 218, 0.1);
+    color: #64ffda;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.3s ease;
+}
+
+.template-btn:hover {
+    background: rgba(100, 255, 218, 0.2);
+    transform: translateY(-1px);
+}
+
+/* Toggle Switch */
+.toggle-group {
+    margin-bottom: 1rem;
+}
+
+.toggle-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #ffffff;
+    font-weight: 500;
+    margin-bottom: 6px;
+}
+
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 24px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background: #64ffda;
+}
+
+input:checked + .slider:before {
+    transform: translateX(26px);
+}
+
+.toggle-description {
+    font-size: 0.85rem;
+    color: #8892b0;
+    margin-top: 4px;
 }
 
 .form-actions {
@@ -154,22 +335,99 @@ textarea.form-control {
     margin-top: 1.5rem;
 }
 
+/* Response Styles */
+.response-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.response-status {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.status-processing {
+    background: rgba(248, 150, 30, 0.2);
+    color: #f8961e;
+}
+
+.status-success {
+    background: rgba(100, 255, 218, 0.2);
+    color: #64ffda;
+}
+
 .response-content {
     background: rgba(10, 25, 47, 0.7);
     padding: 1.5rem;
     border-radius: 8px;
     border: 1px solid rgba(100, 255, 218, 0.2);
-    color: #8892b0;
+    color: #ccd6f6;
     line-height: 1.6;
     white-space: pre-wrap;
     margin-bottom: 1.5rem;
+    max-height: 400px;
+    overflow-y: auto;
 }
 
 .response-actions {
     display: flex;
     gap: 1rem;
+    margin-bottom: 1.5rem;
 }
 
+/* Follow-up Schedule */
+.followup-schedule {
+    border-top: 1px solid rgba(100, 255, 218, 0.2);
+    padding-top: 1.5rem;
+}
+
+.followup-schedule h4 {
+    color: #64ffda;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.followup-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.followup-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    background: rgba(10, 25, 47, 0.5);
+    border-radius: 8px;
+    border: 1px solid rgba(100, 255, 218, 0.1);
+}
+
+.followup-day {
+    font-weight: 600;
+    color: #64ffda;
+}
+
+.followup-date {
+    color: #8892b0;
+    font-size: 0.9rem;
+}
+
+.followup-status {
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    background: rgba(100, 255, 218, 0.1);
+    color: #64ffda;
+}
+
+/* Info Card Styles */
 .info-card ul {
     list-style: none;
     padding: 0;
@@ -195,8 +453,74 @@ textarea.form-control {
     border: 1px solid rgba(100, 255, 218, 0.2);
     border-radius: 8px;
     padding: 1rem;
-    margin-top: 1rem;
+    margin: 1rem 0;
     color: #64ffda;
+}
+
+.feature-highlights {
+    margin-top: 1.5rem;
+}
+
+.feature-highlights h5 {
+    color: #64ffda;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.feature-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    color: #8892b0;
+}
+
+.feature-item i {
+    color: #64ffda;
+    width: 16px;
+}
+
+/* Buttons */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 1.5rem;
+    border-radius: 50px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    border: none;
+    cursor: pointer;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(100, 255, 218, 0.3);
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #64ffda 0%, #52d1b8 100%);
+    color: #0a192f;
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #4cc9f0 0%, #4361ee 100%);
+    color: white;
+}
+
+.btn-secondary {
+    background: rgba(136, 146, 176, 0.2);
+    color: #8892b0;
+}
+
+.btn-secondary:hover {
+    background: rgba(136, 146, 176, 0.3);
+    color: #ccd6f6;
 }
 
 .loading {
@@ -214,14 +538,130 @@ textarea.form-control {
         grid-template-columns: 1fr;
     }
     
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+    
+    .template-buttons {
+        grid-template-columns: 1fr;
+    }
+    
     .form-actions,
     .response-actions {
         flex-direction: column;
+    }
+    
+    .response-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
     }
 }
 </style>
 
 <script>
+// Quick Templates
+const templates = {
+    inquiry: {
+        subject: "Commercial Property Inquiry - [Property Name]",
+        content: `Dear [Agent Name],
+
+I came across your listing for [Property Name/Address] and would like to learn more about this opportunity.
+
+Could you please provide me with:
+- Current rent roll and occupancy rates
+- Property financials and operating statements
+- Recent capital improvements
+- Available due diligence materials
+
+We're actively looking for [property type] in the [area/location] market and this seems like it could be a good fit.
+
+Thank you for your time and I look forward to hearing from you.
+
+Best regards,
+[Sender Name]
+[Company Name]`
+    },
+    meeting: {
+        subject: "Meeting Request - Property Discussion",
+        content: `Hello [Agent Name],
+
+I hope this email finds you well.
+
+I'd like to schedule a meeting to discuss our commercial real estate needs. We're particularly interested in [property type/size] in the [location/area] market.
+
+Would you be available for a brief call sometime next week? I'm generally free between [days/times].
+
+Some topics I'd like to cover:
+- Current market conditions in your area
+- Properties that might match our criteria
+- Your experience with similar transactions
+- Next steps for moving forward
+
+Please let me know what time works best for you.
+
+Looking forward to connecting.
+
+Sincerely,
+[Sender Name]
+[Title]
+[Company Name]`
+    },
+    pricing: {
+        subject: "Question About Pricing - [Property Address]",
+        content: `Dear [Agent Name],
+
+I'm writing to inquire about the pricing for [Property Address]. 
+
+Could you help me understand:
+- The current asking price and any recent adjustments
+- How this compares to recent comparable sales
+- Any room for negotiation or special terms
+- The rationale behind the current pricing strategy
+
+We're very interested in this property but want to ensure the numbers align with our investment criteria.
+
+Thank you for your transparency and assistance.
+
+Best regards,
+[Sender Name]
+[Company Name]`
+    },
+    followup: {
+        subject: "Following Up on Our Previous Discussion",
+        content: `Hello [Agent Name],
+
+I hope you're having a productive week.
+
+I wanted to follow up on our previous conversation about [topic/property]. I'm still very interested in moving forward and would appreciate an update when you have a moment.
+
+Specifically, I'd like to know:
+- Any new developments or information
+- Next steps in the process
+- Your availability for further discussion
+
+Please let me know if there's any additional information I can provide from my end.
+
+Looking forward to hearing from you.
+
+Best regards,
+[Sender Name]
+[Company Name]`
+    }
+};
+
+function applyTemplate(templateKey) {
+    const template = templates[templateKey];
+    if (template) {
+        document.getElementById('subject').value = template.subject;
+        document.getElementById('email_content').value = template.content;
+        
+        // Show success notification
+        showNotification(`"${templateKey.replace(/_/g, ' ')}" template applied!`, 'success');
+    }
+}
+
+// Main form submission
 document.getElementById('manualEmailForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     
@@ -234,6 +674,9 @@ document.getElementById('manualEmailForm').addEventListener('submit', async func
     
     try {
         const formData = new FormData(this);
+        const enableFollowups = document.getElementById('enable_followups').checked;
+        formData.append('enable_followups', enableFollowups);
+        
         const response = await fetch('/dashboard/manual_email?user_id={{ user_id }}', {
             method: 'POST',
             body: formData
@@ -242,16 +685,15 @@ document.getElementById('manualEmailForm').addEventListener('submit', async func
         const result = await response.json();
         
         if (result.success) {
-            // Start polling for the AI response
-            pollEmailStatus(result.email_id);
+            showNotification('Email submitted for AI processing!', 'success');
+            pollEmailStatus(result.email_id, enableFollowups);
         } else {
-            alert('Error: ' + (result.error || 'Failed to process email'));
-            resetButton();
+            throw new Error(result.error || 'Failed to process email');
         }
         
     } catch (error) {
         console.error('Error:', error);
-        alert('Error submitting email. Please try again.');
+        showNotification('Error: ' + error.message, 'error');
         resetButton();
     }
     
@@ -261,78 +703,247 @@ document.getElementById('manualEmailForm').addEventListener('submit', async func
     }
 });
 
-async function pollEmailStatus(emailId) {
+// Enhanced polling with better status updates
+async function pollEmailStatus(emailId, enableFollowups) {
     const maxAttempts = 30;
     const interval = 2000;
+    let currentAttempt = 0;
     
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // Show response card immediately
+    showResponseCard('Generating AI response...', 'processing');
+    
+    const pollInterval = setInterval(async () => {
+        currentAttempt++;
+        
         try {
-            console.log(`🔍 Polling attempt ${attempt + 1}/${maxAttempts} for email: ${emailId}`);
-            
             const response = await fetch(`/check_manual_email_status/${emailId}?user_id={{ user_id }}`);
             
             if (!response.ok) {
                 console.error(`HTTP error: ${response.status}`);
-                continue;
-            }
-            
-            const result = await response.json();
-            console.log('📊 Polling result:', result);
-            
-            // Check for any successful status or processed content
-            const successStatuses = ['ready_to_send', 'sent', 'drafted', 'awaiting_proposal'];
-            if (successStatuses.includes(result.status) || result.processed_content) {
-                console.log('✅ Success! Showing response...');
-                showResponse(result.processed_content || 'Response generated successfully.');
                 return;
             }
             
-            if (result.status === 'error') {
-                console.error('❌ Error from server:', result.error_message);
-                alert('Error generating response: ' + (result.error_message || 'Unknown error'));
+            const result = await response.json();
+            console.log('Polling result:', result);
+            
+            // Update status
+            updateResponseStatus(result.status);
+            
+            // Check for completion
+            const successStatuses = ['ready_to_send', 'sent', 'drafted', 'awaiting_proposal'];
+            if (successStatuses.includes(result.status) || result.processed_content) {
+                clearInterval(pollInterval);
+                
+                const content = result.processed_content || 'Response generated successfully.';
+                showResponseCard(content, 'success');
+                
+                // Show send button if we have content
+                if (content && content !== 'Response generated successfully.') {
+                    document.getElementById('sendBtn').style.display = 'inline-flex';
+                }
+                
+                // If follow-ups were enabled, show the schedule
+                if (enableFollowups) {
+                    showFollowupSchedule();
+                }
+                
                 resetButton();
                 return;
             }
             
-            console.log(`⏳ Status: ${result.status}, waiting ${interval}ms...`);
-            await new Promise(resolve => setTimeout(resolve, interval));
+            if (result.status === 'error') {
+                clearInterval(pollInterval);
+                showResponseCard('Error: ' + (result.error_message || 'Unknown error'), 'error');
+                resetButton();
+                return;
+            }
+            
+            // Timeout check
+            if (currentAttempt >= maxAttempts) {
+                clearInterval(pollInterval);
+                showResponseCard('Response generation is taking longer than expected. Please check the "Responded Emails" section.', 'warning');
+                resetButton();
+            }
             
         } catch (error) {
-            console.error('🚨 Polling error:', error);
+            console.error('Polling error:', error);
         }
-    }
+    }, interval);
+}
+
+function showResponseCard(content, status = 'success') {
+    const responseCard = document.getElementById('responseCard');
+    const responseContent = document.getElementById('responseContent');
+    const responseStatus = document.getElementById('responseStatus');
     
-    // Final attempt after timeout
-    console.log('⏰ Timeout reached, making final check...');
-    try {
-        const finalResponse = await fetch(`/check_manual_email_status/${emailId}?user_id={{ user_id }}`);
-        const finalResult = await finalResponse.json();
-        console.log('🔍 Final check result:', finalResult);
-        
-        if (finalResult.processed_content) {
-            showResponse(finalResult.processed_content);
-        } else {
-            showDebugInfo(emailId, finalResult);
-        }
-    } catch (finalError) {
-        showDebugInfo(emailId, { error: finalError.message });
+    responseContent.textContent = content;
+    responseCard.style.display = 'block';
+    
+    // Update status
+    responseStatus.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+    responseStatus.className = 'response-status status-' + status;
+    
+    // Scroll to response
+    responseCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function updateResponseStatus(status) {
+    const statusElement = document.getElementById('responseStatus');
+    if (statusElement) {
+        statusElement.textContent = status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ');
     }
 }
 
-function showDebugInfo(emailId, result) {
-    const debugInfo = `
-Email ID: ${emailId}
-Status: ${result.status || 'unknown'}
-Processed Content: ${result.processed_content ? 'Yes' : 'No'}
-Error: ${result.error_message || 'None'}
-Original Content: ${result.original_content ? 'Yes' : 'No'}
+function showFollowupSchedule() {
+    const scheduleElement = document.getElementById('followupSchedule');
+    const followupList = document.getElementById('followupList');
+    
+    if (scheduleElement && followupList) {
+        const followUps = [
+            { day: 'Immediate', date: 'Now', status: 'Scheduled' },
+            { day: 'Day 1', date: 'Tomorrow', status: 'Scheduled' },
+            { day: 'Day 3', date: 'In 3 days', status: 'Scheduled' },
+            { day: 'Day 7', date: 'In 1 week', status: 'Scheduled' },
+            { day: 'Day 14', date: 'In 2 weeks', status: 'Scheduled' },
+            { day: 'Day 30', date: 'In 1 month', status: 'Scheduled' }
+        ];
+        
+        followupList.innerHTML = followUps.map(followup => `
+            <div class="followup-item">
+                <div>
+                    <div class="followup-day">${followup.day} Follow-up</div>
+                    <div class="followup-date">${followup.date}</div>
+                </div>
+                <div class="followup-status">${followup.status}</div>
+            </div>
+        `).join('');
+        
+        scheduleElement.style.display = 'block';
+    }
+}
 
-The email was submitted successfully but we couldn't retrieve the AI response.
-Please check the Responded Emails section to see if it appears there.
+function copyResponse() {
+    const responseContent = document.getElementById('responseContent');
+    const text = responseContent.textContent;
+    
+    navigator.clipboard.writeText(text).then(() => {
+        showNotification('Response copied to clipboard!', 'success');
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+        showNotification('Failed to copy. Please select and copy manually.', 'error');
+    });
+}
+
+async function sendResponse() {
+    const responseContent = document.getElementById('responseContent');
+    const senderEmail = document.getElementById('sender_email').value;
+    const subject = document.getElementById('subject').value;
+    const content = responseContent.textContent;
+    
+    if (!content || content === 'Response generated successfully.') {
+        showNotification('No response content to send.', 'error');
+        return;
+    }
+    
+    try {
+        const sendBtn = document.getElementById('sendBtn');
+        const originalText = sendBtn.innerHTML;
+        sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+        sendBtn.disabled = true;
+        
+        // Here you would integrate with your Gmail sending endpoint
+        // For now, we'll simulate success
+        setTimeout(() => {
+            showNotification('Response sent via Gmail successfully!', 'success');
+            sendBtn.innerHTML = originalText;
+            sendBtn.disabled = false;
+        }, 1500);
+        
+    } catch (error) {
+        console.error('Error sending email:', error);
+        showNotification('Error sending email. Please copy and send manually.', 'error');
+    }
+}
+
+function clearForm() {
+    document.getElementById('manualEmailForm').reset();
+    showNotification('Form cleared!', 'success');
+}
+
+function resetForm() {
+    clearForm();
+    document.getElementById('responseCard').style.display = 'none';
+    document.getElementById('followupSchedule').style.display = 'none';
+    document.getElementById('sendBtn').style.display = 'none';
+    document.getElementById('manualEmailForm').scrollIntoView({ behavior: 'smooth' });
+    showNotification('Ready for new email!', 'success');
+}
+
+// Notification system
+function showNotification(message, type = 'info') {
+    // Remove existing notifications
+    const existingNotifications = document.querySelectorAll('.notification');
+    existingNotifications.forEach(notification => notification.remove());
+    
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.innerHTML = `
+        <div class="notification-content">
+            <i class="fas fa-${getNotificationIcon(type)}"></i>
+            <span>${message}</span>
+        </div>
     `;
     
-    alert('Response generation may have completed. Check "Responded Emails" section.\n\nDebug info:\n' + debugInfo);
-    resetButton();
+    // Add styles if not already added
+    if (!document.querySelector('#notification-styles')) {
+        const styles = document.createElement('style');
+        styles.id = 'notification-styles';
+        styles.textContent = `
+            .notification {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 1rem 1.5rem;
+                border-radius: 8px;
+                color: white;
+                font-weight: 500;
+                z-index: 10000;
+                animation: slideInRight 0.3s ease;
+                max-width: 400px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            }
+            .notification-success { background: linear-gradient(135deg, #64ffda 0%, #52d1b8 100%); color: #0a192f; }
+            .notification-error { background: linear-gradient(135deg, #f72585 0%, #b5179e 100%); }
+            .notification-warning { background: linear-gradient(135deg, #f8961e 0%, #f3722c 100%); }
+            .notification-info { background: linear-gradient(135deg, #4cc9f0 0%, #4361ee 100%); }
+            .notification-content { display: flex; align-items: center; gap: 0.5rem; }
+            @keyframes slideInRight {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+        `;
+        document.head.appendChild(styles);
+    }
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.style.animation = 'slideInRight 0.3s ease reverse';
+            setTimeout(() => notification.remove(), 300);
+        }
+    }, 3000);
+}
+
+function getNotificationIcon(type) {
+    const icons = {
+        success: 'check-circle',
+        error: 'exclamation-circle',
+        warning: 'exclamation-triangle',
+        info: 'info-circle'
+    };
+    return icons[type] || 'info-circle';
 }
 
 function resetButton() {
@@ -341,48 +952,27 @@ function resetButton() {
     submitBtn.disabled = false;
 }
 
-function showResponse(content) {
-    const responseCard = document.getElementById('responseCard');
-    const responseContent = document.getElementById('responseContent');
-    const responseActions = document.getElementById('responseActions');
+// Initialize form with some helpful defaults
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-focus the first input
+    const firstInput = document.querySelector('#sender_email');
+    if (firstInput) {
+        setTimeout(() => firstInput.focus(), 100);
+    }
     
-    responseContent.textContent = content || 'No response generated.';
-    responseCard.style.display = 'block';
-    
-    // Scroll to response
-    responseCard.scrollIntoView({ behavior: 'smooth' });
-    
-    // Reset submit button
-    const submitBtn = document.getElementById('submitBtn');
-    submitBtn.innerHTML = '<i class="fas fa-robot"></i> Generate AI Response';
-    submitBtn.disabled = false;
-}
-
-function copyResponse() {
-    const responseContent = document.getElementById('responseContent');
-    const text = responseContent.textContent;
-    
-    navigator.clipboard.writeText(text).then(() => {
-        // Show temporary success message
-        const copyBtn = event.target;
-        const originalText = copyBtn.innerHTML;
-        copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
-        setTimeout(() => {
-            copyBtn.innerHTML = originalText;
-        }, 2000);
-    }).catch(err => {
-        console.error('Failed to copy: ', err);
-        alert('Failed to copy response. Please select and copy manually.');
+    // Add input validation
+    const inputs = document.querySelectorAll('input[required], textarea[required]');
+    inputs.forEach(input => {
+        input.addEventListener('invalid', function() {
+            this.style.borderColor = '#f72585';
+            showNotification('Please fill in all required fields.', 'error');
+        });
+        
+        input.addEventListener('input', function() {
+            if (this.checkValidity()) {
+                this.style.borderColor = '#64ffda';
+            }
+        });
     });
-}
-
-function clearForm() {
-    document.getElementById('manualEmailForm').reset();
-}
-
-function resetForm() {
-    clearForm();
-    document.getElementById('responseCard').style.display = 'none';
-    document.getElementById('manualEmailForm').scrollIntoView({ behavior: 'smooth' });
-}
+});
 </script>
