@@ -2559,7 +2559,99 @@ def generate_fallback_follow_up(lead, sequence_step):
     
     # Use sequence step to pick appropriate fallback, or random if beyond list
     return follow_ups[sequence_step % len(follow_ups)]
+
+@app.route("/generate_manual_followups", methods=["POST"])
+def generate_manual_followups():
+    """Generate AI-powered follow-ups for a manual email"""
+    user_id = _require_user()
     
+    try:
+        data = request.get_json()
+        sender_email = data.get("sender_email")
+        sender_name = data.get("sender_name")
+        subject = data.get("subject")
+        email_content = data.get("email_content")
+        
+        if not all([sender_email, sender_name, email_content]):
+            return jsonify({"error": "Missing required fields"}), 400
+        
+        # Create a temporary lead record for follow-up generation
+        lead_data = {
+            "user_id": user_id,
+            "first_name": sender_name.split()[0] if sender_name else "Lead",
+            "last_name": " ".join(sender_name.split()[1:]) if sender_name and " " in sender_name else "Contact",
+            "email": sender_email,
+            "brokerage": "Unknown",  # Default values
+            "service": "Commercial Real Estate",
+            "city": "Unknown",
+            "status": "new",
+            "email_sent": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Insert the lead
+        lead_result = supabase.table("leads").insert(lead_data).execute()
+        
+        if not lead_result.data:
+            return jsonify({"error": "Failed to create lead record"}), 500
+            
+        lead_id = lead_result.data[0]["id"]
+        
+        # Also store the original email for context
+        email_record = {
+            "user_id": user_id,
+            "sender_email": sender_email,
+            "recipient_email": "manual@input.com",  # Placeholder
+            "original_content": email_content,
+            "subject": subject,
+            "status": "manual_input",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "original_user_id": user_id
+        }
+        
+        supabase.table("emails").insert(email_record).execute()
+        
+        # Generate follow-ups using the same AI system
+        follow_ups = []
+        for step, seq in enumerate(FOLLOW_UP_SEQUENCE):
+            # Generate content for this follow-up step
+            content = generate_follow_up_content(lead_id, step)
+            
+            if content:
+                scheduled_at = datetime.now(timezone.utc) + timedelta(days=seq['delay_days'])
+                
+                follow_up_data = {
+                    "lead_id": lead_id,
+                    "sequence_step": step,
+                    "scheduled_at": scheduled_at.isoformat(),
+                    "status": "pending",
+                    "generated_content": content
+                }
+                
+                # Store the follow-up
+                follow_up_result = supabase.table("lead_follow_ups").insert(follow_up_data).execute()
+                
+                if follow_up_result.data:
+                    follow_ups.append({
+                        "id": follow_up_result.data[0]["id"],
+                        "day": seq['name'],
+                        "date": scheduled_at.strftime("%Y-%m-%d"),
+                        "content": content,
+                        "sequence_step": step,
+                        "delay_days": seq['delay_days']
+                    })
+        
+        return jsonify({
+            "success": True,
+            "lead_id": lead_id,
+            "follow_ups": follow_ups,
+            "message": f"Generated {len(follow_ups)} AI-powered follow-ups"
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error generating manual follow-ups: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Failed to generate follow-ups: {str(e)}"}), 500
+        
 # ── Final entry point ──
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
