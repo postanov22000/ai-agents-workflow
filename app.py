@@ -2589,15 +2589,15 @@ def generate_manual_followups():
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         
-        # Insert the lead
-        lead_result = supabase.table("leads").insert(lead_data).execute()
+        # Insert the lead using service role to bypass RLS
+        lead_result = SUPABASE_SERVICE.table("leads").insert(lead_data).execute()
         
         if not lead_result.data:
             return jsonify({"error": "Failed to create lead record"}), 500
             
         lead_id = lead_result.data[0]["id"]
         
-        # Also store the original email for context
+        # Also store the original email for context using service role
         email_record = {
             "user_id": user_id,
             "sender_email": sender_email,
@@ -2606,10 +2606,11 @@ def generate_manual_followups():
             "subject": subject,
             "status": "manual_input",
             "created_at": datetime.now(timezone.utc).isoformat(),
-            "original_user_id": user_id
+            "original_user_id": user_id,
+            "is_forwarded": False
         }
         
-        supabase.table("emails").insert(email_record).execute()
+        SUPABASE_SERVICE.table("emails").insert(email_record).execute()
         
         # Generate follow-ups using the same AI system
         follow_ups = []
@@ -2628,12 +2629,13 @@ def generate_manual_followups():
                     "generated_content": content
                 }
                 
-                # Store the follow-up
-                follow_up_result = supabase.table("lead_follow_ups").insert(follow_up_data).execute()
+                # Store the follow-up using service role
+                follow_up_result = SUPABASE_SERVICE.table("lead_follow_ups").insert(follow_up_data).execute()
                 
                 if follow_up_result.data:
                     follow_ups.append({
                         "id": follow_up_result.data[0]["id"],
+                        "lead_id": lead_id,
                         "day": seq['name'],
                         "date": scheduled_at.strftime("%Y-%m-%d"),
                         "content": content,
