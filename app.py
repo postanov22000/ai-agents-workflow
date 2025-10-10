@@ -292,28 +292,6 @@ def home():
 def dashboard():
     user_id = request.args.get("user_id", "").strip()
 
-    # Check if user needs to select email mode
-    needs_mode_selection = False
-    if user_id:
-        try:
-            profile = supabase.table("profiles") \
-                .select("email_mode, full_name") \
-                .eq("id", user_id) \
-                .single() \
-                .execute().data
-            
-            # If email_mode is not set (new user), show mode selection
-            if not profile or profile.get("email_mode") is None:
-                needs_mode_selection = True
-                
-        except Exception as e:
-            app.logger.warning(f"Could not check email mode for user {user_id}: {str(e)}")
-            needs_mode_selection = True
-
-    # If user needs to select mode, show the mode selection page
-    if needs_mode_selection:
-        return render_template("mode_selection.html", user_id=user_id)
-
     # ── GUEST DEFAULTS ──
     name            = "Guest"
     ai_enabled      = False
@@ -323,27 +301,37 @@ def dashboard():
     show_reconnect  = False
     revenue         = 0
     revenue_change  = 0
+    email_mode      = "auto"  # Default email mode
 
     # Ensure these always exist for the template
     kits_generated = 0
     estimated_saved = 0
 
     if user_id:
-        # 1) Load profile
+        # 1) Load profile and check email mode
         try:
-            resp = (
+            profile_resp = (
                 supabase.table("profiles")
-                         .select("full_name, ai_enabled, generate_leases")
+                         .select("full_name, ai_enabled, generate_leases, email_mode")
                          .eq("id", user_id)
                          .single()
                          .execute()
             )
-            if resp.data:
-                name            = resp.data["full_name"]
-                ai_enabled      = resp.data["ai_enabled"]
-                generate_leases = resp.data["generate_leases"]
-        except Exception:
-            app.logger.warning(f"dashboard: failed to load profile for {user_id}")
+            if profile_resp.data:
+                profile_data = profile_resp.data
+                name            = profile_data["full_name"]
+                ai_enabled      = profile_data["ai_enabled"]
+                generate_leases = profile_data["generate_leases"]
+                email_mode      = profile_data.get("email_mode", "auto")  # Get email_mode or default to "auto"
+                
+                # Check if user needs to select email mode (new user without mode set)
+                if profile_data.get("email_mode") is None:
+                    return render_template("mode_selection.html", user_id=user_id)
+                    
+        except Exception as e:
+            app.logger.warning(f"dashboard: failed to load profile for {user_id}: {str(e)}")
+            # If there's an error loading profile, show mode selection to be safe
+            return render_template("mode_selection.html", user_id=user_id)
 
         # 2) Count today's emails
         try:
