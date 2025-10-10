@@ -19,7 +19,9 @@
             </div>
         </div>
     </div>
-{% else %}
+  {% endif %}
+  
+{% if email_mode == 'manual' %}
     <!-- Show manual mode indicator -->
     <div class="metric-card">
         <i class="fas fa-keyboard metric-icon"></i>
