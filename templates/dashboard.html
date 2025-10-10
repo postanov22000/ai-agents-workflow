@@ -1107,7 +1107,7 @@
   hx-swap="innerHTML">
   <i class="fas fa-home"></i> Dashboard
 </div>
-
+{% if email_mode == 'manual' %}
 <div
   class="nav-item"
   hx-get="/dashboard/manual_email?user_id={{ user_id }}"
@@ -1115,7 +1115,7 @@
   hx-swap="innerHTML">
   <i class="fas fa-keyboard"></i> Manual Email Reply
 </div>
-            
+{% endif %}            
 <div
   class="nav-item"
   hx-get="/dashboard/new_transaction?user_id={{ user_id }}"
