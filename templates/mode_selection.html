@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Choose Your Email Mode - ReplyzeCRE</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(-45deg, #0a192f, #112240, #1a2f4b, #233554);
+            background-size: 400% 400%;
+            animation: gradientBG 25s ease infinite;
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .mode-selection-container {
+            max-width: 800px;
+            width: 100%;
+            background: rgba(16, 36, 64, 0.9);
+            border-radius: 16px;
+            padding: 3rem;
+            border: 1px solid rgba(100, 255, 218, 0.3);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+
+        .logo {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            background: linear-gradient(45deg, #64ffda, #8affdf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo i {
+            color: #64ffda;
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            color: #ffffff;
+        }
+
+        .subtitle {
+            color: #8892b0;
+            font-size: 1.1rem;
+            margin-bottom: 3rem;
+        }
+
+        .mode-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .mode-card {
+            background: rgba(10, 25, 47, 0.7);
+            border: 2px solid rgba(100, 255, 218, 0.2);
+            border-radius: 12px;
+            padding: 2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: left;
+        }
+
+        .mode-card:hover {
+            border-color: #64ffda;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(100, 255, 218, 0.2);
+        }
+
+        .mode-card.selected {
+            border-color: #64ffda;
+            background: rgba(100, 255, 218, 0.1);
+        }
+
+        .mode-icon {
+            font-size: 3rem;
+            color: #64ffda;
+            margin-bottom: 1rem;
+        }
+
+        .mode-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #64ffda;
+        }
+
+        .mode-description {
+            color: #8892b0;
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+
+        .mode-features {
+            list-style: none;
+            padding: 0;
+        }
+
+        .mode-features li {
+            padding: 0.5rem 0;
+            color: #ccd6f6;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .mode-features li:before {
+            content: "✓";
+            color: #64ffda;
+            font-weight: bold;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem 2rem;
+            border-radius: 50px;
+            font-weight: 700;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            gap: 0.5rem;
+            font-size: 1.1rem;
+            background: linear-gradient(135deg, #64ffda 0%, #52d1b8 100%);
+            color: #0a192f;
+            margin-top: 1rem;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(100, 255, 218, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .note {
+            color: #8892b0;
+            font-size: 0.9rem;
+            margin-top: 2rem;
+            font-style: italic;
+        }
+
+        @media (max-width: 768px) {
+            .mode-options {
+                grid-template-columns: 1fr;
+            }
+            
+            .mode-selection-container {
+                padding: 2rem;
+                margin: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="mode-selection-container">
+        <div class="logo">
+            <i class="fas fa-robot"></i>
+            <span>ReplyzeCRE</span>
+        </div>
+        
+        <h1>Choose Your Email Mode</h1>
+        <p class="subtitle">Select how you'd like to process emails with AI</p>
+        
+        <div class="mode-options">
+            <div class="mode-card" onclick="selectMode('auto')" id="auto-card">
+                <div class="mode-icon">
+                    <i class="fas fa-sync-alt"></i>
+                </div>
+                <h3 class="mode-title">Auto Mode</h3>
+                <p class="mode-description">
+                    Set up email forwarding and let AI automatically process incoming emails.
+                    Perfect for hands-free operation.
+                </p>
+                <ul class="mode-features">
+                    <li>Automatic email processing</li>
+                    <li>Email forwarding setup</li>
+                    <li>Hands-free operation</li>
+                    <li>Real-time responses</li>
+                </ul>
+            </div>
+            
+            <div class="mode-card" onclick="selectMode('manual')" id="manual-card">
+                <div class="mode-icon">
+                    <i class="fas fa-keyboard"></i>
+                </div>
+                <h3 class="mode-title">Manual Mode</h3>
+                <p class="mode-description">
+                    Copy and paste email content for AI processing. Gives you full control over which emails to process.
+                </p>
+                <ul class="mode-features">
+                    <li>Copy & paste emails</li>
+                    <li>Full control over selection</li>
+                    <li>No forwarding setup required</li>
+                    <li>Batch processing available</li>
+                </ul>
+            </div>
+        </div>
+        
+        <button class="btn" id="continue-btn" onclick="continueToDashboard()" disabled>
+            <i class="fas fa-arrow-right"></i> Continue to Dashboard
+        </button>
+        
+        <p class="note">
+            You can change this preference later in Settings.
+        </p>
+    </div>
+
+    <script>
+        let selectedMode = null;
+
+        function selectMode(mode) {
+            selectedMode = mode;
+            
+            // Update UI
+            document.getElementById('auto-card').classList.remove('selected');
+            document.getElementById('manual-card').classList.remove('selected');
+            document.getElementById(mode + '-card').classList.add('selected');
+            
+            // Enable continue button
+            document.getElementById('continue-btn').disabled = false;
+        }
+
+        async function continueToDashboard() {
+            if (!selectedMode) return;
+            
+            const btn = document.getElementById('continue-btn');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Setting up...';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch('/set_email_mode', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        mode: selectedMode,
+                        user_id: '{{ user_id }}'
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Redirect to dashboard
+                    window.location.href = `/dashboard?user_id={{ user_id }}`;
+                } else {
+                    alert('Error setting mode. Please try again.');
+                    btn.innerHTML = '<i class="fas fa-arrow-right"></i> Continue to Dashboard';
+                    btn.disabled = false;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error setting mode. Please try again.');
+                btn.innerHTML = '<i class="fas fa-arrow-right"></i> Continue to Dashboard';
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
