@@ -1274,7 +1274,8 @@
             </div>
         </div>
     </div>
-
+<!-- Mode Selection Modal Container -->
+<div id="mode-modal-container"></div>
     <script>
         document.body.addEventListener('htmx:configRequest', function(evt) {
             document.querySelector('.main-content').style.opacity = 0.4;
@@ -1483,6 +1484,40 @@ document.addEventListener('DOMContentLoaded', function() {
 // Re-check when HTX loads new content
 document.body.addEventListener('htmx:afterSwap', function(evt) {
     setTimeout(checkEmailStatus, 500);
+});
+</script>
+    <script>
+// Handle mode selection modal
+document.addEventListener('DOMContentLoaded', function() {
+    // Check if the response contains a mode selection modal
+    const mainContent = document.querySelector('.main-content');
+    const modeModal = mainContent.querySelector('#mode-selection-modal');
+    
+    if (modeModal) {
+        // Move the modal to the modal container and show it
+        const modalContainer = document.getElementById('mode-modal-container');
+        modalContainer.appendChild(modeModal);
+        
+        // Clear the main content since we're showing the modal
+        mainContent.innerHTML = '<div style="display: none;"></div>';
+    }
+});
+
+// Also handle HTMX responses that might contain the modal
+document.body.addEventListener('htmx:afterSwap', function(evt) {
+    if (evt.detail.target.classList.contains('main-content')) {
+        const mainContent = evt.detail.target;
+        const modeModal = mainContent.querySelector('#mode-selection-modal');
+        
+        if (modeModal) {
+            // Move the modal to the modal container and show it
+            const modalContainer = document.getElementById('mode-modal-container');
+            modalContainer.appendChild(modeModal);
+            
+            // Clear the main content since we're showing the modal
+            mainContent.innerHTML = '<div style="display: none;"></div>';
+        }
+    }
 });
 </script>
 </body>
