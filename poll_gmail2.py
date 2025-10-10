@@ -444,65 +444,90 @@ from email.header import decode_header
 def parse_forwarded_email(raw_email):
     """Parse forwarded email to extract original recipient and content"""
     try:
-        # Decode email headers
         headers = raw_email.get('payload', {}).get('headers', [])
+        body = extract_plaintext(raw_email.get('payload', {}))
         
         # Extract subject to check if it's forwarded
         subject = extract_header(headers, "Subject", "").lower()
         is_forwarded = "fwd:" in subject or "fw:" in subject
         
+        # For ReplyZeAI, we need to look for our specific forwarding pattern
+        # The original recipient is typically in the forwarding headers
         original_recipient = None
-        original_sender = None
-        original_content = ""
         
-        if is_forwarded:
-            body = extract_plaintext(raw_email.get('payload', {}))
-            
-            # Try to extract original recipient from forwarding headers
-            # Look for patterns like "Original Recipient:", "To:", in the forwarded message
-            original_recipient_patterns = [
-                r'Original-Recipient:\s*rfc822;([^\s@]+@[^\s@]+\.[^\s@]+)',
-                r'To:\s*([^\s@]+@[^\s@]+\.[^\s@]+)',
-                r'Originally sent to:\s*([^\s@]+@[^\s@]+\.[^\s@]+)'
+        # Method 1: Check for X-Original-To or Delivered-To headers
+        original_recipient = extract_header(headers, "X-Original-To")
+        if not original_recipient:
+            original_recipient = extract_header(headers, "Delivered-To")
+        
+        # Method 2: Look for our specific forwarding pattern in the body
+        if not original_recipient and is_forwarded:
+            # Common forwarding patterns in email bodies
+            forwarding_patterns = [
+                r'Originally sent to:\s*([^\s@]+@[^\s@]+\.[^\s@]+)',
+                r'Original Recipient:\s*([^\s@]+@[^\s@]+\.[^\s@]+)',
+                r'Forwarded from:\s*([^\s@]+@[^\s@]+\.[^\s@]+)',
+                r'To:\s*([^\s@]+@[^\s@]+\.[^\s@]+)\s*Subject:',
             ]
             
-            for pattern in original_recipient_patterns:
+            for pattern in forwarding_patterns:
                 match = re.search(pattern, body, re.IGNORECASE)
                 if match:
                     original_recipient = match.group(1).strip()
                     break
-            
-            # If no pattern matched, try to extract from common forwarding formats
-            if not original_recipient:
-                # Look for email patterns in the forwarded header section
-                email_pattern = r'[\w\.-]+@[\w\.-]+\.\w+'
-                emails_in_body = re.findall(email_pattern, body)
-                
-                # The original recipient is likely one of the first emails found
-                for found_email in emails_in_body:
-                    if found_email != raw_email.get('sender_email'):
-                        original_recipient = found_email
-                        break
-            
-            # Extract original content by removing forwarding headers
+        
+        # Method 3: Extract from common forwarding headers in the email structure
+        if not original_recipient:
+            # Look for Received headers that might contain the original recipient
+            received_headers = [h.get("value", "") for h in headers if h.get("name", "").lower() == "received"]
+            for received in received_headers:
+                email_match = re.search(r'for\s+<([^\s@]+@[^\s@]+\.[^\s@]+)>', received)
+                if email_match:
+                    original_recipient = email_match.group(1)
+                    break
+        
+        # Clean up the original content by removing forwarding headers
+        original_content = body
+        if is_forwarded:
             lines = body.split('\n')
-            in_original_content = False
             cleaned_lines = []
+            in_original_content = False
+            forwarding_header_found = False
             
             for line in lines:
-                if any(x in line.lower() for x in ['forwarded message', 'original message', 'begin forwarded message']):
-                    in_original_content = True
+                line_lower = line.lower().strip()
+                
+                # Skip forwarding headers
+                if any(header in line_lower for header in [
+                    'forwarded message', 
+                    'original message', 
+                    'begin forwarded message',
+                    'from:', 
+                    'sent:', 
+                    'to:',
+                    'subject:'
+                ]):
+                    forwarding_header_found = True
+                    if 'forwarded message' in line_lower or 'original message' in line_lower:
+                        in_original_content = True
                     continue
-                if in_original_content and line.strip():
+                
+                # Start capturing after the main forwarding header
+                if forwarding_header_found and line.strip() and not in_original_content:
+                    in_original_content = True
+                
+                if in_original_content:
                     cleaned_lines.append(line)
             
             original_content = '\n'.join(cleaned_lines) if cleaned_lines else body
         
+        logger.info(f"Parsed forwarded email - Original recipient: {original_recipient}, Is forwarded: {is_forwarded}")
+        
         return {
             'is_forwarded': is_forwarded,
             'original_recipient': original_recipient,
-            'original_content': original_content if is_forwarded else body,
-            'original_sender': original_sender
+            'original_content': original_content,
+            'original_sender': None
         }
         
     except Exception as e:
@@ -551,47 +576,88 @@ def poll_gmail_for_user(user_email: str):
                 'sender_email': sender
             })
 
-            # Find the correct user_id based on original recipient
+            # Find the correct user_id - this is the critical fix
             target_user_id = None
-            if parsed_email['is_forwarded'] and parsed_email['original_recipient']:
-                # Look up user by original recipient email
-                user_entry = supabase.table("profiles").select("id").eq("email", parsed_email['original_recipient']).execute().data
+            target_user_email = None
+
+            # Method 1: Use original recipient from forwarded email parsing
+            if parsed_email['original_recipient']:
+                target_user_email = parsed_email['original_recipient']
+                user_entry = supabase.table("profiles").select("id, email").eq("email", target_user_email).execute().data
                 if user_entry:
                     target_user_id = user_entry[0]["id"]
-                    logger.info(f"Found target user {target_user_id} for original recipient {parsed_email['original_recipient']}")
-                else:
-                    logger.warning(f"No user found for original recipient: {parsed_email['original_recipient']}")
+                    logger.info(f"Found target user {target_user_id} for original recipient {target_user_email}")
 
-            # If no target user found, use polling account's user_id as fallback
+            # Method 2: If no original recipient found, try to find user by sender email
+            if not target_user_id and sender:
+                sender_email_match = re.search(r'<([^>]+)>', sender)
+                sender_email = sender_email_match.group(1) if sender_email_match else sender
+                user_entry = supabase.table("profiles").select("id, email").eq("email", sender_email).execute().data
+                if user_entry:
+                    target_user_id = user_entry[0]["id"]
+                    target_user_email = user_entry[0]["email"]
+                    logger.info(f"Found target user {target_user_id} by sender email {sender_email}")
+
+            # Method 3: If still no user found, check if this is a direct email to the polling account
             if not target_user_id:
-                user_entry = supabase.table("profiles").select("id").eq("email", user_email).execute().data
-                if not user_entry:
-                    logger.warning(f"No user_id found for {user_email}, skipping email.")
-                    continue
-                target_user_id = user_entry[0]["id"]
+                # Look for the polling account's user record
+                user_entry = supabase.table("profiles").select("id, email").eq("email", user_email).execute().data
+                if user_entry:
+                    target_user_id = user_entry[0]["id"]
+                    target_user_email = user_email
+                    logger.info(f"Using polling account as target user: {user_email}")
+
+            # If no target user found at all, skip this email
+            if not target_user_id:
+                logger.warning(f"No user found for email from {sender}. Skipping.")
+                continue
 
             # Insert email with proper user association
             email_data = {
                 "user_id": target_user_id,
                 "sender_email": sender,
-                "recipient_email": user_email,  # The polling account that received it
+                "recipient_email": target_user_email,  # The actual user who should receive this
                 "original_recipient_email": parsed_email['original_recipient'],
-                "polling_account_email": user_email,
+                "polling_account_email": user_email,  # Which polling account received it
                 "is_forwarded": parsed_email['is_forwarded'],
                 "subject": subject,
                 "original_content": parsed_email['original_content'],
                 "status": "processing",
-                "gmail_id": msg["id"]
+                "gmail_id": msg["id"],
+                "created_at": datetime.now(timezone.utc).isoformat()
             }
 
             supabase.table("emails").insert(email_data).execute()
-            logger.info(f"Inserted email for user {target_user_id} via polling account {user_email}: {subject}")
+            logger.info(f"✅ Inserted email for user {target_user_id} ({target_user_email}) via polling account {user_email}: {subject}")
+
+            # Mark as read in Gmail
+            service.users().messages().modify(
+                userId="me", 
+                id=msg["id"], 
+                body={'removeLabelIds': ['UNREAD']}
+            ).execute()
 
         except Exception as e:
             logger.exception(f"Error processing message {msg.get('id', '?')} for {user_email}: {e}")
 
 
-
+def extract_email_from_string(email_string):
+    """Extract email address from a string that might contain name and email"""
+    if not email_string:
+        return None
+    
+    # Pattern for email in angle brackets
+    match = re.search(r'<([^>]+)>', email_string)
+    if match:
+        return match.group(1).lower()
+    
+    # Pattern for plain email
+    email_pattern = r'[\w\.-]+@[\w\.-]+\.\w+'
+    match = re.search(email_pattern, email_string)
+    if match:
+        return match.group(0).lower()
+    
+    return None
 
 
 
