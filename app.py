@@ -2706,10 +2706,10 @@ def get_email_mode():
             .single() \
             .execute().data
         
-        return jsonify({"mode": profile.get("email_mode", "auto")})
+        return jsonify({"mode": profile.get("email_mode")})
     except Exception as e:
         app.logger.error(f"Error getting email mode: {str(e)}")
-        return jsonify({"mode": "auto"})  # Default to auto
+        return jsonify({"mode": "email_mode"})  # Default to auto
 
 
 # ── Final entry point ──
