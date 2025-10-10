@@ -1520,5 +1520,20 @@ document.body.addEventListener('htmx:afterSwap', function(evt) {
     }
 });
 </script>
+    <!-- Add this right before the closing </body> tag in dashboard.html -->
+{% if show_mode_modal %}
+<div id="mode-modal-container">
+    {% include 'mode_selection_modal.html' %}
+</div>
+<script>
+    // Ensure the modal is visible
+    document.addEventListener('DOMContentLoaded', function() {
+        const modal = document.getElementById('mode-selection-modal');
+        if (modal) {
+            modal.classList.add('active');
+        }
+    });
+</script>
+{% endif %}
 </body>
 </html> 
