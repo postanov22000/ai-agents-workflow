@@ -3,30 +3,384 @@
 <head>
     <title>Import Leads</title>
     <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .container { max-width: 600px; margin: auto; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; }
-        input[type="file"] { padding: 5px; }
-        button { padding: 10px 15px; background: #007bff; color: white; border: none; cursor: pointer; }
-        .message { margin-top: 15px; padding: 10px; border-radius: 5px; }
-        .success { background: #d4edda; color: #155724; }
-        .error { background: #f8d7da; color: #721c24; }
+        /* Consistent spacing variables */
+        :root {
+            --primary-bg: #0a192f;
+            --secondary-bg: #112240;
+            --accent-color: #64ffda;
+            --text-primary: #ffffff;
+            --text-secondary: #8892b0;
+            --card-bg: rgba(16, 36, 64, 0.6);
+            --border-color: rgba(100, 255, 218, 0.2);
+            --spacing-xs: 0.5rem;
+            --spacing-sm: 1rem;
+            --spacing-md: 1.5rem;
+            --spacing-lg: 2rem;
+            --spacing-xl: 3rem;
+        }
+        
+        /* Core Animations */
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        @keyframes floatElement {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-10px) rotate(3deg); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Base Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(-45deg, var(--primary-bg), var(--secondary-bg), #1a2f4b, #233554);
+            background-size: 400% 400%;
+            animation: gradientBG 25s ease infinite;
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--spacing-lg);
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+            animation: fadeIn 0.5s ease;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .logo {
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-bottom: var(--spacing-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            background: linear-gradient(45deg, var(--accent-color), #8affdf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 25px rgba(100, 255, 218, 0.3);
+        }
+
+        .logo i {
+            color: var(--accent-color);
+            animation: floatElement 6s ease-in-out infinite;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: var(--spacing-xs);
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+
+        /* Form Card */
+        .form-card {
+            background: var(--card-bg);
+            padding: var(--spacing-lg);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 10px 30px rgba(10, 25, 47, 0.4);
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+            backdrop-filter: blur(10px);
+        }
+
+        .form-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(10, 25, 47, 0.6);
+        }
+
+        .form-group {
+            margin-bottom: var(--spacing-md);
+        }
+
+        label {
+            display: block;
+            margin-bottom: var(--spacing-xs);
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        /* File Input Styling */
+        .file-input-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .file-input {
+            width: 100%;
+            padding: var(--spacing-sm);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .file-input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 2px rgba(100, 255, 218, 0.2);
+        }
+
+        .file-input::file-selector-button {
+            background: rgba(100, 255, 218, 0.1);
+            border: 1px solid var(--border-color);
+            color: var(--accent-color);
+            padding: 8px 16px;
+            border-radius: 6px;
+            margin-right: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .file-input::file-selector-button:hover {
+            background: rgba(100, 255, 218, 0.2);
+        }
+
+        /* Buttons - Matching dashboard style */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 24px;
+            border-radius: 50px;
+            font-weight: 700;
+            text-decoration: none;
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+            position: relative;
+            overflow: hidden;
+            border: none;
+            cursor: pointer;
+            gap: 8px;
+            width: 100%;
+            font-size: 1rem;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(100, 255, 218, 0.3);
+        }
+
+        .btn:active {
+            transform: translateY(1px);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-color) 0%, #52d1b8 100%);
+            color: #0a192f;
+            box-shadow: 0 4px 15px rgba(100, 255, 218, 0.3);
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #73ffe1 0%, #61e8cf 100%);
+        }
+
+        /* Message styles */
+        .message {
+            margin-top: var(--spacing-md);
+            padding: var(--spacing-sm);
+            border-radius: 8px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .success {
+            background: rgba(100, 255, 218, 0.1);
+            color: var(--accent-color);
+            border: 1px solid rgba(100, 255, 218, 0.3);
+        }
+
+        .error {
+            background: rgba(247, 37, 133, 0.1);
+            color: #f72585;
+            border: 1px solid rgba(247, 37, 133, 0.3);
+        }
+
+        /* Particle background */
+        .particle {
+            position: fixed;
+            background: rgba(100, 255, 218, 0.1);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: -1;
+            animation: floatElement 20s infinite linear;
+        }
+
+        #particleCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+
+        /* Back to Dashboard Link */
+        .back-link {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: var(--spacing-md);
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .back-link:hover {
+            color: var(--accent-color);
+        }
+
+        /* File Info */
+        .file-info {
+            margin-top: var(--spacing-xs);
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            body {
+                padding: var(--spacing-md);
+            }
+            
+            .form-card {
+                padding: var(--spacing-md);
+            }
+            
+            .logo {
+                font-size: 1.8rem;
+            }
+            
+            h1 {
+                font-size: 1.5rem;
+            }
+        }
     </style>
 </head>
 <body>
+    <div id="particleCanvas"></div>
+    
     <div class="container">
-        <h1>Import Leads</h1>
-        <form hx-post="/import_leads" hx-encoding="multipart/form-data" hx-target="#message">
-            <div class="form-group">
-                <label for="file">Upload CSV or Excel File:</label>
-                <input type="file" id="file" name="file" accept=".csv,.xlsx,.xls" required>
+        <div class="header">
+            <div class="logo">
+                <i class="fas fa-robot"></i>
+                <span>ReplyzeCRE</span>
             </div>
-            <input type="hidden" name="user_id" value="{{ user_id }}">
-            <button type="submit">Import</button>
-        </form>
-        <div id="message"></div>
+            <h1>Import Leads</h1>
+            <p class="subtitle">Upload your CSV or Excel file to import new leads</p>
+        </div>
+        
+        <div class="form-card">
+            <form hx-post="/import_leads" hx-encoding="multipart/form-data" hx-target="#message">
+                <div class="form-group">
+                    <label for="file">Select File:</label>
+                    <div class="file-input-container">
+                        <input type="file" id="file" name="file" accept=".csv,.xlsx,.xls" class="file-input" required>
+                    </div>
+                    <div class="file-info">
+                        <i class="fas fa-info-circle"></i>
+                        <span>Supported formats: CSV, XLSX, XLS</span>
+                    </div>
+                </div>
+                <input type="hidden" name="user_id" value="{{ user_id }}">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-upload"></i> Import Leads
+                </button>
+            </form>
+            <div id="message"></div>
+            
+            <a href="/dashboard?user_id={{ user_id }}" class="back-link">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js"></script>
+    <script>
+        // Create particles for background
+        function createParticles() {
+            const container = document.getElementById('particleCanvas');
+            for(let i = 0; i < 30; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.cssText = `
+                    width: ${Math.random() * 6 + 2}px;
+                    height: ${Math.random() * 6 + 2}px;
+                    left: ${Math.random() * 100}%;
+                    top: ${Math.random() * 100}%;
+                    animation-duration: ${Math.random() * 20 + 10}s;
+                    background: hsla(170, 100%, 70%, ${Math.random() * 0.2});
+                `;
+                container.appendChild(particle);
+            }
+        }
+        createParticles();
+
+        // Add hover effects to form card
+        const formCard = document.querySelector('.form-card');
+        formCard.addEventListener('mousemove', (e) => {
+            const rect = formCard.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / formCard.offsetWidth - 0.5;
+            const y = (e.clientY - rect.top) / formCard.offsetHeight - 0.5;
+            
+            formCard.style.transform = `
+                perspective(1000px)
+                rotateX(${y * 2}deg)
+                rotateY(${x * 2}deg)
+                translateY(-5px)
+            `;
+        });
+
+        formCard.addEventListener('mouseleave', () => {
+            formCard.style.transform = 'perspective(1000px) rotateX(0) rotateY(0) translateY(0)';
+        });
+
+        // File input change handler
+        document.getElementById('file').addEventListener('change', function(e) {
+            const fileName = this.files[0]?.name;
+            if (fileName) {
+                // You could add some visual feedback here if needed
+                console.log('Selected file:', fileName);
+            }
+        });
+    </script>
 </body>
 </html>
