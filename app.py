@@ -2680,13 +2680,20 @@ def generate_manual_followups():
 @app.route("/set_email_mode", methods=["POST"])
 def set_email_mode():
     """Set user's preferred email mode (auto or manual)"""
-    user_id = _require_user()
-    mode = request.json.get("mode")
-    
-    if mode not in ["auto", "manual"]:
-        return jsonify({"error": "Invalid mode"}), 400
-    
     try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+            
+        user_id = data.get("user_id")
+        mode = data.get("mode")
+        
+        if not user_id:
+            return jsonify({"error": "Missing user_id"}), 401
+            
+        if mode not in ["auto", "manual"]:
+            return jsonify({"error": "Invalid mode"}), 400
+        
         # Update user's email mode preference
         supabase.table("profiles").update({
             "email_mode": mode
@@ -2700,19 +2707,21 @@ def set_email_mode():
 @app.route("/get_email_mode")
 def get_email_mode():
     """Get user's current email mode"""
-    user_id = _require_user()
-    
     try:
+        user_id = request.args.get("user_id")
+        if not user_id:
+            return jsonify({"error": "Missing user_id"}), 401
+            
         profile = supabase.table("profiles") \
             .select("email_mode") \
             .eq("id", user_id) \
             .single() \
             .execute().data
         
-        return jsonify({"mode": profile.get("email_mode")})
+        return jsonify({"mode": profile.get("email_mode", "auto")})
     except Exception as e:
         app.logger.error(f"Error getting email mode: {str(e)}")
-        return jsonify({"mode": "email_mode"})  # Default to auto
+        return jsonify({"mode": "auto"})  # Default to auto
 
 
 # ── Final entry point ──
