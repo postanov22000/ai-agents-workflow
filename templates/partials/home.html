@@ -1,24 +1,37 @@
 <div class="main-content">
   <h1>Welcome back, <span>{{ name }}</span> 👋</h1>
 
-{% if profile.email_mode == 'auto' %}
-  <!-- Add this with the other metric cards -->
-<div class="metric-card">
-    <i class="fas fa-envelope metric-icon"></i>
-    <h3>Email Forwarding</h3>
-    <div class="metric-value" id="email-status">
-        <span id="status-text">Checking...</span>
-        <div id="status-icon"></div>
-    </div>
-    <div class="progress-container">
-        <div id="reverify-btn" style="display: none; margin-top: 10px;">
-            <button class="btn btn-warning" onclick="verifyEmailConnection()">
-                <i class="fas fa-sync-alt"></i> Re-check
-            </button>
+    <!-- Show email forwarding status only for auto mode -->
+    {% if email_mode == 'auto' %}
+    <div class="metric-card">
+        <i class="fas fa-envelope metric-icon"></i>
+        <h3>Email Forwarding</h3>
+        <div class="metric-value" id="email-status">
+            <span id="status-text">Checking...</span>
+            <div id="status-icon"></div>
+        </div>
+        <div class="progress-container">
+            <div id="reverify-btn" style="display: none; margin-top: 10px;">
+                <button class="btn btn-warning" onclick="verifyEmailConnection()">
+                    <i class="fas fa-sync-alt"></i> Re-check
+                </button>
+            </div>
         </div>
     </div>
-</div>
-  {% endif %}
+    {% else %}
+    <!-- Show manual mode indicator -->
+    <div class="metric-card">
+        <i class="fas fa-keyboard metric-icon"></i>
+        <h3>Email Mode</h3>
+        <div class="metric-value">
+            <span class="status active"><i class="fas fa-edit"></i> Manual</span>
+        </div>
+        <div class="trend up">
+            <i class="fas fa-check-circle"></i>
+            <span>Copy & Paste Mode</span>
+        </div>
+    </div>
+    {% endif %}
   <!-- Metrics Grid -->
   <div class="metrics-grid">
     <div class="metric-card">
