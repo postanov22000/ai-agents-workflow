@@ -322,16 +322,17 @@ def dashboard():
                 name = profile_data["full_name"]
                 ai_enabled = profile_data["ai_enabled"]
                 generate_leases = profile_data["generate_leases"]
-                email_mode = profile_data.get("email_mode", "auto")  # Get email_mode or default to "auto"
+                email_mode = profile_data.get("email_mode", "auto")
                 
                 # Check if user needs to select email mode (new user without mode set)
                 if profile_data.get("email_mode") is None:
-                    return render_template("mode_selection.html", user_id=user_id)
+                    # Return modal content instead of full page redirect
+                    return render_template("mode_selection_modal.html", user_id=user_id)
                     
         except Exception as e:
             app.logger.warning(f"dashboard: failed to load profile for {user_id}: {str(e)}")
-            # If there's an error loading profile, show mode selection to be safe
-            return render_template("mode_selection.html", user_id=user_id)
+            # Return modal content for error case too
+            return render_template("mode_selection_modal.html", user_id=user_id)
 
         # 2) Count today's emails
         try:
