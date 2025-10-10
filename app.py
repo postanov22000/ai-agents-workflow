@@ -333,18 +333,18 @@ def dashboard():
             app.logger.warning(f"dashboard: failed to load profile for {user_id}: {str(e)}")
             needs_mode_selection = True
 
-        # 2) Count emails sent ON BEHALF OF this user (using your account)
+        # 2) FIXED: Count emails sent BY this user (using sent_by_account)
         try:
             today = date.today().isoformat()
             rows = (
                 supabase.table("emails")
                 .select("sent_at, sent_by_account, original_user_id")
-                .eq("original_user_id", user_id)  # Count emails sent on behalf of this user
+                .eq("sent_by_account", user_id)  # Count emails sent BY this user's account
                 .eq("status", "sent")
                 .execute()
                 .data or []
             )
-            # Count all emails sent for this user (regardless of which sending account was used)
+            # Count all emails sent by this user's account
             emails_sent = len(rows)
             time_saved = emails_sent * 5.5
         except Exception:
@@ -732,18 +732,18 @@ def dashboard_home():
     generate_leases = profile.get("generate_leases", False)
     email_mode = profile.get("email_mode")  # Get email_mode
 
-    # Count emails sent ON BEHALF OF this user (using your account)
+    # FIXED: Count emails sent BY this user (using sent_by_account)
     today     = date.today().isoformat()
     sent_rows = (
         supabase.table("emails")
                 .select("sent_at, sent_by_account, original_user_id")
-                .eq("original_user_id", user_id)  # Emails sent for this user
+                .eq("sent_by_account", user_id)  # Emails sent BY this user's account
                 .eq("status", "sent")
                 .execute()
                 .data
         or []
     )
-    # Count total emails sent for this user (all time)
+    # Count total emails sent by this user's account (all time)
     emails_sent_total = len(sent_rows)
     
     # Count today's emails specifically
