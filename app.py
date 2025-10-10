@@ -333,22 +333,24 @@ def dashboard():
             app.logger.warning(f"dashboard: failed to load profile for {user_id}: {str(e)}")
             needs_mode_selection = True
 
-        # 2) Count today's emails
+        # 2) Count emails sent ON BEHALF OF this user (using your account)
         try:
             today = date.today().isoformat()
             rows = (
                 supabase.table("emails")
-                .select("sent_at")
-                .eq("user_id", user_id)
+                .select("sent_at, sent_by_account, original_user_id")
+                .eq("original_user_id", user_id)  # Count emails sent on behalf of this user
                 .eq("status", "sent")
                 .execute()
-                .data
-                or []
+                .data or []
             )
-            emails_sent = sum(1 for e in rows if e.get("sent_at", "").startswith(today))
+            # Count all emails sent for this user (regardless of which sending account was used)
+            emails_sent = len(rows)
             time_saved = emails_sent * 5.5
         except Exception:
             app.logger.warning(f"dashboard: failed to count emails for {user_id}")
+            emails_sent = 0
+            time_saved = 0
 
         # 3) Gmail reconnect flag - only show for auto mode
         show_reconnect = False
@@ -359,8 +361,7 @@ def dashboard():
                     .select("credentials")
                     .eq("user_id", user_id)
                     .execute()
-                    .data
-                    or []
+                    .data or []
                 )
                 if toks:
                     cd = toks[0]["credentials"]
@@ -383,8 +384,7 @@ def dashboard():
             .eq("user_id", user_id)
             .eq("kit_generated", True)
             .execute()
-            .data
-            or []
+            .data or []
         )
         kits_generated = len(kit_rows)
 
@@ -411,7 +411,7 @@ def dashboard():
         revenue=revenue,
         revenue_change=revenue_change,
         email_mode=email_mode,
-        needs_mode_selection=needs_mode_selection  # Add this flag
+        needs_mode_selection=needs_mode_selection
     )
 #--------------------------------------------------------------------------------------------------------------
 @app.route("/dashboard/leads")
@@ -732,18 +732,25 @@ def dashboard_home():
     generate_leases = profile.get("generate_leases", False)
     email_mode = profile.get("email_mode")  # Get email_mode
 
+    # Count emails sent ON BEHALF OF this user (using your account)
     today     = date.today().isoformat()
     sent_rows = (
         supabase.table("emails")
-                .select("sent_at")
-                .eq("user_id", user_id)
+                .select("sent_at, sent_by_account, original_user_id")
+                .eq("original_user_id", user_id)  # Emails sent for this user
                 .eq("status", "sent")
                 .execute()
                 .data
         or []
     )
+    # Count total emails sent for this user (all time)
+    emails_sent_total = len(sent_rows)
+    
+    # Count today's emails specifically
     emails_sent_today = sum(1 for e in sent_rows if e.get("sent_at", "").startswith(today))
-    time_saved        = emails_sent_today * 5.5
+    
+    # Use total for time saved calculation
+    time_saved = emails_sent_total * 5.5
 
     token_rows = (
         supabase.table("gmail_tokens")
@@ -768,8 +775,8 @@ def dashboard_home():
             show_reconnect = creds.expired
         except Exception:
             pass
+            
     # 4) Count "kits generated" for this user
-# (Assuming you flag each transaction row with kit_generated=True)
     kit_rows = (
         supabase
         .table("transactions")
@@ -783,23 +790,21 @@ def dashboard_home():
     kits_generated = len(kit_rows)
 
     # 5) Compute extra estimated time saved
-    # e.g. you save ~15 minutes per generated kit
     PER_KIT_SAVE_MINUTES = 15
     estimated_saved = kits_generated * PER_KIT_SAVE_MINUTES
- 
 
     return render_template(
         "partials/home.html",
         name=full_name,
         user_id=user_id,
-        emails_sent=emails_sent_today,
+        emails_sent=emails_sent_total,  # Use total count for display
         time_saved=time_saved,
-        estimated_saved=estimated_saved,  # new computed value
-        kits_generated=kits_generated,      # new computed value
+        estimated_saved=estimated_saved,
+        kits_generated=kits_generated,
         ai_enabled=ai_enabled,
         show_reconnect=show_reconnect,
         generate_leases=generate_leases,
-        email_mode=email_mode  # Pass email_mode to template
+        email_mode=email_mode
     )
 #----------------------------------------------------------------------
 @app.route("/reconnect_gmail")
@@ -1349,11 +1354,7 @@ def trigger_process():
     if token != os.environ.get("PROCESS_SECRET_TOKEN"):
         return jsonify({"error": "Unauthorized"}), 401
         
-    # Decrement email count
-#    ip = request.remote_addr
- #   demo_rate_limits[ip]['emails'] -= 1
-    
-# ── 0) DAILY RESET CHECK ──
+    # ── 0) DAILY RESET CHECK ──
     today_str = date.today().isoformat()
     rl_row = SUPABASE_SERVICE.table("rate_limit_reset") \
         .select("last_reset") \
@@ -1391,7 +1392,7 @@ def trigger_process():
     for r in sent_rows:
         sent_at = r.get("sent_at","")
         if sent_at.startswith(today_iso):
-            uid = r["original_user_id"]
+            uid = r["original_user_id"]  # Count by original_user_id, not sending account
             emails_sent_today[uid] = emails_sent_today.get(uid, 0) + 1
 
     # ── 1) Fetch the three pre‑send queues ──
@@ -1461,22 +1462,21 @@ def trigger_process():
     # ── 5) Re‑fetch ready_to_send rows ──
     ready = (
         supabase.table("emails")
-                .select("id, user_id, sender_email, processed_content, subject")
+                .select("id, user_id, sender_email, processed_content, subject, original_user_id")
                 .eq("status", "ready_to_send")
                 .execute()
                 .data or []
     )
 
-        # ── 6) Send via SMTP fallback or Gmail API, enforcing 20/day cap ──
     # ── 6) Send via SMTP fallback or Gmail API, enforcing 20/day cap ──
-
     for rec in ready:
         em_id = rec["id"]
-        uid = rec["user_id"]  # The user who owns this email
+        # Use original_user_id if available, otherwise fall back to user_id
+        uid = rec.get("original_user_id") or rec["user_id"]  # The user we're sending on behalf of
         to_addr = rec["sender_email"]
         subject = rec.get("subject", "Your Email")
 
-    # 20-email/day limit for the OWNING user
+        # 20-email/day limit for the ORIGINAL USER (the one we're sending on behalf of)
         if emails_sent_today.get(uid, 0) >= 20:
             app.logger.info(f"User {uid} reached daily limit, marking {em_id} error")
             supabase.table("emails").update({
@@ -1486,7 +1486,7 @@ def trigger_process():
             failed.append(em_id)
             continue
 
-    # Find an available sending account (Gmail tokens, not Gmail tokens2)
+        # Find an available sending account (Gmail tokens, not Gmail tokens2)
         sending_accounts = supabase.table("gmail_tokens").select("user_id, credentials").execute().data
         if not sending_accounts:
             app.logger.error("No sending accounts available")
@@ -1497,11 +1497,11 @@ def trigger_process():
             failed.append(em_id)
             continue
 
-    # Use the first available sending account
+        # Use the first available sending account (YOUR account)
         send_account = sending_accounts[0]
         send_user_id = send_account["user_id"]
 
-    # Get user-specific data
+        # Get user-specific data (for the ORIGINAL USER we're sending on behalf of)
         lease_flag = supabase.table("profiles") \
                              .select("generate_leases") \
                              .eq("id", uid).single().execute().data.get("generate_leases", False)
@@ -1515,7 +1515,7 @@ def trigger_process():
         full_html = f"<html><body><p>{body_html}</p>{prof_sig.get('signature','')}</body></html>"
 
         try:
-        # Use the sending account's credentials
+            # Use the sending account's credentials (YOUR account)
             cd = send_account["credentials"]
             creds = Credentials(
                 token=cd["token"],
@@ -1533,7 +1533,7 @@ def trigger_process():
             msg["to"] = to_addr
             msg["from"] = "me"
 
-        # Use the original user's display name in the "from" header
+            # Use the original user's display name in the "from" header
             display_name = prof_sig.get("display_name", "")
             if display_name:
                 msg["from"] = f'"{display_name}" <me>'
@@ -1552,17 +1552,17 @@ def trigger_process():
                 status_to = "sent"
                 sent.append(em_id)
 
-        # Update the email record with sending info
+            # Update the email record with BOTH users
             supabase.table("emails").update({
-            "status": status_to,
-            "sent_at": datetime.utcnow().isoformat(),
-            "sent_by_account": send_user_id,  # Track which account sent it
-            "original_user_id": uid  # Ensure we track the original user
+                "status": status_to,
+                "sent_at": datetime.utcnow().isoformat(),
+                "sent_by_account": send_user_id,  # Track which account sent it (YOUR account)
+                "original_user_id": uid  # Ensure we track the original user we sent on behalf of
             }).eq("id", em_id).execute()
 
-        # Increment count for the ORIGINAL user (uid), not the sending account
+            # Increment count for the ORIGINAL USER (uid), not the sending account
             emails_sent_today[uid] = emails_sent_today.get(uid, 0) + 1
-            app.logger.info(f"Email {em_id} sent by account {send_user_id} for user {uid}")
+            app.logger.info(f"Email {em_id} sent by account {send_user_id} on behalf of user {uid}")
 
         except Exception as e:
             app.logger.error(f"Gmail API send failed for email {em_id}", exc_info=True)
@@ -1572,12 +1572,12 @@ def trigger_process():
             }).eq("id", em_id).execute()
             failed.append(em_id)
 
-# ── Summary response ──
+    # ── Summary response ──
     summary = {
-    "processed": all_processed,
-    "sent": sent,
-    "drafted": drafted,
-    "failed": failed
+        "processed": all_processed,
+        "sent": sent,
+        "drafted": drafted,
+        "failed": failed
     }
     return jsonify(summary), 200
 
