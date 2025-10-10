@@ -1,8 +1,9 @@
 <div class="main-content">
   <h1>Welcome back, <span>{{ name }}</span> 👋</h1>
 
-    <!-- Show email forwarding status only for auto mode -->
-    {% if email_mode == 'auto' %}
+    <!-- In your home.html template -->
+{% if email_mode == 'auto' %}
+    <!-- Show email forwarding status for auto mode -->
     <div class="metric-card">
         <i class="fas fa-envelope metric-icon"></i>
         <h3>Email Forwarding</h3>
@@ -18,7 +19,7 @@
             </div>
         </div>
     </div>
-    {% else %}
+{% else %}
     <!-- Show manual mode indicator -->
     <div class="metric-card">
         <i class="fas fa-keyboard metric-icon"></i>
@@ -31,7 +32,7 @@
             <span>Copy & Paste Mode</span>
         </div>
     </div>
-    {% endif %}
+{% endif %}
   <!-- Metrics Grid -->
   <div class="metrics-grid">
     <div class="metric-card">
