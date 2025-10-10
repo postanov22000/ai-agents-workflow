@@ -92,7 +92,7 @@
   </div>
 
 
-  {% if email_mode == '' %}
+
   <!-- Action Section -->
   <div class="action-grid">
     <div class="action-card">
@@ -100,6 +100,7 @@
       <div class="action-buttons">
         <form method="POST" action="/disconnect_gmail">
           <input type="hidden" name="user_id" value="{{ user_id }}" />
+{% if email_mode == '' %}
           <button type="submit" class="btn btn-danger">
             <i class="fas fa-unlink"></i> Disconnect Gmail
           </button>      
