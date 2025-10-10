@@ -326,8 +326,9 @@ def dashboard():
                 
                 # Check if user needs to select email mode (new user without mode set)
                 if profile_data.get("email_mode") is None:
-                    # Return modal content instead of full page redirect
-                    return render_template("mode_selection_modal.html", user_id=user_id)
+    # For HTMX requests, return just the modal
+                    if request.headers.get('HX-Request'):
+                        return render_template("mode_selection_modal.html", user_id=user_id)
                     
         except Exception as e:
             app.logger.warning(f"dashboard: failed to load profile for {user_id}: {str(e)}")
@@ -407,7 +408,8 @@ def dashboard():
         show_reconnect=show_reconnect,
         revenue=revenue,
         revenue_change=revenue_change,
-        email_mode=email_mode  # Pass email_mode to template
+        email_mode=email_mode,
+        show_mode_modal=True  # Add this flag 
     )
 #--------------------------------------------------------------------------------------------------------------
 @app.route("/dashboard/leads")
