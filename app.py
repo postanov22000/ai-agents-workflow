@@ -415,7 +415,8 @@ def dashboard():
         kits_generated=kits_generated,
         show_reconnect=show_reconnect,
         revenue=revenue,
-        revenue_change=revenue_change
+        revenue_change=revenue_change,
+        email_mode=email_mode
     )
 #--------------------------------------------------------------------------------------------------------------
 @app.route("/dashboard/leads")
