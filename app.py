@@ -301,11 +301,12 @@ def dashboard():
     show_reconnect = False
     revenue = 0
     revenue_change = 0
-    email_mode = "auto"  # Default email mode
+    email_mode = "auto"
 
     # Ensure these always exist for the template
     kits_generated = 0
     estimated_saved = 0
+    needs_mode_selection = False
 
     if user_id:
         # 1) Load profile and check email mode
@@ -324,16 +325,13 @@ def dashboard():
                 generate_leases = profile_data["generate_leases"]
                 email_mode = profile_data.get("email_mode", "auto")
                 
-                # Check if user needs to select email mode (new user without mode set)
+                # Check if user needs to select email mode
                 if profile_data.get("email_mode") is None:
-    # For HTMX requests, return just the modal
-                    if request.headers.get('HX-Request'):
-                        return render_template("mode_selection_modal.html", user_id=user_id)
+                    needs_mode_selection = True
                     
         except Exception as e:
             app.logger.warning(f"dashboard: failed to load profile for {user_id}: {str(e)}")
-            # Return modal content for error case too
-            return render_template("mode_selection_modal.html", user_id=user_id)
+            needs_mode_selection = True
 
         # 2) Count today's emails
         try:
@@ -394,6 +392,10 @@ def dashboard():
         PER_KIT_SAVE_MINUTES = 15
         estimated_saved = kits_generated * PER_KIT_SAVE_MINUTES
 
+    # If HTMX request and needs mode selection, return just the modal
+    if request.headers.get('HX-Request') and needs_mode_selection:
+        return render_template("mode_selection_modal.html", user_id=user_id)
+
     # ── Render dashboard ──
     return render_template(
         "dashboard.html",
@@ -409,7 +411,7 @@ def dashboard():
         revenue=revenue,
         revenue_change=revenue_change,
         email_mode=email_mode,
-        show_mode_modal=True  # Add this flag 
+        needs_mode_selection=needs_mode_selection  # Add this flag
     )
 #--------------------------------------------------------------------------------------------------------------
 @app.route("/dashboard/leads")
