@@ -292,6 +292,28 @@ def home():
 def dashboard():
     user_id = request.args.get("user_id", "").strip()
 
+    # Check if user needs to select email mode
+    needs_mode_selection = False
+    if user_id:
+        try:
+            profile = supabase.table("profiles") \
+                .select("email_mode, full_name") \
+                .eq("id", user_id) \
+                .single() \
+                .execute().data
+            
+            # If email_mode is not set (new user), show mode selection
+            if not profile or profile.get("email_mode") is None:
+                needs_mode_selection = True
+                
+        except Exception as e:
+            app.logger.warning(f"Could not check email mode for user {user_id}: {str(e)}")
+            needs_mode_selection = True
+
+    # If user needs to select mode, show the mode selection page
+    if needs_mode_selection:
+        return render_template("mode_selection.html", user_id=user_id)
+
     # ── GUEST DEFAULTS ──
     name            = "Guest"
     ai_enabled      = False
@@ -2653,7 +2675,50 @@ def generate_manual_followups():
     except Exception as e:
         app.logger.error(f"Error generating manual follow-ups: {str(e)}", exc_info=True)
         return jsonify({"error": f"Failed to generate follow-ups: {str(e)}"}), 500
+
+
+
+
+#-------------------------------------------------------------
+#--------------------manual /auto--------------------------------------
+@app.route("/set_email_mode", methods=["POST"])
+def set_email_mode():
+    """Set user's preferred email mode (auto or manual)"""
+    user_id = _require_user()
+    mode = request.json.get("mode")
+    
+    if mode not in ["auto", "manual"]:
+        return jsonify({"error": "Invalid mode"}), 400
+    
+    try:
+        # Update user's email mode preference
+        supabase.table("profiles").update({
+            "email_mode": mode
+        }).eq("id", user_id).execute()
         
+        return jsonify({"success": True, "mode": mode})
+    except Exception as e:
+        app.logger.error(f"Error setting email mode: {str(e)}")
+        return jsonify({"error": "Failed to set email mode"}), 500
+
+@app.route("/get_email_mode")
+def get_email_mode():
+    """Get user's current email mode"""
+    user_id = _require_user()
+    
+    try:
+        profile = supabase.table("profiles") \
+            .select("email_mode") \
+            .eq("id", user_id) \
+            .single() \
+            .execute().data
+        
+        return jsonify({"mode": profile.get("email_mode", "auto")})
+    except Exception as e:
+        app.logger.error(f"Error getting email mode: {str(e)}")
+        return jsonify({"mode": "auto"})  # Default to auto
+
+
 # ── Final entry point ──
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
