@@ -1276,7 +1276,31 @@
     </div>
 <!-- Mode Selection Modal Container -->
 <div id="mode-modal-container"></div>
-    <script>
+  
+        <script>
+        // Load mode modal if needed
+        document.addEventListener('DOMContentLoaded', function() {
+            const needsModeSelection = {{ needs_mode_selection|tojson }};
+            if (needsModeSelection) {
+                // Load modal via HTMX
+                htmx.ajax('GET', '/dashboard?user_id={{ user_id }}', {
+                    target: '#mode-modal-container',
+                    swap: 'innerHTML'
+                });
+            }
+        });
+
+        // Handle modal display after HTMX loads it
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            if (evt.detail.target.id === 'mode-modal-container') {
+                const modal = document.getElementById('mode-selection-modal');
+                if (modal) {
+                    modal.classList.add('active');
+                }
+            }
+        });
+
+        // Your existing HTMX event handlers
         document.body.addEventListener('htmx:configRequest', function(evt) {
             document.querySelector('.main-content').style.opacity = 0.4;
         });
