@@ -92,7 +92,7 @@
   </div>
 
 
-  
+  {% if email_mode == '' %}
   <!-- Action Section -->
   <div class="action-grid">
     <div class="action-card">
@@ -112,7 +112,7 @@
           </button>   
         </form>
         {% endif %}
-
+{% endif %}
         <a href="upgrade.html" class="btn btn-warning">
           <i class="fas fa-rocket"></i> Upgrade Plan
         </a>
