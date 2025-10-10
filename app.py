@@ -293,15 +293,15 @@ def dashboard():
     user_id = request.args.get("user_id", "").strip()
 
     # ── GUEST DEFAULTS ──
-    name            = "Guest"
-    ai_enabled      = False
+    name = "Guest"
+    ai_enabled = False
     generate_leases = False
-    emails_sent     = 0
-    time_saved      = 0
-    show_reconnect  = False
-    revenue         = 0
-    revenue_change  = 0
-    email_mode      = "auto"  # Default email mode
+    emails_sent = 0
+    time_saved = 0
+    show_reconnect = False
+    revenue = 0
+    revenue_change = 0
+    email_mode = "auto"  # Default email mode
 
     # Ensure these always exist for the template
     kits_generated = 0
@@ -312,17 +312,17 @@ def dashboard():
         try:
             profile_resp = (
                 supabase.table("profiles")
-                         .select("full_name, ai_enabled, generate_leases, email_mode")
-                         .eq("id", user_id)
-                         .single()
-                         .execute()
+                .select("full_name, ai_enabled, generate_leases, email_mode")
+                .eq("id", user_id)
+                .single()
+                .execute()
             )
             if profile_resp.data:
                 profile_data = profile_resp.data
-                name            = profile_data["full_name"]
-                ai_enabled      = profile_data["ai_enabled"]
+                name = profile_data["full_name"]
+                ai_enabled = profile_data["ai_enabled"]
                 generate_leases = profile_data["generate_leases"]
-                email_mode      = profile_data.get("email_mode", "auto")  # Get email_mode or default to "auto"
+                email_mode = profile_data.get("email_mode", "auto")  # Get email_mode or default to "auto"
                 
                 # Check if user needs to select email mode (new user without mode set)
                 if profile_data.get("email_mode") is None:
@@ -336,52 +336,54 @@ def dashboard():
         # 2) Count today's emails
         try:
             today = date.today().isoformat()
-            rows  = (
+            rows = (
                 supabase.table("emails")
-                        .select("sent_at")
-                        .eq("user_id", user_id)
-                        .eq("status", "sent")
-                        .execute()
-                        .data
+                .select("sent_at")
+                .eq("user_id", user_id)
+                .eq("status", "sent")
+                .execute()
+                .data
                 or []
             )
-            emails_sent = sum(1 for e in rows if e.get("sent_at","").startswith(today))
-            time_saved  = emails_sent * 5.5
+            emails_sent = sum(1 for e in rows if e.get("sent_at", "").startswith(today))
+            time_saved = emails_sent * 5.5
         except Exception:
             app.logger.warning(f"dashboard: failed to count emails for {user_id}")
 
-        # 3) Gmail reconnect flag
-        try:
-            toks = (
-                supabase.table("gmail_tokens")
-                         .select("credentials")
-                         .eq("user_id", user_id)
-                         .execute()
-                         .data
-                or []
-            )
-            if toks:
-                cd = toks[0]["credentials"]
-                creds = Credentials(
-                    token=cd["token"],
-                    refresh_token=cd["refresh_token"],
-                    token_uri=cd["token_uri"],
-                    client_id=cd["client_id"],
-                    client_secret=cd["client_secret"],
-                    scopes=cd["scopes"],
+        # 3) Gmail reconnect flag - only show for auto mode
+        show_reconnect = False
+        if email_mode == "auto":
+            try:
+                toks = (
+                    supabase.table("gmail_tokens")
+                    .select("credentials")
+                    .eq("user_id", user_id)
+                    .execute()
+                    .data
+                    or []
                 )
-                show_reconnect = creds.expired
-        except Exception:
-            app.logger.warning(f"dashboard: failed to check Gmail token for {user_id}")
+                if toks:
+                    cd = toks[0]["credentials"]
+                    creds = Credentials(
+                        token=cd["token"],
+                        refresh_token=cd["refresh_token"],
+                        token_uri=cd["token_uri"],
+                        client_id=cd["client_id"],
+                        client_secret=cd["client_secret"],
+                        scopes=cd["scopes"],
+                    )
+                    show_reconnect = creds.expired
+            except Exception:
+                app.logger.warning(f"dashboard: failed to check Gmail token for {user_id}")
 
         # 4) Count "kits generated" for this user
         kit_rows = (
             supabase.table("transactions")
-                     .select("id")
-                     .eq("user_id", user_id)
-                     .eq("kit_generated", True)
-                     .execute()
-                     .data
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("kit_generated", True)
+            .execute()
+            .data
             or []
         )
         kits_generated = len(kit_rows)
@@ -404,7 +406,7 @@ def dashboard():
         show_reconnect=show_reconnect,
         revenue=revenue,
         revenue_change=revenue_change,
-        email_mode=email_mode
+        email_mode=email_mode  # Pass email_mode to template
     )
 #--------------------------------------------------------------------------------------------------------------
 @app.route("/dashboard/leads")
@@ -723,6 +725,7 @@ def dashboard_home():
     full_name       = profile.get("display_name", "")
     ai_enabled      = profile.get("ai_enabled", True)
     generate_leases = profile.get("generate_leases", False)
+    email_mode = profile.get("email_mode", "auto")  # Get email_mode
 
     today     = date.today().isoformat()
     sent_rows = (
@@ -791,6 +794,7 @@ def dashboard_home():
         ai_enabled=ai_enabled,
         show_reconnect=show_reconnect,
         generate_leases=generate_leases,
+        email_mode=email_mode  # Pass email_mode to template
     )
 #----------------------------------------------------------------------
 @app.route("/reconnect_gmail")
