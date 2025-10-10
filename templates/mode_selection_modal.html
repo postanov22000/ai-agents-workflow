@@ -274,13 +274,17 @@ async function continueToDashboard() {
         const result = await response.json();
         
         if (result.success) {
-            // Remove modal and refresh dashboard content
-            const modal = document.getElementById('mode-selection-modal');
-            if (modal) {
-                modal.remove();
+            // Remove the modal container completely
+            const modalContainer = document.getElementById('mode-modal-container');
+            if (modalContainer) {
+                modalContainer.innerHTML = '';
             }
-            // Refresh the main content
-            htmx.ajax('GET', `/dashboard/home?user_id={{ user_id }}`, { target: '.main-content', swap: 'innerHTML' });
+            
+            // Reload the main dashboard content
+            htmx.ajax('GET', `/dashboard/home?user_id={{ user_id }}`, { 
+                target: '.main-content', 
+                swap: 'innerHTML' 
+            });
         } else {
             alert('Error setting mode. Please try again.');
             btn.innerHTML = '<i class="fas fa-arrow-right"></i> Continue to Dashboard';
@@ -297,9 +301,9 @@ async function continueToDashboard() {
 // Close modal with Escape key
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
-        const modal = document.getElementById('mode-selection-modal');
-        if (modal) {
-            modal.remove();
+        const modalContainer = document.getElementById('mode-modal-container');
+        if (modalContainer) {
+            modalContainer.innerHTML = '';
         }
     }
 });
@@ -308,7 +312,18 @@ document.addEventListener('keydown', function(e) {
 document.addEventListener('click', function(e) {
     const modal = document.getElementById('mode-selection-modal');
     if (modal && e.target === modal) {
-        modal.remove();
+        const modalContainer = document.getElementById('mode-modal-container');
+        if (modalContainer) {
+            modalContainer.innerHTML = '';
+        }
+    }
+});
+
+// Prevent modal from closing when clicking inside the modal content
+document.addEventListener('click', function(e) {
+    const modalContent = document.querySelector('.modal-content');
+    if (modalContent && modalContent.contains(e.target)) {
+        e.stopPropagation();
     }
 });
 </script>
