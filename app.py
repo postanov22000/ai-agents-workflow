@@ -718,7 +718,7 @@ def dashboard_home():
     # (Same logic as /dashboard for HTMX partial)
     profile_resp = (
         supabase.table("profiles")
-                .select("display_name, ai_enabled, email, generate_leases")
+                .select("display_name, ai_enabled, email, generate_leases, email_mode")
                 .eq("id", user_id)
                 .single()
                 .execute()
@@ -730,7 +730,7 @@ def dashboard_home():
     full_name       = profile.get("display_name", "")
     ai_enabled      = profile.get("ai_enabled", True)
     generate_leases = profile.get("generate_leases", False)
-    email_mode = profile.get("email_mode", "auto")  # Get email_mode
+    email_mode = profile.get("email_mode")  # Get email_mode
 
     today     = date.today().isoformat()
     sent_rows = (
