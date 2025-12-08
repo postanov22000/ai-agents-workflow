@@ -31,7 +31,7 @@ jobs:
           pip install -r requirements.txt
 
 
-      - name: Run Gmail Poller
+      - name: Run imap
         id: poll-gmail
         env:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
@@ -40,7 +40,7 @@ jobs:
           GOOGLE_CLIENT_SECRET:      ${{ secrets.GOOGLE_CLIENT_SECRET }}
           ENCRYPTION_KEY:            ${{ secrets.ENCRYPTION_KEY }}
         run: |
-          python poll_gmail.py
+          python poll_imap_smtp.py
           echo "status=gmail" >> $GITHUB_OUTPUT
 
       - name: Run Gmail Poller
