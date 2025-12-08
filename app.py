@@ -145,6 +145,32 @@ def send_email_gmail(user_id, to_email, subject, html_content, cc_emails=None, b
         app.logger.error(f"Error sending email via Gmail API: {str(e)}")
         return False, str(e)
 
+
+
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
+
+def send_email_smtp(from_email, from_password, to_email, subject, body, smtp_host, smtp_port):
+    """
+    Sends an email using SMTP (SSL).
+    """
+
+    msg = MIMEMultipart("alternative")
+    msg["From"] = from_email
+    msg["To"] = to_email
+    msg["Subject"] = subject
+
+    msg.attach(MIMEText(body, "html"))
+
+    with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+        server.login(from_email, from_password)
+        server.sendmail(from_email, to_email, msg.as_string())
+
+
+
+
 def create_draft_gmail(user_id, to_email, subject, html_content):
     """Create a draft email using Gmail API"""
     try:
