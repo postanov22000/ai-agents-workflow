@@ -491,6 +491,55 @@ class PlanRateLimiter:
         except Exception as e:
             app.logger.error(f"Error getting trial days: {str(e)}")
             return 0
+
+    def update_user_plan(self, user_id, plan_name, start_trial=False):
+        """Update user's plan in database"""
+        try:
+            if plan_name not in PLANS:
+                return False, "Invalid plan name"
+            
+            plan_config = PLANS[plan_name]
+            now = datetime.now(timezone.utc)
+            
+            update_data = {
+                'plan_name': plan_name,
+                'monthly_leads_limit': plan_config['monthly_leads'],
+                'monthly_emails_limit': plan_config['monthly_emails'],
+                'monthly_cold_emails_limit': plan_config['cold_emails'],
+                'connected_accounts_limit': plan_config['connected_accounts'],
+                'document_generation_enabled': plan_config['document_generation'],
+                'plan_last_updated': now.isoformat()
+            }
+            
+            if start_trial:
+                trial_ends = now + timedelta(days=plan_config['trial_days'])
+                update_data.update({
+                    'trial_started_at': now.isoformat(),
+                    'trial_ends_at': trial_ends.isoformat(),
+                    'subscription_status': 'trial'
+                })
+            else:
+                update_data.update({
+                    'subscription_status': 'active',
+                    'trial_started_at': None,
+                    'trial_ends_at': None
+                })
+            
+            # Update profile
+            self.supabase.table("profiles") \
+                .update(update_data) \
+                .eq("id", user_id) \
+                .execute()
+            
+            # Clear cache
+            if user_id in self.local_cache:
+                self.local_cache.pop(user_id, None)
+            
+            return True, f"Plan updated to {plan_config['name']}"
+            
+        except Exception as e:
+            app.logger.error(f"Error updating user plan: {str(e)}")
+            return False, str(e)
 #----------------------------------------------------------------
     
 @app.route("/signin2")
@@ -593,61 +642,6 @@ def format_date_filter(value):
 
 # Initialize rate limiter
 rate_limiter = PlanRateLimiter(supabase)
-
-
-
-
-
-
-    
-    def update_user_plan(self, user_id, plan_name, start_trial=False):
-        """Update user's plan in database"""
-        try:
-            if plan_name not in PLANS:
-                return False, "Invalid plan name"
-            
-            plan_config = PLANS[plan_name]
-            now = datetime.now(timezone.utc)
-            
-            update_data = {
-                'plan_name': plan_name,
-                'monthly_leads_limit': plan_config['monthly_leads'],
-                'monthly_emails_limit': plan_config['monthly_emails'],
-                'monthly_cold_emails_limit': plan_config['cold_emails'],
-                'connected_accounts_limit': plan_config['connected_accounts'],
-                'document_generation_enabled': plan_config['document_generation'],
-                'plan_last_updated': now.isoformat()
-            }
-            
-            if start_trial:
-                trial_ends = now + timedelta(days=plan_config['trial_days'])
-                update_data.update({
-                    'trial_started_at': now.isoformat(),
-                    'trial_ends_at': trial_ends.isoformat(),
-                    'subscription_status': 'trial'
-                })
-            else:
-                update_data.update({
-                    'subscription_status': 'active',
-                    'trial_started_at': None,
-                    'trial_ends_at': None
-                })
-            
-            # Update profile
-            self.supabase.table("profiles") \
-                .update(update_data) \
-                .eq("id", user_id) \
-                .execute()
-            
-            # Clear cache
-            if user_id in self.local_cache:
-                self.local_cache.pop(user_id, None)
-            
-            return True, f"Plan updated to {plan_config['name']}"
-            
-        except Exception as e:
-            app.logger.error(f"Error updating user plan: {str(e)}")
-            return False, str(e)
 
 
  
