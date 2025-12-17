@@ -56,6 +56,10 @@ from collections import defaultdict
 from functools import wraps
 import json
 
+
+
+# Initialize rate limiter
+rate_limiter = PlanRateLimiter(supabase)
 # --- Subscription Plan Definitions ---
 PLANS = {
     'free_trial': {
