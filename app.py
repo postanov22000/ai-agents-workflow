@@ -197,6 +197,68 @@ FOLLOW_UP_SEQUENCE = [
 
 
 
+# ---------------------------------------------------------------------------
+def call_edge(endpoint_path: str, payload: dict, return_response: bool = False):
+    url = f"{EDGE_BASE_URL}{endpoint_path}"
+    app.logger.info(f"🔗 call_edge → URL: {url}")
+    app.logger.info(f"🔗 call_edge → Payload: {payload}")
+
+    headers = {
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "apikey":        SUPABASE_SERVICE_ROLE_KEY,
+        "Content-Type":  "application/json"
+    }
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=120)
+            app.logger.info(f"↩️  Response [{resp.status_code}]: {resp.text}")
+
+            if resp.status_code == 200:
+                if return_response:
+                    return resp
+                else:
+                    return True
+            elif resp.status_code == 429:
+                wait = RETRY_BACKOFF_BASE ** attempt
+                app.logger.warning(f"[{endpoint_path}] Rate‐limited, retry {attempt+1}/{MAX_RETRIES} after {wait}s")
+                time.sleep(wait)
+                continue
+            else:
+                app.logger.error(f"[{endpoint_path}] Failed ({resp.status_code}): {resp.text}")
+                if return_response:
+                    return resp
+                else:
+                    return False
+        except requests.RequestException as e:
+            wait = RETRY_BACKOFF_BASE ** attempt
+            app.logger.error(f"[{endpoint_path}] Exception: {e}, retrying in {wait}s")
+            time.sleep(wait)
+    app.logger.error(f"[{endpoint_path}] Exceeded max retries.")
+    if return_response:
+        return None
+    else:
+        return False
+
+# ── Routes ──
+#-----------------------------------------------
+
+
+# Add this near the top of your app.py after creating the Flask app
+@app.template_filter('format_date')
+def format_date_filter(value):
+    if not value:
+        return ""
+    try:
+        # Try to parse the date string
+        date_obj = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        return date_obj.strftime("%b %d, %Y %I:%M %p")
+    except:
+        return value
+
+
+#------------------------------------------------------------------
+
 # Initialize rate limiter
 rate_limiter = PlanRateLimiter(supabase)
 
@@ -269,428 +331,7 @@ class PlanRateLimiter:
                     'current_month_cold_emails': 0,
                     'usage_reset_date': now.isoformat()
                 }
-                
-                self.supabase.table("profiles") \
-                    .update(update_data) \
-                    .eq("id", user_profile['id']) \
-                    .execute()
-                
-                # Update local profile
-                user_profile.update(update_data)
-        
-        return user_profile
-    
-    def get_user_plan(self, user_id):
-        """Get user's current plan with trial status"""
-        try:
-            # Check cache first
-            if user_id in self.local_cache and 'plan' in self.local_cache[user_id]:
-                cached = self.local_cache[user_id]['plan']
-                if datetime.now() - cached['fetched_at'] < timedelta(minutes=5):
-                    return cached['data']
-            
-            # Get user's profile with plan info
-            result = self.supabase.table("profiles") \
-                .select("*") \
-                .eq("id", user_id) \
-                .single() \
-                .execute()
-            
-            if result.data:
-                profile = result.data
-                
-                # Reset monthly usage if needed
-                profile = self._reset_monthly_usage_if_needed(profile)
-                
-                plan_name = profile.get('plan_name', 'starter')
-                subscription_status = profile.get('subscription_status', 'active')
-                
-                # Check if user is in trial period
-                trial_ends_at = profile.get('trial_ends_at')
-                trial_active = False
-                
-                if trial_ends_at:
-                    trial_ends = datetime.fromisoformat(trial_ends_at.replace('Z', '+00:00'))
-                    trial_active = datetime.now(timezone.utc) < trial_ends
-                
-                if trial_active:
-                    # User is in trial - give them selected plan features
-                    base_plan = PLANS.get(plan_name, PLANS['professional']).copy()
-                    plan_data = {
-                        'name': base_plan['name'] + ' (Trial)',
-                        'monthly_leads': base_plan['monthly_leads'],
-                        'monthly_emails': base_plan['monthly_emails'],
-                        'connected_accounts': base_plan['connected_accounts'],
-                        'cold_emails': base_plan['cold_emails'],
-                        'document_generation': base_plan['document_generation'],
-                        'is_trial': True,
-                        'trial_days': 14,
-                        'trial_ends_at': trial_ends_at,
-                        'subscription_status': 'trial',
-                        'plan_last_updated': profile.get('plan_last_updated')
-                    }
-                else:
-                    # Regular plan - use values from profile or defaults
-                    plan_data = {
-                        'name': PLANS.get(plan_name, {}).get('name', 'Starter'),
-                        'monthly_leads': profile.get('monthly_leads_limit', 500),
-                        'monthly_emails': profile.get('monthly_emails_limit', 500),
-                        'connected_accounts': profile.get('connected_accounts_limit', 1),
-                        'cold_emails': profile.get('monthly_cold_emails_limit', 200),
-                        'document_generation': profile.get('document_generation_enabled', False),
-                        'is_trial': False,
-                        'trial_days': 0,
-                        'subscription_status': subscription_status,
-                        'plan_last_updated': profile.get('plan_last_updated')
-                    }
-                
-                # Add current usage from profile
-                plan_data.update({
-                    'current_leads': profile.get('current_month_leads', 0),
-                    'current_emails': profile.get('current_month_emails', 0),
-                    'current_cold_emails': profile.get('current_month_cold_emails', 0)
-                })
-                
-                # Cache the result
-                self.local_cache[user_id]['plan'] = {
-                    'data': plan_data,
-                    'fetched_at': datetime.now()
-                }
-                
-                return plan_data
-            
-            # No profile found - default to starter
-            default_plan = PLANS['starter'].copy()
-            default_plan['is_trial'] = False
-            default_plan['current_leads'] = 0
-            default_plan['current_emails'] = 0
-            default_plan['current_cold_emails'] = 0
-            
-            return default_plan
-            
-        except Exception as e:
-            app.logger.error(f"Error getting user plan: {str(e)}")
-            # Fall back to starter plan
-            fallback = PLANS['starter'].copy()
-            fallback.update({
-                'is_trial': False,
-                'current_leads': 0,
-                'current_emails': 0,
-                'current_cold_emails': 0
-            })
-            return fallback
-    
-    def check_rate_limit(self, user_id, resource_type, amount=1):
-        """
-        Check if user has exceeded rate limit for a resource
-        Returns: (allowed, remaining, message)
-        """
-        try:
-            plan = self.get_user_plan(user_id)
-            
-            # Map resource types to plan limits
-            resource_map = {
-                'leads': ('monthly_leads', 'current_leads'),
-                'emails': ('monthly_emails', 'current_emails'),
-                'cold_emails': ('cold_emails', 'current_cold_emails'),
-                'connected_accounts': ('connected_accounts', None)
-            }
-            
-            if resource_type not in resource_map:
-                return False, 0, f"Unknown resource type: {resource_type}"
-            
-            limit_key, current_key = resource_map[resource_type]
-            plan_limit = plan.get(limit_key, 0)
-            current_usage = plan.get(current_key, 0) if current_key else 0
-            
-            # Check if adding amount would exceed limit
-            if current_usage + amount > plan_limit:
-                remaining = max(0, plan_limit - current_usage)
-                message = f"{resource_type.replace('_', ' ').title()} limit exceeded. Plan limit: {plan_limit}, Used: {current_usage}"
-                return False, remaining, message
-            
-            # Update usage in database
-            self._increment_usage(user_id, resource_type, amount)
-            
-            remaining = plan_limit - (current_usage + amount)
-            return True, remaining, f"Limit: {plan_limit}, Remaining: {remaining}"
-            
-        except Exception as e:
-            app.logger.error(f"Error checking rate limit: {str(e)}")
-            return False, 0, f"Error checking limits: {str(e)}"
-    
-    def _increment_usage(self, user_id, resource_type, amount=1):
-        """Increment usage counter in database"""
-        try:
-            # Map resource types to column names
-            column_map = {
-                'leads': 'current_month_leads',
-                'emails': 'current_month_emails',
-                'cold_emails': 'current_month_cold_emails'
-            }
-            
-            if resource_type not in column_map:
-                return
-            
-            column = column_map[resource_type]
-            
-            # Increment the counter
-            self.supabase.rpc('increment_usage', {
-                'user_id': user_id,
-                'column_name': column,
-                'amount': amount
-            }).execute()
-            
-        except Exception as e:
-            # Fallback to update query
-            try:
-                update_query = f"{column} = COALESCE({column}, 0) + {amount}"
-                self.supabase.table("profiles") \
-                    .update({column: self.supabase.raw(update_query)}) \
-                    .eq("id", user_id) \
-                    .execute()
-            except Exception as e2:
-                app.logger.error(f"Error incrementing usage: {str(e2)}")
-    
-    def check_document_generation(self, user_id):
-        """Check if user has document generation feature"""
-        plan = self.get_user_plan(user_id)
-        return plan.get('document_generation', False)
-    
-    def get_plan_info(self, user_id):
-        """Get comprehensive plan information for display"""
-        plan = self.get_user_plan(user_id)
-        
-        # Count connected email accounts
-        connected_accounts = 0
-        try:
-            result = self.supabase.table("profiles") \
-                .select("smtp_enc_password") \
-                .eq("id", user_id) \
-                .single() \
-                .execute()
-            
-            if result.data and result.data.get('smtp_enc_password'):
-                connected_accounts = 1
-        except:
-            pass
-        
-        return {
-            'plan_name': plan['name'],
-            'is_trial': plan.get('is_trial', False),
-            'trial_days_left': self.get_trial_days_left(user_id) if plan.get('is_trial') else 0,
-            'features': {
-                'document_generation': plan.get('document_generation', False),
-                'connected_accounts': {
-                    'used': connected_accounts,
-                    'limit': plan.get('connected_accounts', 1),
-                    'allowed': connected_accounts < plan.get('connected_accounts', 1) or 
-                               plan.get('connected_accounts', 1) >= 100  # Elite plan
-                }
-            },
-            'usage': {
-                'leads': {
-                    'used': plan.get('current_leads', 0),
-                    'limit': plan.get('monthly_leads', 500),
-                    'remaining': max(0, plan.get('monthly_leads', 500) - plan.get('current_leads', 0))
-                },
-                'emails': {
-                    'used': plan.get('current_emails', 0),
-                    'limit': plan.get('monthly_emails', 500),
-                    'remaining': max(0, plan.get('monthly_emails', 500) - plan.get('current_emails', 0))
-                },
-                'cold_emails': {
-                    'used': plan.get('current_cold_emails', 0),
-                    'limit': plan.get('cold_emails', 200),
-                    'remaining': max(0, plan.get('cold_emails', 200) - plan.get('current_cold_emails', 0))
-                }
-            },
-            'limits': {
-                'monthly_leads': plan.get('monthly_leads', 500),
-                'monthly_emails': plan.get('monthly_emails', 500),
-                'cold_emails': plan.get('cold_emails', 200),
-                'connected_accounts': plan.get('connected_accounts', 1)
-            }
-        }
-    
-    def get_trial_days_left(self, user_id):
-        """Get remaining trial days"""
-        try:
-            result = self.supabase.table("profiles") \
-                .select("trial_ends_at") \
-                .eq("id", user_id) \
-                .single() \
-                .execute()
-            
-            if result.data and result.data.get('trial_ends_at'):
-                trial_ends = datetime.fromisoformat(result.data['trial_ends_at'].replace('Z', '+00:00'))
-                days_left = (trial_ends - datetime.now(timezone.utc)).days
-                return max(0, days_left)
-            
-            return 0
-            
-        except Exception as e:
-            app.logger.error(f"Error getting trial days: {str(e)}")
-            return 0
-    
-    def update_user_plan(self, user_id, plan_name, start_trial=False):
-        """Update user's plan in database"""
-        try:
-            if plan_name not in PLANS:
-                return False, "Invalid plan name"
-            
-            plan_config = PLANS[plan_name]
-            now = datetime.now(timezone.utc)
-            
-            update_data = {
-                'plan_name': plan_name,
-                'monthly_leads_limit': plan_config['monthly_leads'],
-                'monthly_emails_limit': plan_config['monthly_emails'],
-                'monthly_cold_emails_limit': plan_config['cold_emails'],
-                'connected_accounts_limit': plan_config['connected_accounts'],
-                'document_generation_enabled': plan_config['document_generation'],
-                'plan_last_updated': now.isoformat()
-            }
-            
-            if start_trial:
-                trial_ends = now + timedelta(days=plan_config['trial_days'])
-                update_data.update({
-                    'trial_started_at': now.isoformat(),
-                    'trial_ends_at': trial_ends.isoformat(),
-                    'subscription_status': 'trial'
-                })
-            else:
-                update_data.update({
-                    'subscription_status': 'active',
-                    'trial_started_at': None,
-                    'trial_ends_at': None
-                })
-            
-            # Update profile
-            self.supabase.table("profiles") \
-                .update(update_data) \
-                .eq("id", user_id) \
-                .execute()
-            
-            # Clear cache
-            if user_id in self.local_cache:
-                self.local_cache.pop(user_id, None)
-            
-            return True, f"Plan updated to {plan_config['name']}"
-            
-        except Exception as e:
-            app.logger.error(f"Error updating user plan: {str(e)}")
-            return False, str(e)
-
-
- 
-# ── Plan-aware Rate Limit Decorators ──
-def check_plan_limit(resource_type, amount=1):
-   # """Decorator to check plan-based rate limits"""
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            user_id = _require_user()
-            
-            allowed, remaining, message = rate_limiter.check_rate_limit(user_id, resource_type, amount)
-            
-            if not allowed:
-                return jsonify({
-                    "error": "Plan limit exceeded",
-                    "message": message,
-                    "remaining": remaining,
-                    "resource": resource_type
-                }), 429
-            
-            # Add rate limit info to response headers
-            response = make_response(f(*args, **kwargs))
-            response.headers['X-RateLimit-Remaining'] = str(remaining)
-            response.headers['X-RateLimit-Resource'] = resource_type
-            
-            return response
-        return decorated_function
     return decorator
-
-
-def require_feature(feature_name):
-   # """Decorator to check if user has specific feature"""
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            user_id = _require_user()
-            
-            if feature_name == 'document_generation':
-                if not rate_limiter.check_document_generation(user_id):
-                    return jsonify({
-                        "error": "Feature not available",
-                        "message": f"{feature_name.replace('_', ' ').title()} is not available in your plan",
-                        "upgrade_required": True
-                    }), 403
-            
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
-# ---------------------------------------------------------------------------
-def call_edge(endpoint_path: str, payload: dict, return_response: bool = False):
-    url = f"{EDGE_BASE_URL}{endpoint_path}"
-    app.logger.info(f"🔗 call_edge → URL: {url}")
-    app.logger.info(f"🔗 call_edge → Payload: {payload}")
-
-    headers = {
-        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-        "apikey":        SUPABASE_SERVICE_ROLE_KEY,
-        "Content-Type":  "application/json"
-    }
-
-    for attempt in range(MAX_RETRIES):
-        try:
-            resp = requests.post(url, json=payload, headers=headers, timeout=120)
-            app.logger.info(f"↩️  Response [{resp.status_code}]: {resp.text}")
-
-            if resp.status_code == 200:
-                if return_response:
-                    return resp
-                else:
-                    return True
-            elif resp.status_code == 429:
-                wait = RETRY_BACKOFF_BASE ** attempt
-                app.logger.warning(f"[{endpoint_path}] Rate‐limited, retry {attempt+1}/{MAX_RETRIES} after {wait}s")
-                time.sleep(wait)
-                continue
-            else:
-                app.logger.error(f"[{endpoint_path}] Failed ({resp.status_code}): {resp.text}")
-                if return_response:
-                    return resp
-                else:
-                    return False
-        except requests.RequestException as e:
-            wait = RETRY_BACKOFF_BASE ** attempt
-            app.logger.error(f"[{endpoint_path}] Exception: {e}, retrying in {wait}s")
-            time.sleep(wait)
-    app.logger.error(f"[{endpoint_path}] Exceeded max retries.")
-    if return_response:
-        return None
-    else:
-        return False
-
-# ── Routes ──
-#-----------------------------------------------
-
-
-# Add this near the top of your app.py after creating the Flask app
-@app.template_filter('format_date')
-def format_date_filter(value):
-    if not value:
-        return ""
-    try:
-        # Try to parse the date string
-        date_obj = datetime.fromisoformat(value.replace('Z', '+00:00'))
-        return date_obj.strftime("%b %d, %Y %I:%M %p")
-    except:
-        return value
-
-
-
 
 
 #-------------------------------------------------
