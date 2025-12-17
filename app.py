@@ -159,111 +159,6 @@ def create_draft_gmail(user_id, to_email, subject, html_content):
         app.logger.error(f"Error creating draft via Gmail API: {str(e)}")
         return False, str(e)
 #--------------------------------------------------------------
-
-    
-@app.route("/signin2")
-def signin():
-    user_id = request.args.get("user_id", "")
-    return render_template("signin2.html", user_id=user_id)
-#--------------------------------------------------------------
-app.register_blueprint(autopilot_bp, url_prefix="/autopilot")
-app.register_blueprint(public_bp)
-
-# --- Supabase setup ---
-SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_ANON_KEY = os.environ["SUPABASE_ANON_KEY"]
-SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-SUPABASE_SERVICE: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-# Edge Function base URL *without* trailing slash or endpoint
-EDGE_BASE_URL = os.environ.get("EDGE_BASE_URL", "").rstrip("/")
-ENCRYPTION_KEY = os.environ["ENCRYPTION_KEY"].encode()  # 32-url-safe-base64 bytes
-fernet = Fernet(ENCRYPTION_KEY)
-# Retry configuration for calling the Edge Function
-MAX_RETRIES = 5
-RETRY_BACKOFF_BASE = 2
-
-# Define follow-up sequence (days after initial contact)
-FOLLOW_UP_SEQUENCE = [
-    {"delay_days": 0, "name": "Immediate Follow-up"},
-    {"delay_days": 1, "name": "Day 1 Follow-up"},
-    {"delay_days": 3, "name": "Day 3 Follow-up"},
-    {"delay_days": 7, "name": "Day 7 Follow-up"},
-    {"delay_days": 14, "name": "Day 14 Follow-up"},
-    {"delay_days": 30, "name": "Day 30 Follow-up"},
-]
-
-#----------------------------------------------------------------------------
-
-
-
-# ---------------------------------------------------------------------------
-def call_edge(endpoint_path: str, payload: dict, return_response: bool = False):
-    url = f"{EDGE_BASE_URL}{endpoint_path}"
-    app.logger.info(f"🔗 call_edge → URL: {url}")
-    app.logger.info(f"🔗 call_edge → Payload: {payload}")
-
-    headers = {
-        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-        "apikey":        SUPABASE_SERVICE_ROLE_KEY,
-        "Content-Type":  "application/json"
-    }
-
-    for attempt in range(MAX_RETRIES):
-        try:
-            resp = requests.post(url, json=payload, headers=headers, timeout=120)
-            app.logger.info(f"↩️  Response [{resp.status_code}]: {resp.text}")
-
-            if resp.status_code == 200:
-                if return_response:
-                    return resp
-                else:
-                    return True
-            elif resp.status_code == 429:
-                wait = RETRY_BACKOFF_BASE ** attempt
-                app.logger.warning(f"[{endpoint_path}] Rate‐limited, retry {attempt+1}/{MAX_RETRIES} after {wait}s")
-                time.sleep(wait)
-                continue
-            else:
-                app.logger.error(f"[{endpoint_path}] Failed ({resp.status_code}): {resp.text}")
-                if return_response:
-                    return resp
-                else:
-                    return False
-        except requests.RequestException as e:
-            wait = RETRY_BACKOFF_BASE ** attempt
-            app.logger.error(f"[{endpoint_path}] Exception: {e}, retrying in {wait}s")
-            time.sleep(wait)
-    app.logger.error(f"[{endpoint_path}] Exceeded max retries.")
-    if return_response:
-        return None
-    else:
-        return False
-
-# ── Routes ──
-#-----------------------------------------------
-
-
-# Add this near the top of your app.py after creating the Flask app
-@app.template_filter('format_date')
-def format_date_filter(value):
-    if not value:
-        return ""
-    try:
-        # Try to parse the date string
-        date_obj = datetime.fromisoformat(value.replace('Z', '+00:00'))
-        return date_obj.strftime("%b %d, %Y %I:%M %p")
-    except:
-        return value
-
-
-#------------------------------------------------------------------
-
-# Initialize rate limiter
-rate_limiter = PlanRateLimiter(supabase)
-
-
-
 # --- Subscription Plan Definitions ---
 PLANS = {
     'free_trial': {
@@ -307,6 +202,8 @@ PLANS = {
         'price': 199
     }
 }
+
+
 
 # --- Plan Rate Limiter Class (Modified for Profiles Table) ---
 class PlanRateLimiter:
@@ -594,6 +491,114 @@ class PlanRateLimiter:
         except Exception as e:
             app.logger.error(f"Error getting trial days: {str(e)}")
             return 0
+#----------------------------------------------------------------
+    
+@app.route("/signin2")
+def signin():
+    user_id = request.args.get("user_id", "")
+    return render_template("signin2.html", user_id=user_id)
+#--------------------------------------------------------------
+app.register_blueprint(autopilot_bp, url_prefix="/autopilot")
+app.register_blueprint(public_bp)
+
+# --- Supabase setup ---
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_ANON_KEY = os.environ["SUPABASE_ANON_KEY"]
+SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+SUPABASE_SERVICE: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+# Edge Function base URL *without* trailing slash or endpoint
+EDGE_BASE_URL = os.environ.get("EDGE_BASE_URL", "").rstrip("/")
+ENCRYPTION_KEY = os.environ["ENCRYPTION_KEY"].encode()  # 32-url-safe-base64 bytes
+fernet = Fernet(ENCRYPTION_KEY)
+# Retry configuration for calling the Edge Function
+MAX_RETRIES = 5
+RETRY_BACKOFF_BASE = 2
+
+# Define follow-up sequence (days after initial contact)
+FOLLOW_UP_SEQUENCE = [
+    {"delay_days": 0, "name": "Immediate Follow-up"},
+    {"delay_days": 1, "name": "Day 1 Follow-up"},
+    {"delay_days": 3, "name": "Day 3 Follow-up"},
+    {"delay_days": 7, "name": "Day 7 Follow-up"},
+    {"delay_days": 14, "name": "Day 14 Follow-up"},
+    {"delay_days": 30, "name": "Day 30 Follow-up"},
+]
+
+#----------------------------------------------------------------------------
+
+
+
+# ---------------------------------------------------------------------------
+def call_edge(endpoint_path: str, payload: dict, return_response: bool = False):
+    url = f"{EDGE_BASE_URL}{endpoint_path}"
+    app.logger.info(f"🔗 call_edge → URL: {url}")
+    app.logger.info(f"🔗 call_edge → Payload: {payload}")
+
+    headers = {
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "apikey":        SUPABASE_SERVICE_ROLE_KEY,
+        "Content-Type":  "application/json"
+    }
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=120)
+            app.logger.info(f"↩️  Response [{resp.status_code}]: {resp.text}")
+
+            if resp.status_code == 200:
+                if return_response:
+                    return resp
+                else:
+                    return True
+            elif resp.status_code == 429:
+                wait = RETRY_BACKOFF_BASE ** attempt
+                app.logger.warning(f"[{endpoint_path}] Rate‐limited, retry {attempt+1}/{MAX_RETRIES} after {wait}s")
+                time.sleep(wait)
+                continue
+            else:
+                app.logger.error(f"[{endpoint_path}] Failed ({resp.status_code}): {resp.text}")
+                if return_response:
+                    return resp
+                else:
+                    return False
+        except requests.RequestException as e:
+            wait = RETRY_BACKOFF_BASE ** attempt
+            app.logger.error(f"[{endpoint_path}] Exception: {e}, retrying in {wait}s")
+            time.sleep(wait)
+    app.logger.error(f"[{endpoint_path}] Exceeded max retries.")
+    if return_response:
+        return None
+    else:
+        return False
+
+# ── Routes ──
+#-----------------------------------------------
+
+
+# Add this near the top of your app.py after creating the Flask app
+@app.template_filter('format_date')
+def format_date_filter(value):
+    if not value:
+        return ""
+    try:
+        # Try to parse the date string
+        date_obj = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        return date_obj.strftime("%b %d, %Y %I:%M %p")
+    except:
+        return value
+
+
+#------------------------------------------------------------------
+
+# Initialize rate limiter
+rate_limiter = PlanRateLimiter(supabase)
+
+
+
+
+
+
     
     def update_user_plan(self, user_id, plan_name, start_trial=False):
         """Update user's plan in database"""
