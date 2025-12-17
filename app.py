@@ -1757,7 +1757,6 @@ def debug_env():
     }
 
 from datetime import datetime
-
 @app.route("/process", methods=["GET"])
 def trigger_process():
     token = request.args.get("token")
@@ -1820,7 +1819,7 @@ def trigger_process():
                 email_ids = [e['id'] for e in user_emails]
                 supabase.table("emails") \
                     .update({"status": "error", "error_message": message}) \
-                    .in_("id", email_ids).execute()
+                    .in_("id", email_ids).Execute()
                 
                 failed.extend(email_ids)
                 continue
@@ -1880,7 +1879,7 @@ def trigger_process():
     for email in ready:
         ready_by_user[email['user_id']].append(email)
 
-    # ── 6) SEND via Gmail API with rate limiting ──
+    # ── 6) SEND via SMTP ──
     for user_id, user_ready_emails in ready_by_user.items():
         # Check if user can send these emails
         allowed, remaining, message = rate_limiter.check_rate_limit(
@@ -1901,10 +1900,18 @@ def trigger_process():
             failed.extend(email_ids)
             continue
 
+        # Get SMTP credentials for this user (you'll need to implement this)
+        smtp_config = get_user_smtp_config(user_id)  # You need to implement this function
+        
+        if not smtp_config:
+            app.logger.error(f"No SMTP configuration found for user {user_id}")
+            continue
+
         # Process each email for this user
         for rec in user_ready_emails:
             em_id = rec["id"]
             sender = rec["sender_email"]
+            recipient = rec.get("recipient_email") or sender  # Fallback to sender if no recipient
             subject = rec.get("subject", "Your Email")
 
             try:
@@ -1928,10 +1935,11 @@ def trigger_process():
                 lease_flag = profile.get("generate_leases", False)
                 final_subject = "Lease Agreement Draft" if lease_flag else f"RE: {subject}"
 
-                # ─── SEND EMAIL via Gmail API ───
-                success, message = send_email_gmail(
-                    user_id=user_id,
-                    to_email=sender,
+                # ─── SEND EMAIL via SMTP ───
+                success, message = send_email_smtp(
+                    smtp_config=smtp_config,
+                    from_email=sender,  # Using sender_email from the email record
+                    to_email=recipient,
                     subject=final_subject,
                     html_content=final_html
                 )
@@ -1953,11 +1961,12 @@ def trigger_process():
                 else:
                     supabase.table("emails").update({
                         "status": "error",
-                        "error_message": f"Gmail API send failed: {message}"
+                        "error_message": f"SMTP send failed: {message}"
                     }).eq("id", em_id).execute()
                     failed.append(em_id)
 
             except Exception as e:
+                app.logger.error(f"Error sending email {em_id}: {str(e)}")
                 supabase.table("emails").update({
                     "status": "error",
                     "error_message": f"Send failed: {str(e)}"
