@@ -58,8 +58,6 @@ import json
 
 
 
-# Initialize rate limiter
-rate_limiter = PlanRateLimiter(supabase)
 # --- Subscription Plan Definitions ---
 PLANS = {
     'free_trial': {
@@ -109,7 +107,14 @@ class PlanRateLimiter:
     def __init__(self, supabase_client):
         self.supabase = supabase_client
         self.local_cache = defaultdict(dict)
-    
+
+
+
+# Initialize rate limiter
+rate_limiter = PlanRateLimiter(supabase)
+
+
+
     def _reset_monthly_usage_if_needed(self, user_profile):
         """Reset monthly usage if it's a new month"""
         now = datetime.now(timezone.utc)
