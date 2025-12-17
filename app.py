@@ -58,6 +58,150 @@ import json
 
 
 
+#----------------------------------------------------------------------------------
+# --- Gmail API Helper Functions ---
+
+def get_gmail_service(user_id):
+    """Get Gmail service for a user"""
+    try:
+        # Get user's Gmail tokens from Supabase
+        tok = supabase.table("gmail_tokens") \
+                     .select("credentials") \
+                     .eq("user_id", user_id) \
+                     .single() \
+                     .execute()
+        
+        if not tok.data:
+            return None
+            
+        cd = tok.data[0]["credentials"]
+        creds = Credentials(
+            token=cd["token"],
+            refresh_token=cd["refresh_token"],
+            token_uri=cd["token_uri"],
+            client_id=cd["client_id"],
+            client_secret=cd["client_secret"],
+            scopes=cd["scopes"],
+        )
+        
+        # Refresh token if expired
+        if creds.expired and creds.refresh_token:
+            creds.refresh(GoogleRequest())
+            
+        # Build Gmail service
+        service = build("gmail", "v1", credentials=creds, cache_discovery=False)
+        return service
+        
+    except Exception as e:
+        app.logger.error(f"Error getting Gmail service for user {user_id}: {str(e)}")
+        return None
+
+def send_email_gmail(user_id, to_email, subject, html_content, cc_emails=None, bcc_emails=None):
+    """Send email using Gmail API"""
+    try:
+        service = get_gmail_service(user_id)
+        if not service:
+            return False, "Gmail service not available"
+
+        # Create message
+        message = MIMEText(html_content, 'html')
+        message['to'] = to_email
+        message['from'] = "me"  # Gmail API uses 'me' for authenticated user
+        message['subject'] = subject
+        
+        if cc_emails:
+            message['cc'] = ', '.join(cc_emails)
+        if bcc_emails:
+            message['bcc'] = ', '.join(bcc_emails)
+
+        # Encode message
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        
+        # Send message
+        sent_message = service.users().messages().send(
+            userId="me", 
+            body={'raw': raw_message}
+        ).execute()
+        
+        app.logger.info(f"Email sent via Gmail API, message ID: {sent_message['id']}")
+        return True, "Email sent successfully"
+        
+    except Exception as e:
+        app.logger.error(f"Error sending email via Gmail API: {str(e)}")
+        return False, str(e)
+
+def create_draft_gmail(user_id, to_email, subject, html_content):
+    """Create a draft email using Gmail API"""
+    try:
+        service = get_gmail_service(user_id)
+        if not service:
+            return False, "Gmail service not available"
+
+        # Create message
+        message = MIMEText(html_content, 'html')
+        message['to'] = to_email
+        message['from'] = "me"
+        message['subject'] = subject
+
+        # Encode message
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        
+        # Create draft
+        draft = service.users().drafts().create(
+            userId="me",
+            body={'message': {'raw': raw_message}}
+        ).execute()
+        
+        app.logger.info(f"Draft created via Gmail API, draft ID: {draft['id']}")
+        return True, "Draft created successfully"
+        
+    except Exception as e:
+        app.logger.error(f"Error creating draft via Gmail API: {str(e)}")
+        return False, str(e)
+#--------------------------------------------------------------
+
+    
+@app.route("/signin2")
+def signin():
+    user_id = request.args.get("user_id", "")
+    return render_template("signin2.html", user_id=user_id)
+#--------------------------------------------------------------
+app.register_blueprint(autopilot_bp, url_prefix="/autopilot")
+app.register_blueprint(public_bp)
+
+# --- Supabase setup ---
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_ANON_KEY = os.environ["SUPABASE_ANON_KEY"]
+SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+SUPABASE_SERVICE: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+# Edge Function base URL *without* trailing slash or endpoint
+EDGE_BASE_URL = os.environ.get("EDGE_BASE_URL", "").rstrip("/")
+ENCRYPTION_KEY = os.environ["ENCRYPTION_KEY"].encode()  # 32-url-safe-base64 bytes
+fernet = Fernet(ENCRYPTION_KEY)
+# Retry configuration for calling the Edge Function
+MAX_RETRIES = 5
+RETRY_BACKOFF_BASE = 2
+
+# Define follow-up sequence (days after initial contact)
+FOLLOW_UP_SEQUENCE = [
+    {"delay_days": 0, "name": "Immediate Follow-up"},
+    {"delay_days": 1, "name": "Day 1 Follow-up"},
+    {"delay_days": 3, "name": "Day 3 Follow-up"},
+    {"delay_days": 7, "name": "Day 7 Follow-up"},
+    {"delay_days": 14, "name": "Day 14 Follow-up"},
+    {"delay_days": 30, "name": "Day 30 Follow-up"},
+]
+
+#----------------------------------------------------------------------------
+
+
+
+# Initialize rate limiter
+rate_limiter = PlanRateLimiter(supabase)
+
+
+
 # --- Subscription Plan Definitions ---
 PLANS = {
     'free_trial': {
@@ -107,13 +251,6 @@ class PlanRateLimiter:
     def __init__(self, supabase_client):
         self.supabase = supabase_client
         self.local_cache = defaultdict(dict)
-
-
-
-# Initialize rate limiter
-rate_limiter = PlanRateLimiter(supabase)
-
-
 
     def _reset_monthly_usage_if_needed(self, user_profile):
         """Reset monthly usage if it's a new month"""
@@ -445,8 +582,7 @@ rate_limiter = PlanRateLimiter(supabase)
             app.logger.error(f"Error updating user plan: {str(e)}")
             return False, str(e)
 
-# Initialize rate limiter
-rate_limiter = PlanRateLimiter(supabase)
+
  
 # ── Plan-aware Rate Limit Decorators ──
 def check_plan_limit(resource_type, amount=1):
@@ -494,144 +630,6 @@ def require_feature(feature_name):
             return f(*args, **kwargs)
         return decorated_function
     return decorator
-#----------------------------------------------------------------------------------
-# --- Gmail API Helper Functions ---
-
-def get_gmail_service(user_id):
-    """Get Gmail service for a user"""
-    try:
-        # Get user's Gmail tokens from Supabase
-        tok = supabase.table("gmail_tokens") \
-                     .select("credentials") \
-                     .eq("user_id", user_id) \
-                     .single() \
-                     .execute()
-        
-        if not tok.data:
-            return None
-            
-        cd = tok.data[0]["credentials"]
-        creds = Credentials(
-            token=cd["token"],
-            refresh_token=cd["refresh_token"],
-            token_uri=cd["token_uri"],
-            client_id=cd["client_id"],
-            client_secret=cd["client_secret"],
-            scopes=cd["scopes"],
-        )
-        
-        # Refresh token if expired
-        if creds.expired and creds.refresh_token:
-            creds.refresh(GoogleRequest())
-            
-        # Build Gmail service
-        service = build("gmail", "v1", credentials=creds, cache_discovery=False)
-        return service
-        
-    except Exception as e:
-        app.logger.error(f"Error getting Gmail service for user {user_id}: {str(e)}")
-        return None
-
-def send_email_gmail(user_id, to_email, subject, html_content, cc_emails=None, bcc_emails=None):
-    """Send email using Gmail API"""
-    try:
-        service = get_gmail_service(user_id)
-        if not service:
-            return False, "Gmail service not available"
-
-        # Create message
-        message = MIMEText(html_content, 'html')
-        message['to'] = to_email
-        message['from'] = "me"  # Gmail API uses 'me' for authenticated user
-        message['subject'] = subject
-        
-        if cc_emails:
-            message['cc'] = ', '.join(cc_emails)
-        if bcc_emails:
-            message['bcc'] = ', '.join(bcc_emails)
-
-        # Encode message
-        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
-        
-        # Send message
-        sent_message = service.users().messages().send(
-            userId="me", 
-            body={'raw': raw_message}
-        ).execute()
-        
-        app.logger.info(f"Email sent via Gmail API, message ID: {sent_message['id']}")
-        return True, "Email sent successfully"
-        
-    except Exception as e:
-        app.logger.error(f"Error sending email via Gmail API: {str(e)}")
-        return False, str(e)
-
-def create_draft_gmail(user_id, to_email, subject, html_content):
-    """Create a draft email using Gmail API"""
-    try:
-        service = get_gmail_service(user_id)
-        if not service:
-            return False, "Gmail service not available"
-
-        # Create message
-        message = MIMEText(html_content, 'html')
-        message['to'] = to_email
-        message['from'] = "me"
-        message['subject'] = subject
-
-        # Encode message
-        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
-        
-        # Create draft
-        draft = service.users().drafts().create(
-            userId="me",
-            body={'message': {'raw': raw_message}}
-        ).execute()
-        
-        app.logger.info(f"Draft created via Gmail API, draft ID: {draft['id']}")
-        return True, "Draft created successfully"
-        
-    except Exception as e:
-        app.logger.error(f"Error creating draft via Gmail API: {str(e)}")
-        return False, str(e)
-#--------------------------------------------------------------
-
-    
-@app.route("/signin2")
-def signin():
-    user_id = request.args.get("user_id", "")
-    return render_template("signin2.html", user_id=user_id)
-#--------------------------------------------------------------
-app.register_blueprint(autopilot_bp, url_prefix="/autopilot")
-app.register_blueprint(public_bp)
-
-# --- Supabase setup ---
-SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_ANON_KEY = os.environ["SUPABASE_ANON_KEY"]
-SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-SUPABASE_SERVICE: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-# Edge Function base URL *without* trailing slash or endpoint
-EDGE_BASE_URL = os.environ.get("EDGE_BASE_URL", "").rstrip("/")
-ENCRYPTION_KEY = os.environ["ENCRYPTION_KEY"].encode()  # 32-url-safe-base64 bytes
-fernet = Fernet(ENCRYPTION_KEY)
-# Retry configuration for calling the Edge Function
-MAX_RETRIES = 5
-RETRY_BACKOFF_BASE = 2
-
-# Define follow-up sequence (days after initial contact)
-FOLLOW_UP_SEQUENCE = [
-    {"delay_days": 0, "name": "Immediate Follow-up"},
-    {"delay_days": 1, "name": "Day 1 Follow-up"},
-    {"delay_days": 3, "name": "Day 3 Follow-up"},
-    {"delay_days": 7, "name": "Day 7 Follow-up"},
-    {"delay_days": 14, "name": "Day 14 Follow-up"},
-    {"delay_days": 30, "name": "Day 30 Follow-up"},
-]
-
-#----------------------------------------------------------------------------
-
-
 # ---------------------------------------------------------------------------
 def call_edge(endpoint_path: str, payload: dict, return_response: bool = False):
     url = f"{EDGE_BASE_URL}{endpoint_path}"
