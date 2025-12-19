@@ -1936,94 +1936,180 @@ def import_leads():
         return jsonify({"error": f"Failed to import leads: {str(e)}"}), 500
 #------------------------------------------------------------------------------------------------------------------
 def generate_follow_up_content(lead_id, sequence_step):
-    """Generate follow-up content using AI with context of previous communications"""
+    """Generate dynamic, context-aware follow-up content using AI"""
     try:
-        app.logger.info(f"Starting follow-up generation for lead {lead_id}, step {sequence_step}")
+        app.logger.info(f"Starting dynamic follow-up generation for lead {lead_id}, step {sequence_step}")
         
-        # Get lead details
+        # Get lead details with more context
         lead_resp = supabase.table("leads").select("*").eq("id", lead_id).single().execute()
         if not lead_resp.data:
             app.logger.error(f"Lead {lead_id} not found")
             return None
             
         lead = lead_resp.data
-        app.logger.info(f"Found lead: {lead['email']}")
+        app.logger.info(f"Processing follow-up for: {lead['first_name']} {lead['last_name']} at {lead['email']}")
         
-        # Get previous emails from emails table
-        previous_emails = supabase.table("emails") \
-            .select("subject, original_content, processed_content, sent_at") \
-            .eq("sender_email", lead["email"]) \
-            .order("sent_at", desc=True) \
-            .limit(5) \
-            .execute().data or []
+        # Get comprehensive communication history
+        # ALTERNATIVE: Get emails where lead is either sender or recipient
+        try:
+            # Try both queries separately and combine results
+            previous_emails_sent = supabase.table("emails") \
+                .select("subject, original_content, processed_content, sent_at, status") \
+                .eq("sender_email", lead["email"]) \
+                .order("sent_at", desc=True) \
+                .limit(10) \
+                .execute().data or []
+            
+            previous_emails_received = supabase.table("emails") \
+                .select("subject, original_content, processed_content, sent_at, status") \
+                .eq("recipient_email", lead["email"]) \
+                .order("sent_at", desc=True) \
+                .limit(10) \
+                .execute().data or []
+            
+            # Combine both lists
+            previous_emails = previous_emails_sent + previous_emails_received
+            # Remove duplicates (by ID) and sort by date
+            seen_ids = set()
+            unique_emails = []
+            for email in previous_emails:
+                email_id = email.get('id')
+                if email_id and email_id not in seen_ids:
+                    seen_ids.add(email_id)
+                    unique_emails.append(email)
+            
+            # Sort by sent_at date, most recent first
+            unique_emails.sort(key=lambda x: x.get('sent_at', ''), reverse=True)
+            previous_emails = unique_emails[:10]  # Keep only top 10 most recent
+            
+        except Exception as e:
+            app.logger.warning(f"Error fetching email history: {str(e)}. Using empty history.")
+            previous_emails = []
         
-        # Get previous follow-ups from lead_follow_ups table
         previous_follow_ups = supabase.table("lead_follow_ups") \
-            .select("generated_content, sent_at, sequence_step") \
+            .select("generated_content, sent_at, sequence_step, status") \
             .eq("lead_id", lead_id) \
-            .eq("status", "sent") \
-            .lt("sequence_step", sequence_step) \
             .order("sent_at", desc=True) \
+            .limit(10) \
             .execute().data or []
         
-        app.logger.info(f"Found {len(previous_emails)} previous emails and {len(previous_follow_ups)} previous follow-ups")
+        app.logger.info(f"Found {len(previous_emails)} emails and {len(previous_follow_ups)} follow-ups")
         
-        # Build context for AI
+        # Build rich context for AI
         context = f"""
-        Lead: {lead['first_name']} {lead['last_name']}
-        Company: {lead['brokerage']}
-        Service: {lead['service']}
-        Location: {lead['city']}
+LEAD PROFILE:
+- Name: {lead['first_name']} {lead['last_name']}
+- Company/Brokerage: {lead.get('brokerage', 'Not specified')}
+- Service Interest: {lead.get('service', 'Not specified')}
+- Location: {lead.get('city', 'Not specified')}
+- Current Status: {lead.get('status', 'new')}
+- Initial Contact: {lead.get('email_sent', 'Not recorded')}
+
+FOLLOW-UP CONTEXT:
+- This is follow-up #{sequence_step + 1} in the sequence
+- Days since initial contact: {FOLLOW_UP_SEQUENCE[sequence_step]['delay_days']}
+- Follow-up type: {FOLLOW_UP_SEQUENCE[sequence_step]['name']}
+
+COMMUNICATION HISTORY:
+"""
+
+        # Add detailed email history
+        if previous_emails:
+            context += "\nEMAIL EXCHANGES:\n"
+            for i, email in enumerate(previous_emails):
+                context += f"\n--- Email {i+1} ({email.get('sent_at', 'Unknown date')}) ---\n"
+                context += f"Subject: {email.get('subject', 'No subject')}\n"
+                context += f"Status: {email.get('status', 'unknown')}\n"
+                
+                # Use original content if available, otherwise processed content
+                content = email.get('original_content') or email.get('processed_content', 'No content')
+                if content and content != 'No content':
+                    # Clean and truncate content for context
+                    clean_content = ' '.join(content.split()[:100])  # First 100 words
+                    context += f"Content: {clean_content}...\n"
+        else:
+            context += "\nNo previous email exchanges found.\n"
+
+        # Add follow-up history
+        if previous_follow_ups:
+            context += "\nPREVIOUS FOLLOW-UPS:\n"
+            for i, follow_up in enumerate(previous_follow_ups):
+                context += f"\n--- Follow-up {i+1} (Step {follow_up['sequence_step']}) ---\n"
+                context += f"Sent: {follow_up.get('sent_at', 'Not sent')}\n"
+                context += f"Status: {follow_up.get('status', 'unknown')}\n"
+                
+                content = follow_up.get('generated_content', '')
+                if content:
+                    clean_content = ' '.join(content.split()[:50])  # First 50 words
+                    context += f"Content: {clean_content}...\n"
+        else:
+            context += "\nNo previous follow-ups sent.\n"
+
+        # Add strategic guidance for the AI
+        context += f"""
+WRITING INSTRUCTIONS:
+- Create a natural, conversational follow-up email
+- Reference specific details from the lead's profile and history when relevant
+- Adapt tone based on sequence step: earlier steps are more introductory, later steps are more persistent
+- Focus on providing value, not just checking in
+- Keep it professional but personable
+- If this is a later follow-up, acknowledge the previous attempts to connect
+- Include a clear call-to-action appropriate for this stage
+- Length: 50-150 words, concise but meaningful
+- Do NOT use generic templates - make it feel personalized and human
+
+SPECIFIC CONTEXT FOR THIS FOLLOW-UP:
+- Sequence position: {sequence_step + 1} of {len(FOLLOW_UP_SEQUENCE)}
+- Days since initial contact: {FOLLOW_UP_SEQUENCE[sequence_step]['delay_days']}
+- Lead's current engagement level: {'High' if previous_emails else 'Low'}
+- Previous interactions: {len(previous_emails)} emails, {len([f for f in previous_follow_ups if f.get('status') == 'sent'])} follow-ups sent
+
+Generate a fresh, non-templated email that builds on this specific context.
+"""
+
+        app.logger.info(f"Built comprehensive context for AI (first 500 chars): {context[:500]}...")
         
-        Previous communications:
-        """
-        
-        # Add emails from emails table
-        for i, email in enumerate(previous_emails):
-            context += f"\nEmail {i+1} ({email.get('sent_at', '')}):\n"
-            context += f"Subject: {email.get('subject', 'No subject')}\n"
-            content = email.get('original_content') or email.get('processed_content', '')
-            context += f"Content: {content[:200]}...\n" if len(content) > 200 else f"Content: {content}\n"
-        
-        # Add follow-ups from lead_follow_ups table
-        for i, follow_up in enumerate(previous_follow_ups, start=len(previous_emails)+1):
-            context += f"\nFollow-up {i} (Day {FOLLOW_UP_SEQUENCE[follow_up['sequence_step']]['delay_days']}, {follow_up.get('sent_at', '')}):\n"
-            content = follow_up.get('generated_content', '')
-            context += f"Content: {content[:200]}...\n" if len(content) > 200 else f"Content: {content}\n"
-        
-        if not previous_emails and not previous_follow_ups:
-            context += "\nNo previous communications found. This is the first contact.\n"
-        
-        context += f"\n\nWrite a friendly, professional follow-up email for day {FOLLOW_UP_SEQUENCE[sequence_step]['delay_days']}."
-        context += " Reference previous communications if relevant. Keep it concise and focused on providing value."
-        
-        app.logger.info(f"Built context for AI: {context[:500]}...")
-        
-        # Call your AI API
+        # Call AI with enhanced payload
         payload = {
             "context": context,
-            "type": "follow_up",
+            "type": "dynamic_follow_up",
             "sequence_step": sequence_step,
-            "lead_id": lead_id
+            "lead_id": lead_id,
+            "lead_name": f"{lead['first_name']} {lead['last_name']}",
+            "company": lead.get('brokerage', ''),
+            "service_interest": lead.get('service', ''),
+            "days_since_contact": FOLLOW_UP_SEQUENCE[sequence_step]['delay_days'],
+            "communication_history_count": len(previous_emails),
+            "previous_follow_up_count": len([f for f in previous_follow_ups if f.get('status') == 'sent'])
         }
         
-        app.logger.info(f"Calling edge function with payload: {payload}")
+        app.logger.info(f"Calling AI with enhanced follow-up payload for step {sequence_step}")
         
         # Use your existing Edge Function call pattern
-        # Modify call_edge to return the response content instead of just success/failure
         response = call_edge("/functions/v1/generate-follow-up", payload, return_response=True)
         
         if response and response.status_code == 200:
-            content = response.json().get("content")
-            app.logger.info(f"Successfully generated follow-up for lead {lead_id}")
-            return content
+            result = response.json()
+            content = result.get("content")
+            
+            if content:
+                app.logger.info(f"Successfully generated dynamic follow-up for lead {lead_id}, step {sequence_step}")
+                app.logger.debug(f"Generated content: {content[:200]}...")
+                return content
+            else:
+                app.logger.error(f"AI returned empty content for lead {lead_id}")
+                return generate_fallback_follow_up(lead, sequence_step)
         else:
-            app.logger.error(f"Failed to generate follow-up content for lead {lead_id}")
-            return None
+            app.logger.error(f"AI call failed for lead {lead_id}: {response.status_code if response else 'No response'}")
+            return generate_fallback_follow_up(lead, sequence_step)
             
     except Exception as e:
-        app.logger.error(f"Error generating follow-up content: {str(e)}", exc_info=True)
-        return None
+        app.logger.error(f"Error generating dynamic follow-up content: {str(e)}", exc_info=True)
+        # Check if lead variable exists before calling fallback
+        if 'lead' in locals():
+            return generate_fallback_follow_up(lead, sequence_step)
+        else:
+            return None
 #-------------------------------------------------------------------------------------------------------------------------------------------------
 
 
