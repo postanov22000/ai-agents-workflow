@@ -35,11 +35,11 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
 
 # Rate limiting storage
 # Rate limiting storage - fix structure and initialization
-demo_rate_limits = defaultdict(lambda: {
-    'emails': {'remaining': 20, 'last_reset': datetime.now()},
-    'kits': {'remaining': 20, 'last_reset': datetime.now()},
-    'leads': {'remaining': 25, 'last_reset': datetime.now()}
-})
+#demo_rate_limits = defaultdict(lambda: {
+#    'emails': {'remaining': 20, 'last_reset': datetime.now()},
+#    'kits': {'remaining': 20, 'last_reset': datetime.now()},
+#    'leads': {'remaining': 25, 'last_reset': datetime.now()}
+#})
 
 # Fixed rate limit decorator
 
