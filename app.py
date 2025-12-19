@@ -211,7 +211,7 @@ PLANS = {
     'starter': {
         'name': 'Starter',
         'monthly_leads': 500,
-        'monthly_emails': 500,
+        'monthly_emails': 5,
         'connected_accounts': 1,
         'cold_emails': 200,
         'document_generation': False,
