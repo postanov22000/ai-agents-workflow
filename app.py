@@ -42,37 +42,7 @@ demo_rate_limits = defaultdict(lambda: {
 })
 
 # Fixed rate limit decorator
-def check_rate_limit(resource):
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            ip = request.remote_addr
-            now = datetime.now()
-            
-            # Reset limits based on their specific time periods
-            if resource == 'emails':
-                # Daily reset for emails
-                if (now - demo_rate_limits[ip][resource]['last_reset']).days >= 1:
-                    demo_rate_limits[ip][resource]['remaining'] = 20
-                    demo_rate_limits[ip][resource]['last_reset'] = now
-            else:
-                # Monthly reset for kits and leads
-                if (now - demo_rate_limits[ip][resource]['last_reset']).days >= 30:
-                    if resource == 'kits':
-                        demo_rate_limits[ip][resource]['remaining'] = 20
-                    else:  # leads
-                        demo_rate_limits[ip][resource]['remaining'] = 25
-                    demo_rate_limits[ip][resource]['last_reset'] = now
-            
-            # Check if limit is exceeded
-            if demo_rate_limits[ip][resource]['remaining'] <= 0:
-                return jsonify({"error": f"{resource.capitalize()} limit exceeded"}), 429
-            
-            # Decrement the counter and proceed
-            demo_rate_limits[ip][resource]['remaining'] -= 1
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
+
 #----------------------------------------------------------------------------------
 # --- Gmail API Helper Functions ---
 
@@ -236,7 +206,148 @@ FOLLOW_UP_SEQUENCE = [
 
 #----------------------------------------------------------------------------
 
+# --- Subscription Plan Definitions ---
+PLANS = {
+    'starter': {
+        'name': 'Starter',
+        'monthly_leads': 500,
+        'monthly_emails': 500,
+        'connected_accounts': 1,
+        'cold_emails': 200,
+        'document_generation': False,
+        'price': 29
+    },
+    'professional': {
+        'name': 'Professional',
+        'monthly_leads': 2000,
+        'monthly_emails': 2000,
+        'connected_accounts': 3,
+        'cold_emails': 1000,
+        'document_generation': True,
+        'price': 79
+    },
+    'elite': {
+        'name': 'Elite',
+        'monthly_leads': 1000000,
+        'monthly_emails': 1000000,
+        'connected_accounts': 100,
+        'cold_emails': 1000000,
+        'document_generation': True,
+        'price': 199
+    }
+}
 
+# Remove the demo_rate_limits and replace with plan-based checking
+def get_user_plan_limits(user_id):
+    """Get user's plan limits from database"""
+    try:
+        profile = supabase.table("profiles") \
+            .select("plan_name, subscription_status, current_month_emails, current_month_leads, " \
+                   "monthly_emails_limit, monthly_leads_limit, usage_reset_date, is_trial") \
+            .eq("id", user_id) \
+            .single() \
+            .execute().data
+        
+        if not profile:
+            return None
+            
+        plan_name = profile.get("plan_name", "starter").lower()
+        plan = PLANS.get(plan_name, PLANS['starter'])
+        
+        # Check if usage reset is needed (new month)
+        now = datetime.now(timezone.utc)
+        reset_date = profile.get("usage_reset_date")
+        if reset_date:
+            reset_date = datetime.fromisoformat(reset_date.replace('Z', '+00:00'))
+            if now.month != reset_date.month or now.year != reset_date.year:
+                # Reset usage counters
+                supabase.table("profiles") \
+                    .update({
+                        "current_month_emails": 0,
+                        "current_month_leads": 0,
+                        "usage_reset_date": now.isoformat()
+                    }) \
+                    .eq("id", user_id) \
+                    .execute()
+                
+                return {
+                    'plan': plan_name,
+                    'emails_used': 0,
+                    'leads_used': 0,
+                    'emails_limit': plan['monthly_emails'],
+                    'leads_limit': plan['monthly_leads'],
+                    'kits_allowed': plan['document_generation'],
+                    'subscription_status': profile.get("subscription_status", "active")
+                }
+        
+        return {
+            'plan': plan_name,
+            'emails_used': profile.get("current_month_emails", 0),
+            'leads_used': profile.get("current_month_leads", 0),
+            'emails_limit': plan['monthly_emails'],
+            'leads_limit': plan['monthly_leads'],
+            'kits_allowed': plan['document_generation'],
+            'subscription_status': profile.get("subscription_status", "active")
+        }
+    except Exception as e:
+        app.logger.error(f"Error getting user plan limits: {str(e)}")
+        return None
+
+def check_plan_limit(resource):
+    """Decorator to check plan-based limits"""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            user_id = request.args.get("user_id") or request.form.get("user_id")
+            if not user_id:
+                abort(401, "Missing user_id")
+            
+            # Get user's plan limits
+            limits = get_user_plan_limits(user_id)
+            if not limits:
+                return jsonify({"error": "Unable to verify subscription"}), 500
+            
+            # Check subscription status
+            if limits['subscription_status'] not in ['trial', 'active']:
+                return jsonify({"error": "Subscription inactive or expired"}), 403
+            
+            # Check resource limits
+            if resource == 'emails':
+                if limits['emails_used'] >= limits['emails_limit']:
+                    return jsonify({"error": "Monthly email limit reached"}), 429
+            elif resource == 'leads':
+                if limits['leads_used'] >= limits['leads_limit']:
+                    return jsonify({"error": "Monthly leads limit reached"}), 429
+            elif resource == 'kits':
+                if not limits['kits_allowed']:
+                    return jsonify({"error": "Document generation not available in your plan"}), 403
+            
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+def increment_usage(user_id, resource, amount=1):
+    """Increment user's monthly usage counter"""
+    try:
+        column = ""
+        if resource == 'emails':
+            column = "current_month_emails"
+        elif resource == 'leads':
+            column = "current_month_leads"
+        else:
+            return False
+        
+        # Increment the counter
+        supabase.table("profiles") \
+            .update({
+                column: supabase.table("profiles").select(column).eq("id", user_id).single().execute().data[0][column] + amount
+            }) \
+            .eq("id", user_id) \
+            .execute()
+        return True
+    except Exception as e:
+        app.logger.error(f"Error incrementing {resource} usage: {str(e)}")
+        return False
 # ---------------------------------------------------------------------------
 def call_edge(endpoint_path: str, payload: dict, return_response: bool = False):
     url = f"{EDGE_BASE_URL}{endpoint_path}"
@@ -1374,7 +1485,7 @@ def debug_env():
 from datetime import datetime
 
 @app.route("/process", methods=["GET"])
-@check_rate_limit('emails')
+@check_plan_limit('emails')
 def trigger_process():
     token = request.args.get("token")
     if token != os.environ.get("PROCESS_SECRET_TOKEN"):
@@ -1575,6 +1686,12 @@ def trigger_process():
             }).eq("id", em_id).execute()
             failed.append(em_id)
 
+
+
+    user_id = "get_user_id_from_email"  # You'll need to get user_id from the email
+    if sent or drafted:
+        increment_usage(user_id, 'emails', len(sent) + len(drafted))
+        
     return jsonify({
         "processed": all_processed,
         "sent": sent,
