@@ -1713,7 +1713,7 @@ def mark_ready(txn_id):
     return "", 204
 
 @app.route("/autopilot/batch", methods=["POST"])
-@check_rate_limit('kits')
+@check_plan_limit('kits')
 def batch_autopilot():
     # Decrement kit count
 #    ip = request.remote_addr
@@ -1847,7 +1847,7 @@ from io import TextIOWrapper
 from openpyxl import load_workbook
 
 @app.route("/import_leads", methods=["GET", "POST"])
-@check_rate_limit('leads')
+@check_plan_limit('leads')
 def import_leads():
     user_id = _require_user()
     
