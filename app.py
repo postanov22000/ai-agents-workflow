@@ -2046,25 +2046,91 @@ def process_follow_ups():
         
         results = {"processed": [], "failed": []}
         
+        # Get today's date for daily limit check
+        today_str = datetime.utcnow().date().isoformat()
+        
         for follow_up in due_follow_ups:
             try:
                 # Generate content using AI
                 content = generate_follow_up_content(follow_up["lead_id"], follow_up["sequence_step"])
                 if content:
-                    # Get user_id from lead
+                    # Get user_id and lead info
                     user_id = follow_up["leads"]["user_id"]
                     lead_email = follow_up["leads"]["email"]
                     
-                    # Send using Gmail API
-                    subject = f"Follow-up: {follow_up['leads'].get('first_name', '')} {follow_up['leads'].get('last_name', '')}"
-                    success, message = send_email_gmail(
-                        user_id,
-                        lead_email,
-                        subject,
-                        content
-                    )
+                    # Get user's SMTP credentials
+                    user_profile = supabase.table("profiles") \
+                        .select("smtp_email, smtp_enc_password, smtp_host, smtp_port, display_name") \
+                        .eq("id", user_id) \
+                        .single().execute().data
                     
-                    if success:
+                    if not user_profile or not user_profile.get("smtp_email"):
+                        supabase.table("lead_follow_ups") \
+                            .update({
+                                "status": "failed", 
+                                "error_message": "No SMTP account configured for user"
+                            }) \
+                            .eq("id", follow_up["id"]) \
+                            .execute()
+                        results["failed"].append(follow_up["id"])
+                        continue
+                    
+                    # Check daily sending limit for this inbox
+                    today_sent = supabase.table("emails") \
+                        .select("id") \
+                        .eq("recipient_email", user_profile["smtp_email"]) \
+                        .eq("status", "sent") \
+                        .like("sent_at", f"{today_str}%") \
+                        .execute().data
+                    
+                    if len(today_sent) >= 20:  # Daily limit per inbox
+                        supabase.table("lead_follow_ups") \
+                            .update({
+                                "status": "failed", 
+                                "error_message": "Daily email limit reached for this inbox"
+                            }) \
+                            .eq("id", follow_up["id"]) \
+                            .execute()
+                        results["failed"].append(follow_up["id"])
+                        continue
+                    
+                    # Decrypt SMTP password
+                    try:
+                        smtp_password = fernet.decrypt(user_profile["smtp_enc_password"].encode()).decode()
+                    except Exception as e:
+                        supabase.table("lead_follow_ups") \
+                            .update({
+                                "status": "failed", 
+                                "error_message": f"SMTP password decryption failed: {str(e)}"
+                            }) \
+                            .eq("id", follow_up["id"]) \
+                            .execute()
+                        results["failed"].append(follow_up["id"])
+                        continue
+                    
+                    # Prepare email content
+                    subject = f"Follow-up: {follow_up['leads'].get('first_name', '')} {follow_up['leads'].get('last_name', '')}"
+                    
+                    # Build HTML body
+                    body_html = content.replace("\n", "<br>")
+                    if user_profile.get("display_name"):
+                        # Replace [Your Name] placeholder if exists
+                        body_html = body_html.replace("[Your Name]", user_profile["display_name"])
+                    
+                    final_html = f"<html><body><p>{body_html}</p></body></html>"
+                    
+                    # Send using SMTP
+                    try:
+                        send_email_smtp(
+                            from_email=user_profile["smtp_email"],
+                            from_password=smtp_password,
+                            to_email=lead_email,
+                            subject=subject,
+                            body=final_html,
+                            smtp_host=user_profile.get("smtp_host", "smtp.gmail.com"),
+                            smtp_port=int(user_profile.get("smtp_port", 465))
+                        )
+                        
                         # Update status
                         supabase.table("lead_follow_ups") \
                             .update({
@@ -2075,15 +2141,28 @@ def process_follow_ups():
                             .eq("id", follow_up["id"]) \
                             .execute()
                         results["processed"].append(follow_up["id"])
-                    else:
+                        
+                        # Also create a record in emails table for tracking
+                        supabase.table("emails").insert({
+                            "sender_email": lead_email,
+                            "recipient_email": user_profile["smtp_email"],
+                            "subject": subject,
+                            "processed_content": content,
+                            "status": "sent",
+                            "sent_at": now,
+                            "user_id": user_id
+                        }).execute()
+                        
+                    except Exception as e:
                         supabase.table("lead_follow_ups") \
                             .update({
                                 "status": "failed", 
-                                "error_message": message
+                                "error_message": f"SMTP send failed: {str(e)}"
                             }) \
                             .eq("id", follow_up["id"]) \
                             .execute()
                         results["failed"].append(follow_up["id"])
+                        
                 else:
                     supabase.table("lead_follow_ups") \
                         .update({"status": "failed", "error_message": "Failed to generate content"}) \
@@ -2093,6 +2172,13 @@ def process_follow_ups():
                     
             except Exception as e:
                 app.logger.error(f"Error processing follow-up {follow_up['id']}: {str(e)}")
+                supabase.table("lead_follow_ups") \
+                    .update({
+                        "status": "failed", 
+                        "error_message": f"Processing error: {str(e)}"
+                    }) \
+                    .eq("id", follow_up["id"]) \
+                    .execute()
                 results["failed"].append(follow_up["id"])
         
         return jsonify(results), 200
@@ -2100,7 +2186,6 @@ def process_follow_ups():
     except Exception as e:
         app.logger.error(f"Error in process_follow_ups: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
 
 #----------------------------------------------------------------------------------------------------------------------------------------
 # Add to app.py
