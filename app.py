@@ -200,8 +200,248 @@ def create_draft_gmail(user_id, to_email, subject, html_content):
         app.logger.error(f"Error creating draft via Gmail API: {str(e)}")
         return False, str(e)
 #--------------------------------------------------------------
+# Add these imports at the top
+import supabase
+from datetime import datetime, timedelta
+from collections import defaultdict
+from functools import wraps
+import json
 
+# Add PlanRateLimiter class definition
+class PlanRateLimiter:
+    def __init__(self, supabase_client):
+        self.supabase = supabase_client
+        self.local_cache = defaultdict(dict)
+
+    def _reset_monthly_usage_if_needed(self, user_profile):
+        """Reset monthly usage if it's a new month"""
+        now = datetime.now(timezone.utc)
+        reset_date = user_profile.get('usage_reset_date')
+        
+        if reset_date:
+            if isinstance(reset_date, str):
+                reset_date = datetime.fromisoformat(reset_date.replace('Z', '+00:00'))
+            
+            # Reset on the 1st of each month
+            if now.month != reset_date.month or now.year != reset_date.year:
+                update_data = {
+                    'current_month_leads': 0,
+                    'current_month_emails': 0,
+                    'current_month_cold_emails': 0,
+                    'usage_reset_date': now.isoformat()
+                }
+                
+                self.supabase.table("profiles") \
+                    .update(update_data) \
+                    .eq("id", user_profile['id']) \
+                    .execute()
+                
+                # Update local profile
+                user_profile.update(update_data)
+        
+        return user_profile
     
+    def get_user_plan(self, user_id):
+        """Get user's current plan with trial status"""
+        try:
+            # Check cache first
+            if user_id in self.local_cache and 'plan' in self.local_cache[user_id]:
+                cached = self.local_cache[user_id]['plan']
+                if datetime.now() - cached['fetched_at'] < timedelta(minutes=5):
+                    return cached['data']
+        
+            app.logger.info(f"Getting plan for user {user_id}")
+            
+            # Get user's profile with plan info
+            result = self.supabase.table("profiles") \
+                .select("*") \
+                .eq("id", user_id) \
+                .single() \
+                .execute()
+            
+            app.logger.info(f"Profile result: {result.data}")
+            
+            if result.data:
+                profile = result.data
+                
+                # Reset monthly usage if needed
+                profile = self._reset_monthly_usage_if_needed(profile)
+                
+                plan_name = profile.get('plan_name', 'starter')
+                subscription_status = profile.get('subscription_status', 'active')
+                
+                # Check if user is in trial period
+                trial_ends_at = profile.get('trial_ends_at')
+                trial_active = False
+                
+                if trial_ends_at:
+                    trial_ends = datetime.fromisoformat(trial_ends_at.replace('Z', '+00:00'))
+                    trial_active = datetime.now(timezone.utc) < trial_ends
+                
+                if trial_active:
+                    # User is in trial
+                    plan_data = {
+                        'name': plan_name + ' (Trial)',
+                        'monthly_leads': profile.get('monthly_leads_limit', 500),
+                        'monthly_emails': profile.get('monthly_emails_limit', 500),
+                        'connected_accounts': profile.get('connected_accounts_limit', 1),
+                        'cold_emails': profile.get('monthly_cold_emails_limit', 200),
+                        'document_generation': profile.get('document_generation_enabled', False),
+                        'is_trial': True,
+                        'trial_days': 14,
+                        'trial_ends_at': trial_ends_at,
+                        'subscription_status': 'trial',
+                        'plan_last_updated': profile.get('plan_last_updated')
+                    }
+                else:
+                    # Regular plan
+                    plan_data = {
+                        'name': plan_name,
+                        'monthly_leads': profile.get('monthly_leads_limit', 500),
+                        'monthly_emails': profile.get('monthly_emails_limit', 500),
+                        'connected_accounts': profile.get('connected_accounts_limit', 1),
+                        'cold_emails': profile.get('monthly_cold_emails_limit', 200),
+                        'document_generation': profile.get('document_generation_enabled', False),
+                        'is_trial': False,
+                        'trial_days': 0,
+                        'subscription_status': subscription_status,
+                        'plan_last_updated': profile.get('plan_last_updated')
+                    }
+                
+                # Add current usage from profile
+                plan_data.update({
+                    'current_leads': profile.get('current_month_leads', 0),
+                    'current_emails': profile.get('current_month_emails', 0),
+                    'current_cold_emails': profile.get('current_month_cold_emails', 0)
+                })
+                
+                # Cache the result
+                self.local_cache[user_id]['plan'] = {
+                    'data': plan_data,
+                    'fetched_at': datetime.now()
+                }
+                
+                return plan_data
+            
+            # No profile found - default
+            default_plan = {
+                'name': 'Starter',
+                'monthly_leads': 500,
+                'monthly_emails': 500,
+                'connected_accounts': 1,
+                'cold_emails': 200,
+                'document_generation': False,
+                'is_trial': False,
+                'trial_days': 0,
+                'subscription_status': 'active',
+                'current_leads': 0,
+                'current_emails': 0,
+                'current_cold_emails': 0
+            }
+            
+            return default_plan
+            
+        except Exception as e:
+            app.logger.error(f"Error getting user plan: {str(e)}")
+            fallback = {
+                'name': 'Starter',
+                'monthly_leads': 500,
+                'monthly_emails': 500,
+                'connected_accounts': 1,
+                'cold_emails': 200,
+                'document_generation': False,
+                'is_trial': False,
+                'trial_days': 0,
+                'subscription_status': 'active',
+                'current_leads': 0,
+                'current_emails': 0,
+                'current_cold_emails': 0
+            }
+            return fallback
+    
+    def check_rate_limit(self, user_id, resource_type, amount=1):
+        """Check if user has exceeded rate limit for a resource"""
+        try:
+            # First, get the latest plan data
+            plan = self.get_user_plan(user_id)
+            
+            # Map resource types to plan limits
+            resource_map = {
+                'leads': ('monthly_leads', 'current_leads'),
+                'emails': ('monthly_emails', 'current_emails'),
+                'cold_emails': ('cold_emails', 'current_cold_emails'),
+                'connected_accounts': ('connected_accounts', None)
+            }
+            
+            if resource_type not in resource_map:
+                return False, 0, f"Unknown resource type: {resource_type}"
+            
+            limit_key, current_key = resource_map[resource_type]
+            plan_limit = plan.get(limit_key, 0)
+            current_usage = plan.get(current_key, 0) if current_key else 0
+            
+            app.logger.info(f"Rate limit check for user {user_id}: {resource_type}")
+            app.logger.info(f"  Plan limit: {plan_limit}, Current usage: {current_usage}, Requested: {amount}")
+            
+            # Check if adding amount would exceed limit
+            if current_usage + amount > plan_limit:
+                remaining = max(0, plan_limit - current_usage)
+                message = f"{resource_type.replace('_', ' ').title()} limit exceeded. Plan limit: {plan_limit}, Used: {current_usage}"
+                app.logger.warning(f"Rate limit exceeded: {message}")
+                return False, remaining, message
+            
+            # If allowed, return success
+            remaining = plan_limit - current_usage
+            return True, remaining, f"Limit: {plan_limit}, Used: {current_usage}, Remaining: {remaining}"
+            
+        except Exception as e:
+            app.logger.error(f"Error checking rate limit: {str(e)}", exc_info=True)
+            return False, 0, f"Error checking limits: {str(e)}"
+    
+    def _increment_usage(self, user_id, resource_type, amount=1):
+        """Increment usage counter in database"""
+        try:
+            # Map resource types to column names
+            column_map = {
+                'leads': 'current_month_leads',
+                'emails': 'current_month_emails',
+                'cold_emails': 'current_month_cold_emails'
+            }
+        
+            if resource_type not in column_map:
+                return
+        
+            column = column_map[resource_type]
+            
+            # Use RPC function to increment or direct update
+            try:
+                self.supabase.rpc('increment_usage', {
+                    'user_id': user_id,
+                    'column_name': column,
+                    'amount': amount
+                }).execute()
+            except Exception as rpc_error:
+                # Fallback to direct update
+                app.logger.warning(f"RPC increment failed, using direct update: {str(rpc_error)}")
+                # Get current value first
+                result = self.supabase.table("profiles") \
+                    .select(column) \
+                    .eq("id", user_id) \
+                    .single() \
+                    .execute()
+                
+                current_value = result.data.get(column, 0) if result.data else 0
+                new_value = current_value + amount
+            
+                # Update the value
+                self.supabase.table("profiles") \
+                    .update({column: new_value}) \
+                    .eq("id", user_id) \
+                    .execute()
+            
+        except Exception as e:
+            app.logger.error(f"Error incrementing usage: {str(e)}")
+#----------------------------------------------------------------    
 @app.route("/signin2")
 def signin():
     user_id = request.args.get("user_id", "")
@@ -225,6 +465,9 @@ MAX_RETRIES = 5
 RETRY_BACKOFF_BASE = 2
 
 # Define follow-up sequence (days after initial contact)
+
+rate_limiter = PlanRateLimiter(supabase)
+
 FOLLOW_UP_SEQUENCE = [
     {"delay_days": 0, "name": "Immediate Follow-up"},
     {"delay_days": 1, "name": "Day 1 Follow-up"},
