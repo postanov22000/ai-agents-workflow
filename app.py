@@ -2080,7 +2080,8 @@ def process_follow_ups():
                         .select("id") \
                         .eq("recipient_email", user_profile["smtp_email"]) \
                         .eq("status", "sent") \
-                        .like("sent_at", f"{today_str}%") \
+                        .gte("sent_at", f"{today_str}T00:00:00Z") \
+                        .lte("sent_at", f"{today_str}T23:59:59Z") \
                         .execute().data
                     
                     if len(today_sent) >= 20:  # Daily limit per inbox
@@ -2141,17 +2142,7 @@ def process_follow_ups():
                             .eq("id", follow_up["id"]) \
                             .execute()
                         results["processed"].append(follow_up["id"])
-                        
-                        # Also create a record in emails table for tracking
-                        supabase.table("emails").insert({
-                            "sender_email": lead_email,
-                            "recipient_email": user_profile["smtp_email"],
-                            "subject": subject,
-                            "processed_content": content,
-                            "status": "sent",
-                            "sent_at": now,
-                            "user_id": user_id
-                        }).execute()
+                
                         
                     except Exception as e:
                         supabase.table("lead_follow_ups") \
