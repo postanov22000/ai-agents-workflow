@@ -1374,7 +1374,7 @@ def debug_env():
 from datetime import datetime
 
 @app.route("/process", methods=["GET"])
-@check_rate_limit('emails')
+@check_plan_limit('emails')
 def trigger_process():
     token = request.args.get("token")
     if token != os.environ.get("PROCESS_SECRET_TOKEN"):
@@ -1402,20 +1402,42 @@ def trigger_process():
             .eq("id", "global") \
             .execute()
 
-    # ── Build per-user daily email count ──
-    today_iso = datetime.utcnow().date().isoformat()
-    sent_rows = (
+
+    user_id = None
+    # First, fetch emails to get user IDs
+    ready = (
         supabase.table("emails")
-            .select("recipient_email, sent_at")
-            .eq("status", "sent")
-            .execute()
-            .data or []
+        .select("id, user_id, sender_email, recipient_email, processed_content, subject")
+        .eq("status", "ready_to_send")
+        .execute()
+        .data or []
     )
-    emails_sent_today = {}
-    for r in sent_rows:
-        if r.get("sent_at", "").startswith(today_iso):
-            inbox = r["recipient_email"]
-            emails_sent_today[inbox] = emails_sent_today.get(inbox, 0) + 1
+    
+    if not ready:
+        return "", 204
+        
+    # Get user_id from first email
+    user_id = ready[0].get("user_id")
+    if not user_id:
+        app.logger.error("No user_id found in ready emails")
+        return jsonify({"error": "No user_id found"}), 400
+    
+    # ── Check rate limit BEFORE processing ──
+    allowed, remaining, message = rate_limiter.check_rate_limit(user_id, 'emails', len(ready))
+    
+    if not allowed:
+        app.logger.warning(f"Rate limit exceeded for user {user_id}: {message}")
+        # Update all emails to rate_limited status
+        email_ids = [rec["id"] for rec in ready]
+        supabase.table("emails").update({
+            "status": "rate_limited",
+            "error_message": f"Plan limit exceeded: {message}"
+        }).in_("id", email_ids).execute()
+        return jsonify({"error": "Rate limit exceeded", "message": message}), 429
+            
+
+
+
 
     # ── 1) Fetch 3 queues ──
     gen = supabase.table("emails").select("id").eq("status", "processing").execute().data or []
@@ -1430,26 +1452,13 @@ def trigger_process():
 
     # ── 2) Run AI Generation ──
     if gen:
-        ip = request.remote_addr
-        now = datetime.now()
-        if (now - demo_rate_limits[ip]['emails']['last_reset']).days >= 1:
-            demo_rate_limits[ip]['emails']['remaining'] = 20
-            demo_rate_limits[ip]['emails']['last_reset'] = now
-
-        if demo_rate_limits[ip]['emails']['remaining'] <= 0:
-            ids = [r["id"] for r in gen]
-            supabase.table("emails") \
-                .update({"status": "error", "error_message": "Rate limit exceeded"}) \
-                .in_("id", ids).execute()
+        ids = [r["id"] for r in gen]
+        if call_edge("/functions/v1/clever-service/generate-response", {"email_ids": ids}):
+            all_processed.extend(ids)
         else:
-            demo_rate_limits[ip]['emails']['remaining'] -= 1
-            ids = [r["id"] for r in gen]
-            if call_edge("/functions/v1/clever-service/generate-response", {"email_ids": ids}):
-                all_processed.extend(ids)
-            else:
-                supabase.table("emails") \
-                    .update({"status": "error", "error_message": "generate-response failed"}) \
-                    .in_("id", ids).execute()
+            supabase.table("emails") \
+                .update({"status": "error", "error_message": "generate-response failed"}) \
+                .in_("id", ids).execute()
 
     # ── 3) Personalize Template ──
     if per:
@@ -1486,23 +1495,26 @@ def trigger_process():
         .data or []
     )
 
-    # ── 6) SEND via SMTP (KEY FIX SECTION) ──
+    # ── 6) SEND via SMTP ──
     for rec in ready:
         em_id = rec["id"]
         sender = rec["sender_email"]
-        inbox = rec["recipient_email"]          # <── THIS is the "from" email account
+        inbox = rec["recipient_email"]
         subject = rec.get("subject", "Your Email")
 
-        # Daily limit applies per inbox
-        if emails_sent_today.get(inbox, 0) >= 20:
-            supabase.table("emails").update({
-                "status": "error",
-                "error_message": "Daily email limit reached"
-            }).eq("id", em_id).execute()
-            failed.append(em_id)
-            continue
+        # Load SMTP credentials for THIS inbox
+        if user_id:
+            allowed, remaining, message = rate_limiter.check_rate_limit(user_id, 'emails', 1)
+            if not allowed:
+                app.logger.warning(f"Rate limit exceeded for user {user_id}: {message}")
+                supabase.table("emails").update({
+                    "status": "rate_limited",
+                    "error_message": f"Plan limit exceeded: {message}"
+                }).eq("id", em_id).execute()
+                failed.append(em_id)
+                continue  # Skip this email, move to next
 
-        # ─── Load SMTP credentials for THIS inbox ───
+        # Load SMTP credentials for THIS inbox
         prof = supabase.table("profiles") \
             .select("smtp_email, smtp_enc_password, smtp_host, smtp_port, display_name, signature, generate_leases") \
             .eq("smtp_email", inbox) \
@@ -1515,7 +1527,6 @@ def trigger_process():
             }).eq("id", em_id).execute()
             failed.append(em_id)
             continue
-
         # Decrypt password
         try:
             smtp_password = fernet.decrypt(prof["smtp_enc_password"].encode()).decode()
@@ -1558,15 +1569,16 @@ def trigger_process():
             supabase.table("emails").update({
                 "status": status_to,
                 "sent_at": datetime.utcnow().isoformat(),
-                "recipient_email": inbox    # Track which inbox sent the reply
+                "recipient_email": inbox,
+                "emails_sent": user_id
             }).eq("id", em_id).execute()
-
+            
+            rate_limiter._increment_usage(user_id, 'emails', 1)
+            
             if status_to == "sent":
                 sent.append(em_id)
             else:
                 drafted.append(em_id)
-
-            emails_sent_today[inbox] = emails_sent_today.get(inbox, 0) + 1
 
         except Exception as e:
             supabase.table("emails").update({
@@ -1581,7 +1593,6 @@ def trigger_process():
         "drafted": drafted,
         "failed": failed
     }), 200
-
 
 
 #---------------------------------------------------------------------------------------------------------------------------
