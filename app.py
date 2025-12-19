@@ -293,11 +293,20 @@ def get_user_plan_limits(user_id):
         app.logger.error(f"Error getting user plan limits: {str(e)}")
         return None
 
-def check_plan_limit(resource):
-    """Decorator to check plan-based limits"""
+def check_plan_limit(resource, allow_cron=False):
+    """Decorator to check plan-based limits with option for cron jobs"""
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
+            # For cron jobs, we need to handle authentication differently
+            if allow_cron:
+                token = request.args.get("token")
+                if token != os.environ.get("PROCESS_SECRET_TOKEN"):
+                    return jsonify({"error": "Unauthorized"}), 401
+                # Cron jobs are allowed to proceed without user_id
+                return f(*args, **kwargs)
+            
+            # Normal user requests
             user_id = request.args.get("user_id") or request.form.get("user_id")
             if not user_id:
                 abort(401, "Missing user_id")
@@ -1591,7 +1600,7 @@ def trigger_process():
     # ── 5) Fetch ready_to_send emails (include recipient_email!) ──
     ready = (
         supabase.table("emails")
-        .select("id, sender_email, recipient_email, processed_content, subject")
+        .select("id, sender_email, recipient_email, processed_content, subject, user_id")
         .eq("status", "ready_to_send")
         .execute()
         .data or []
@@ -1602,7 +1611,46 @@ def trigger_process():
         em_id = rec["id"]
         sender = rec["sender_email"]
         inbox = rec["recipient_email"]          # <── THIS is the "from" email account
+        user_id = rec["user_id"]
         subject = rec.get("subject", "Your Email")
+
+
+                # Get user's plan limits for this specific user
+        limits = get_user_plan_limits(user_id)
+        if not limits or limits['subscription_status'] not in ['trial', 'active']:
+            supabase.table("emails").update({
+                "status": "error",
+                "error_message": "User subscription issue"
+            }).eq("id", em_id).execute()
+            failed.append(em_id)
+            continue
+
+        # Check daily limit per inbox
+        today_str = datetime.utcnow().date().isoformat()
+        today_sent = supabase.table("emails") \
+            .select("id") \
+            .eq("recipient_email", inbox) \
+            .eq("status", "sent") \
+            .gte("sent_at", f"{today_str}T00:00:00Z") \
+            .lte("sent_at", f"{today_str}T23:59:59Z") \
+            .execute().data
+        
+        if len(today_sent) >= 20:  # Daily limit per inbox
+            supabase.table("emails").update({
+                "status": "error",
+                "error_message": "Daily email limit reached for this inbox"
+            }).eq("id", em_id).execute()
+            failed.append(em_id)
+            continue
+
+        # Check monthly email limit for user
+        if limits['emails_used'] >= limits['emails_limit']:
+            supabase.table("emails").update({
+                "status": "error",
+                "error_message": "Monthly email limit reached"
+            }).eq("id", em_id).execute()
+            failed.append(em_id)
+            continue
 
         # Daily limit applies per inbox
         if emails_sent_today.get(inbox, 0) >= 20:
