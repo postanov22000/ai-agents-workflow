@@ -3,7 +3,6 @@ import time
 import base64
 import requests
 import io
-import json
 from flask import abort, Flask, render_template, request, redirect, jsonify, make_response, url_for
 from datetime import date, datetime, timezone, timedelta
 from email.mime.text import MIMEText
@@ -29,445 +28,179 @@ from openpyxl import load_workbook
 from collections import defaultdict
 from functools import wraps
 
-# You need these imports for SMTP
-import smtplib
-import ssl
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-
 # ── single Flask app & blueprint registration ──
 app = Flask(__name__, template_folder="templates")
 CORS(app, resources={r"/connect-smtp": {"origins": "https://replyzeai.vercel.app"}})
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
 
+# Rate limiting storage
+# Rate limiting storage - fix structure and initialization
+demo_rate_limits = defaultdict(lambda: {
+    'emails': {'remaining': 20, 'last_reset': datetime.now()},
+    'kits': {'remaining': 20, 'last_reset': datetime.now()},
+    'leads': {'remaining': 25, 'last_reset': datetime.now()}
+})
 
 # Fixed rate limit decorator
-# Add these imports at the top
-import supabase
-from datetime import datetime, timedelta
-from collections import defaultdict
-from functools import wraps
-import json
-
-# Add to your imports section
-import zipfile
-from docxtpl import DocxTemplate
-from io import BytesIO
-from flask import send_file
-
-#----------------------------------------------------------------------------------
-
-
-#--------------------------------------------------------------
-# --- Subscription Plan Definitions ---
-PLANS = {
-    'free_trial': {
-        'name': 'Free Trial',
-        'monthly_leads': 500,
-        'monthly_emails': 500,
-        'connected_accounts': 1,
-        'cold_emails': 200,
-        'document_generation': False,
-        'trial_days': 14,
-        'price': 0
-    },
-    'starter': {
-        'name': 'Starter',
-        'monthly_leads': 500,
-        'monthly_emails': 500,
-        'connected_accounts': 1,
-        'cold_emails': 200,
-        'document_generation': False,
-        'trial_days': 0,
-        'price': 29
-    },
-    'professional': {
-        'name': 'Professional',
-        'monthly_leads': 2000,
-        'monthly_emails': 2000,
-        'connected_accounts': 3,
-        'cold_emails': 1000,
-        'document_generation': True,
-        'trial_days': 0,
-        'price': 79
-    },
-    'elite': {
-        'name': 'Elite',
-        'monthly_leads': 1000000,  # Very high number instead of infinite
-        'monthly_emails': 1000000,
-        'connected_accounts': 100,  # Very high number instead of infinite
-        'cold_emails': 1000000,
-        'document_generation': True,
-        'trial_days': 0,
-        'price': 199
-    }
-}
-
-
-
-# --- Plan Rate Limiter Class (Modified for Profiles Table) ---
-class PlanRateLimiter:
-    def __init__(self, supabase_client):
-        self.supabase = supabase_client
-        self.local_cache = defaultdict(dict)
-
-    def _reset_monthly_usage_if_needed(self, user_profile):
-        """Reset monthly usage if it's a new month"""
-        now = datetime.now(timezone.utc)
-        reset_date = user_profile.get('usage_reset_date')
-        
-        if reset_date:
-            if isinstance(reset_date, str):
-                reset_date = datetime.fromisoformat(reset_date.replace('Z', '+00:00'))
+def check_rate_limit(resource):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            ip = request.remote_addr
+            now = datetime.now()
             
-            # Reset on the 1st of each month
-            if now.month != reset_date.month or now.year != reset_date.year:
-                update_data = {
-                    'current_month_leads': 0,
-                    'current_month_emails': 0,
-                    'current_month_cold_emails': 0,
-                    'usage_reset_date': now.isoformat()
-                }
-                
-                self.supabase.table("profiles") \
-                    .update(update_data) \
-                    .eq("id", user_profile['id']) \
-                    .execute()
-                
-                # Update local profile
-                user_profile.update(update_data)
-        
-        return user_profile
-    
-    def get_user_plan(self, user_id):
-        """Get user's current plan with trial status"""
-        
-        
-        try:
-            # Check cache first
-            if user_id in self.local_cache and 'plan' in self.local_cache[user_id]:
-                cached = self.local_cache[user_id]['plan']
-                if datetime.now() - cached['fetched_at'] < timedelta(minutes=5):
-                    return cached['data']
-                    
-        
-#        try:
-            app.logger.info(f"Getting plan for user {user_id}")
-            
-            # Get user's profile with plan info
-            result = self.supabase.table("profiles") \
-                .select("*") \
-                .eq("id", user_id) \
-                .single() \
-                .execute()
-            
-            app.logger.info(f"Profile result: {result.data}")
-            
-            if result.data:
-                profile = result.data
-                
-                # Reset monthly usage if needed
-                profile = self._reset_monthly_usage_if_needed(profile)
-                app.logger.info(f"Raw plan_name from DB: {profile.get('plan_name')}")
-                app.logger.info(f"Raw subscription_status from DB: {profile.get('subscription_status')}")
-                
-                plan_name = profile.get('plan_name', 'starter')
-                subscription_status = profile.get('subscription_status', 'active')
-                
-                # Check if user is in trial period
-                trial_ends_at = profile.get('trial_ends_at')
-                trial_active = False
-                
-                if trial_ends_at:
-                    trial_ends = datetime.fromisoformat(trial_ends_at.replace('Z', '+00:00'))
-                    trial_active = datetime.now(timezone.utc) < trial_ends
-                
-                if trial_active:
-                    # User is in trial - give them selected plan features
-                    base_plan = PLANS.get(plan_name, PLANS['professional']).copy()#
-                    plan_data = {
-                        'name': base_plan['name'] + ' (Trial)',
-                        'monthly_leads': base_plan['monthly_leads'],
-                        'monthly_emails': base_plan['monthly_emails'],
-                        'connected_accounts': base_plan['connected_accounts'],
-                        'cold_emails': base_plan['cold_emails'],
-                        'document_generation': base_plan['document_generation'],
-                        'is_trial': True,
-                        'trial_days': 14,
-                        'trial_ends_at': trial_ends_at,
-                        'subscription_status': 'trial',
-                        'plan_last_updated': profile.get('plan_last_updated')
-                    }
-                else:
-                    # Regular plan - use values from profile or defaults
-                    base_plan = PLANS.get(plan_name.lower(), PLANS['starter'])
-                    
-                    plan_data = {
-                        #'name': PLANS.get(plan_name, {}).get('name', 'Starter'),
-                        'name': base_plan.get('name', 'Starter'),
-                        'monthly_leads': profile.get('monthly_leads_limit', 500),
-                        'monthly_emails': profile.get('monthly_emails_limit', 500),
-                        'connected_accounts': profile.get('connected_accounts_limit', 1),
-                        'cold_emails': profile.get('monthly_cold_emails_limit', 200),
-                        'document_generation': profile.get('document_generation_enabled', False),
-                        'is_trial': False,
-                        'trial_days': 0,
-                        'subscription_status': subscription_status,
-                        'plan_last_updated': profile.get('plan_last_updated')
-                    }
-                
-                # Add current usage from profile
-                plan_data.update({
-                    'current_leads': profile.get('current_month_leads', 0),
-                    'current_emails': profile.get('current_month_emails', 0),
-                    'current_cold_emails': profile.get('current_month_cold_emails', 0)
-                })
-                
-                # Cache the result
-                self.local_cache[user_id]['plan'] = {
-                    'data': plan_data,
-                    'fetched_at': datetime.now()
-                }
-                
-                return plan_data
-            
-            # No profile found - default to starter
-            default_plan = PLANS['Starter'].copy()
-            default_plan['is_trial'] = False
-            default_plan['current_leads'] = 0
-            default_plan['current_emails'] = 0
-            default_plan['current_cold_emails'] = 0
-            
-            return default_plan
-            
-        except Exception as e:
-            app.logger.error(f"Error getting user plan: {str(e)}")
-            # Fall back to starter plan
-            fallback = PLANS['starter'].copy()
-            fallback.update({
-                'is_trial': False,
-                'current_leads': 0,
-                'current_emails': 0,
-                'current_cold_emails': 0
-            })
-            return fallback
-    
-    def check_rate_limit(self, user_id, resource_type, amount=1):
-        """
-        Check if user has exceeded rate limit for a resource
-        Returns: (allowed, remaining, message)
-        """
-        try:
-            # First, get the latest plan data (ensures fresh usage counts)
-            plan = self.get_user_plan(user_id)
-            
-            # Map resource types to plan limits
-            resource_map = {
-                'leads': ('monthly_leads', 'current_leads'),
-                'emails': ('monthly_emails', 'current_emails'),
-                'cold_emails': ('cold_emails', 'current_cold_emails'),
-                'connected_accounts': ('connected_accounts', None)
-            }
-            
-            if resource_type not in resource_map:
-                return False, 0, f"Unknown resource type: {resource_type}"
-            
-            limit_key, current_key = resource_map[resource_type]
-            plan_limit = plan.get(limit_key, 0)
-            current_usage = plan.get(current_key, 0) if current_key else 0
-            
-            app.logger.info(f"Rate limit check for user {user_id}: {resource_type}")
-            app.logger.info(f"  Plan limit: {plan_limit}, Current usage: {current_usage}, Requested: {amount}")
-            
-            # Check if adding amount would exceed limit
-            if current_usage + amount > plan_limit:
-                remaining = max(0, plan_limit - current_usage)
-                message = f"{resource_type.replace('_', ' ').title()} limit exceeded. Plan limit: {plan_limit}, Used: {current_usage}"
-                app.logger.warning(f"Rate limit exceeded: {message}")
-                return False, remaining, message
-            
-            # If allowed, return success (actual increment happens elsewhere)
-            remaining = plan_limit - current_usage
-            return True, remaining, f"Limit: {plan_limit}, Used: {current_usage}, Remaining: {remaining}"
-            
-        except Exception as e:
-            app.logger.error(f"Error checking rate limit: {str(e)}", exc_info=True)
-            return False, 0, f"Error checking limits: {str(e)}"
-    
-    def _increment_usage(self, user_id, resource_type, amount=1):
-        """Increment usage counter in database"""
-        try:
-            # Map resource types to column names
-            column_map = {
-                'leads': 'current_month_leads',
-                'emails': 'current_month_emails',
-                'cold_emails': 'current_month_cold_emails'
-            }
-        
-            if resource_type not in column_map:
-                return
-        
-            column = column_map[resource_type]
-            
-        # Use RPC function to increment - this is the most reliable
-            try:
-                self.supabase.rpc('increment_usage', {
-                    'user_id': user_id,
-                    'column_name': column,
-                    'amount': amount
-                }).execute()
-            except Exception as rpc_error:
-                # Fallback to direct update if RPC fails
-                app.logger.warning(f"RPC increment failed, using direct update: {str(rpc_error)}")
-                # Get current value first
-                result = self.supabase.table("profiles") \
-                    .select(column) \
-                    .eq("id", user_id) \
-                    .single() \
-                    .execute()
-                
-                current_value = result.data.get(column, 0) if result.data else 0
-                new_value = current_value + amount
-            
-            # Update the value
-                self.supabase.table("profiles") \
-                    .update({column: new_value}) \
-                    .eq("id", user_id) \
-                    .execute()
-            
-        except Exception as e:
-            app.logger.error(f"Error incrementing usage: {str(e)}")
-    
-    def check_document_generation(self, user_id):
-        """Check if user has document generation feature"""
-        plan = self.get_user_plan(user_id)
-        return plan.get('document_generation', False)
-    
-    def get_plan_info(self, user_id):
-        """Get comprehensive plan information for display"""
-        plan = self.get_user_plan(user_id)
-        
-        # Count connected email accounts
-        connected_accounts = 0
-        try:
-            result = self.supabase.table("profiles") \
-                .select("smtp_enc_password") \
-                .eq("id", user_id) \
-                .single() \
-                .execute()
-            
-            if result.data and result.data.get('smtp_enc_password'):
-                connected_accounts = 1
-        except:
-            pass
-        
-        return {
-            'plan_name': plan['name'],
-            'is_trial': plan.get('is_trial', False),
-            'trial_days_left': self.get_trial_days_left(user_id) if plan.get('is_trial') else 0,
-            'features': {
-                'document_generation': plan.get('document_generation', False),
-                'connected_accounts': {
-                    'used': connected_accounts,
-                    'limit': plan.get('connected_accounts', 1),
-                    'allowed': connected_accounts < plan.get('connected_accounts', 1) or 
-                               plan.get('connected_accounts', 1) >= 100  # Elite plan
-                }
-            },
-            'usage': {
-                'leads': {
-                    'used': plan.get('current_leads', 0),
-                    'limit': plan.get('monthly_leads', 500),
-                    'remaining': max(0, plan.get('monthly_leads', 500) - plan.get('current_leads', 0))
-                },
-                'emails': {
-                    'used': plan.get('current_emails', 0),
-                    'limit': plan.get('monthly_emails', 500),
-                    'remaining': max(0, plan.get('monthly_emails', 500) - plan.get('current_emails', 0))
-                },
-                'cold_emails': {
-                    'used': plan.get('current_cold_emails', 0),
-                    'limit': plan.get('cold_emails', 200),
-                    'remaining': max(0, plan.get('cold_emails', 200) - plan.get('current_cold_emails', 0))
-                }
-            },
-            'limits': {
-                'monthly_leads': plan.get('monthly_leads', 500),
-                'monthly_emails': plan.get('monthly_emails', 500),
-                'cold_emails': plan.get('cold_emails', 200),
-                'connected_accounts': plan.get('connected_accounts', 1)
-            }
-        }
-    
-    def get_trial_days_left(self, user_id):
-        """Get remaining trial days"""
-        try:
-            result = self.supabase.table("profiles") \
-                .select("trial_ends_at") \
-                .eq("id", user_id) \
-                .single() \
-                .execute()
-            
-            if result.data and result.data.get('trial_ends_at'):
-                trial_ends = datetime.fromisoformat(result.data['trial_ends_at'].replace('Z', '+00:00'))
-                days_left = (trial_ends - datetime.now(timezone.utc)).days
-                return max(0, days_left)
-            
-            return 0
-            
-        except Exception as e:
-            app.logger.error(f"Error getting trial days: {str(e)}")
-            return 0
-
-    def update_user_plan(self, user_id, plan_name, start_trial=False):
-        """Update user's plan in database"""
-        try:
-            if plan_name not in PLANS:
-                return False, "Invalid plan name"
-            
-            plan_config = PLANS[plan_name]
-            now = datetime.now(timezone.utc)
-            
-            update_data = {
-                'plan_name': plan_name,
-                'monthly_leads_limit': plan_config['monthly_leads'],
-                'monthly_emails_limit': plan_config['monthly_emails'],
-                'monthly_cold_emails_limit': plan_config['cold_emails'],
-                'connected_accounts_limit': plan_config['connected_accounts'],
-                'document_generation_enabled': plan_config['document_generation'],
-                'plan_last_updated': now.isoformat()
-            }
-            
-            if start_trial:
-                trial_ends = now + timedelta(days=plan_config['trial_days'])
-                update_data.update({
-                    'trial_started_at': now.isoformat(),
-                    'trial_ends_at': trial_ends.isoformat(),
-                    'subscription_status': 'trial'
-                })
+            # Reset limits based on their specific time periods
+            if resource == 'emails':
+                # Daily reset for emails
+                if (now - demo_rate_limits[ip][resource]['last_reset']).days >= 1:
+                    demo_rate_limits[ip][resource]['remaining'] = 20
+                    demo_rate_limits[ip][resource]['last_reset'] = now
             else:
-                update_data.update({
-                    'subscription_status': 'active',
-                    'trial_started_at': None,
-                    'trial_ends_at': None
-                })
+                # Monthly reset for kits and leads
+                if (now - demo_rate_limits[ip][resource]['last_reset']).days >= 30:
+                    if resource == 'kits':
+                        demo_rate_limits[ip][resource]['remaining'] = 20
+                    else:  # leads
+                        demo_rate_limits[ip][resource]['remaining'] = 25
+                    demo_rate_limits[ip][resource]['last_reset'] = now
             
-            # Update profile
-            self.supabase.table("profiles") \
-                .update(update_data) \
-                .eq("id", user_id) \
-                .execute()
+            # Check if limit is exceeded
+            if demo_rate_limits[ip][resource]['remaining'] <= 0:
+                return jsonify({"error": f"{resource.capitalize()} limit exceeded"}), 429
             
-            # Clear cache
-            if user_id in self.local_cache:
-                self.local_cache.pop(user_id, None)
+            # Decrement the counter and proceed
+            demo_rate_limits[ip][resource]['remaining'] -= 1
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+#----------------------------------------------------------------------------------
+# --- Gmail API Helper Functions ---
+
+def get_gmail_service(user_id):
+    """Get Gmail service for a user"""
+    try:
+        # Get user's Gmail tokens from Supabase
+        tok = supabase.table("gmail_tokens") \
+                     .select("credentials") \
+                     .eq("user_id", user_id) \
+                     .single() \
+                     .execute()
+        
+        if not tok.data:
+            return None
             
-            return True, f"Plan updated to {plan_config['name']}"
+        cd = tok.data[0]["credentials"]
+        creds = Credentials(
+            token=cd["token"],
+            refresh_token=cd["refresh_token"],
+            token_uri=cd["token_uri"],
+            client_id=cd["client_id"],
+            client_secret=cd["client_secret"],
+            scopes=cd["scopes"],
+        )
+        
+        # Refresh token if expired
+        if creds.expired and creds.refresh_token:
+            creds.refresh(GoogleRequest())
             
-        except Exception as e:
-            app.logger.error(f"Error updating user plan: {str(e)}")
-            return False, str(e)
-#----------------------------------------------------------------
+        # Build Gmail service
+        service = build("gmail", "v1", credentials=creds, cache_discovery=False)
+        return service
+        
+    except Exception as e:
+        app.logger.error(f"Error getting Gmail service for user {user_id}: {str(e)}")
+        return None
+
+def send_email_gmail(user_id, to_email, subject, html_content, cc_emails=None, bcc_emails=None):
+    """Send email using Gmail API"""
+    try:
+        service = get_gmail_service(user_id)
+        if not service:
+            return False, "Gmail service not available"
+
+        # Create message
+        message = MIMEText(html_content, 'html')
+        message['to'] = to_email
+        message['from'] = "me"  # Gmail API uses 'me' for authenticated user
+        message['subject'] = subject
+        
+        if cc_emails:
+            message['cc'] = ', '.join(cc_emails)
+        if bcc_emails:
+            message['bcc'] = ', '.join(bcc_emails)
+
+        # Encode message
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        
+        # Send message
+        sent_message = service.users().messages().send(
+            userId="me", 
+            body={'raw': raw_message}
+        ).execute()
+        
+        app.logger.info(f"Email sent via Gmail API, message ID: {sent_message['id']}")
+        return True, "Email sent successfully"
+        
+    except Exception as e:
+        app.logger.error(f"Error sending email via Gmail API: {str(e)}")
+        return False, str(e)
+
+
+
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
+
+def send_email_smtp(from_email, from_password, to_email, subject, body, smtp_host, smtp_port):
+    """
+    Sends an email using SMTP (SSL).
+    """
+
+    msg = MIMEMultipart("alternative")
+    msg["From"] = from_email
+    msg["To"] = to_email
+    msg["Subject"] = subject
+
+    msg.attach(MIMEText(body, "html"))
+
+    with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+        server.login(from_email, from_password)
+        server.sendmail(from_email, to_email, msg.as_string())
+
+
+
+
+def create_draft_gmail(user_id, to_email, subject, html_content):
+    """Create a draft email using Gmail API"""
+    try:
+        service = get_gmail_service(user_id)
+        if not service:
+            return False, "Gmail service not available"
+
+        # Create message
+        message = MIMEText(html_content, 'html')
+        message['to'] = to_email
+        message['from'] = "me"
+        message['subject'] = subject
+
+        # Encode message
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        
+        # Create draft
+        draft = service.users().drafts().create(
+            userId="me",
+            body={'message': {'raw': raw_message}}
+        ).execute()
+        
+        app.logger.info(f"Draft created via Gmail API, draft ID: {draft['id']}")
+        return True, "Draft created successfully"
+        
+    except Exception as e:
+        app.logger.error(f"Error creating draft via Gmail API: {str(e)}")
+        return False, str(e)
+#--------------------------------------------------------------
+
     
 @app.route("/signin2")
 def signin():
@@ -502,7 +235,6 @@ FOLLOW_UP_SEQUENCE = [
 ]
 
 #----------------------------------------------------------------------------
-
 
 
 # ---------------------------------------------------------------------------
@@ -565,64 +297,8 @@ def format_date_filter(value):
         return value
 
 
-#------------------------------------------------------------------
-
-# Initialize rate limiter
-rate_limiter = PlanRateLimiter(supabase)
-
-def _require_user():
-    uid = request.args.get("user_id") or request.form.get("user_id") or request.json.get("user_id")
-    if not uid:
-        abort(401, "Missing user_id")
-    return uid
-
- 
-# ── Plan-aware Rate Limit Decorators ──
-def check_plan_limit(resource_type, amount=1):
-   # """Decorator to check plan-based rate limits"""
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            user_id = _require_user()
-            
-            allowed, remaining, message = rate_limiter.check_rate_limit(user_id, resource_type, amount)
-            
-            if not allowed:
-                return jsonify({
-                    "error": "Plan limit exceeded",
-                    "message": message,
-                    "remaining": remaining,
-                    "resource": resource_type
-                }), 429
-            
-            # Add rate limit info to response headers
-            response = make_response(f(*args, **kwargs))
-            response.headers['X-RateLimit-Remaining'] = str(remaining)
-            response.headers['X-RateLimit-Resource'] = resource_type
-            
-            return response
-        return decorated_function
-    return decorator
 
 
-def require_feature(feature_name):
-   # """Decorator to check if user has specific feature"""
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            user_id = _require_user()
-            
-            if feature_name == 'document_generation':
-                if not rate_limiter.check_document_generation(user_id):
-                    return jsonify({
-                        "error": "Feature not available",
-                        "message": f"{feature_name.replace('_', ' ').title()} is not available in your plan",
-                        "upgrade_required": True
-                    }), 403
-            
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
 
 #-------------------------------------------------
 from flask import url_for
@@ -641,155 +317,127 @@ def home():
 @app.route("/dashboard")
 def dashboard():
     user_id = request.args.get("user_id", "").strip()
-    
-    if not user_id:
-        return redirect(f"/app/signin2?redirect=/dashboard")
-    
-    # Default values
+
+    # ── GUEST DEFAULTS ──
     name = "Guest"
     ai_enabled = False
     generate_leases = False
-    show_reconnect = False
-    
-    # Initialize counts
-    replies_sent = 0
-    outreach_emails = 0
-    kits_generated = 0
+    emails_sent = 0
     time_saved = 0
-    
-    # Get plan info with proper structure
-    plan_info = rate_limiter.get_plan_info(user_id)
-    
+    show_reconnect = False
+    revenue = 0
+    revenue_change = 0
+    email_mode = "auto"
+
+    # Ensure these always exist for the template
+    kits_generated = 0
+    estimated_saved = 0
+    needs_mode_selection = False
+
     if user_id:
+        # 1) Load profile and check email mode
         try:
-            # Get profile
-            profile_resp = supabase.table("profiles") \
-                .select("full_name, ai_enabled, generate_leases, plan_name, current_month_emails") \
-                .eq("id", user_id) \
-                .single() \
+            profile_resp = (
+                supabase.table("profiles")
+                .select("full_name, ai_enabled, generate_leases, email_mode")
+                .eq("id", user_id)
+                .single()
                 .execute()
-            
+            )
             if profile_resp.data:
-                profile = profile_resp.data
-                name = profile.get("full_name", "Guest")
-                ai_enabled = profile.get("ai_enabled", False)
-                generate_leases = profile.get("generate_leases", False)
-            
-            # FIXED: Count replies sent - use user_id field
-                replies_result = supabase.table("emails") \
-                    .select("id", count="exact") \
-                    .eq("user_id", user_id) \
-                    .eq("status", "sent") \
-                    .execute()
-                replies_sent = replies_result.count or 0
-    
-    # Increment the monthly emails count if we found sent emails
-                if replies_sent > 0:
-        # Check if we need to increment based on when emails were sent
-        # We should only increment for emails sent in the current month
-        # Let's count emails sent this month
-                    now = datetime.now(timezone.utc)
-                    first_of_month = datetime(now.year, now.month, 1, tzinfo=timezone.utc).isoformat()
-        
-        # Count emails sent this month
-                    current_month_sent_result = supabase.table("emails") \
-                        .select("id", count="exact") \
-                        .eq("user_id", user_id) \
-                        .eq("status", "sent") \
-                        .gte("sent_at", first_of_month) \
-                        .execute()
-        
-                    current_month_sent = current_month_sent_result.count or 0
-        
-        # Get current count from profiles
-                    current_profile = supabase.table("profiles") \
-                        .select("current_month_emails") \
-                        .eq("id", user_id) \
-                        .single() \
-                        .execute()
-        
-                    current_emails_count = current_profile.data.get("current_month_emails", 0) if current_profile.data else 0
-        
-        # Only increment if the current count is less than what we found
-                    if current_month_sent > current_emails_count:
-                        increment_amount = current_month_sent - current_emails_count
-                        if increment_amount > 0:
-                # Use the rate limiter's increment method
-                            rate_limiter._increment_usage(user_id, 'emails', increment_amount)
-            
-            # Count outreach emails from lead_follow_ups
-                        leads_result = supabase.table("leads") \
-                            .select("id") \
-                            .eq("user_id", user_id) \
-                            .execute()
-            
-                        lead_ids = [lead["id"] for lead in (leads_result.data or [])]
-                        if lead_ids:
-                            outreach_result = supabase.table("lead_follow_ups") \
-                                .select("id", count="exact") \
-                                .in_("lead_id", lead_ids) \
-                                .eq("status", "sent") \
-                                .execute()
-                            outreach_emails = outreach_result.count or 0
-            
-            # Count kits generated
-            kits_result = supabase.table("transactions") \
-                .select("id", count="exact") \
-                .eq("user_id", user_id) \
-                .eq("kit_generated", True) \
-                .execute()
-            kits_generated = kits_result.count or 0
-            
-            # Calculate time saved
-            time_saved = replies_sent * 5.5 + kits_generated * 15
-            
+                profile_data = profile_resp.data
+                name = profile_data["full_name"]
+                ai_enabled = profile_data["ai_enabled"]
+                generate_leases = profile_data["generate_leases"]
+                email_mode = profile_data.get("email_mode", "auto")
+                
+                # Check if user needs to select email mode
+                if profile_data.get("email_mode") is None:
+                    needs_mode_selection = True
+                    
         except Exception as e:
-            app.logger.error(f"Error loading dashboard: {str(e)}")
-    
-    # Build plan info for template
-    plan_display_info = {
-        'plan_name': plan_info.get('plan_name', 'Starter'),
-        'is_trial': plan_info.get('is_trial', False),
-        'trial_days_left': rate_limiter.get_trial_days_left(user_id) if plan_info.get('is_trial') else 0,
-        'features': {
-            'document_generation': plan_info.get('document_generation', False),
-            'ai_replies': True,  # Always available
-            'outreach_emails': True,  # Always available
-            'multiple_accounts': plan_info.get('connected_accounts', 1) > 1,
-            'unlimited_kits': plan_info.get('document_generation', False)
-        },
-        'usage': {                   #current_emails
-            'replies': plan_info.get('current_month_emails', 0),
-            'outreach': plan_info.get('current_cold_emails', 0),
-            'kits': 0,  # Will count separately
-            'limits': {
-                'monthly_emails': plan_info.get('monthly_emails', 500),
-                'cold_emails': plan_info.get('cold_emails', 200),
-                'connected_accounts': plan_info.get('connected_accounts', 1)
-            }
-        },
-        'current_counts': {
-            'replies_sent': replies_sent,#current_month_emails
-            'outreach_emails': outreach_emails,
-            'kits_generated': kits_generated
-        }
-    }
-    
+            app.logger.warning(f"dashboard: failed to load profile for {user_id}: {str(e)}")
+            needs_mode_selection = True
+
+        # 2) FIXED: Count emails sent BY this user (using sent_by_account)
+        try:
+            today = date.today().isoformat()
+            rows = (
+                supabase.table("emails")
+                .select("sent_at, sent_by_account, original_user_id")
+                .eq("sent_by_account", user_id)  # Count emails sent BY this user's account
+                .eq("status", "sent")
+                .execute()
+                .data or []
+            )
+            # Count all emails sent by this user's account
+            emails_sent = len(rows)
+            time_saved = emails_sent * 5.5
+        except Exception:
+            app.logger.warning(f"dashboard: failed to count emails for {user_id}")
+            emails_sent = 0
+            time_saved = 0
+
+        # 3) Gmail reconnect flag - only show for auto mode
+        show_reconnect = False
+        if email_mode == "auto":
+            try:
+                toks = (
+                    supabase.table("gmail_tokens")
+                    .select("credentials")
+                    .eq("user_id", user_id)
+                    .execute()
+                    .data or []
+                )
+                if toks:
+                    cd = toks[0]["credentials"]
+                    creds = Credentials(
+                        token=cd["token"],
+                        refresh_token=cd["refresh_token"],
+                        token_uri=cd["token_uri"],
+                        client_id=cd["client_id"],
+                        client_secret=cd["client_secret"],
+                        scopes=cd["scopes"],
+                    )
+                    show_reconnect = creds.expired
+            except Exception:
+                app.logger.warning(f"dashboard: failed to check Gmail token for {user_id}")
+
+        # 4) Count "kits generated" for this user
+        kit_rows = (
+            supabase.table("transactions")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("kit_generated", True)
+            .execute()
+            .data or []
+        )
+        kits_generated = len(kit_rows)
+
+        # 5) Compute extra estimated time saved (e.g. 15 min per kit)
+        PER_KIT_SAVE_MINUTES = 15
+        estimated_saved = kits_generated * PER_KIT_SAVE_MINUTES
+
+    # If HTMX request and needs mode selection, return just the modal
+    if request.headers.get('HX-Request') and needs_mode_selection:
+        return render_template("mode_selection_modal.html", user_id=user_id)
+
+    # ── Render dashboard ──
     return render_template(
         "dashboard.html",
         user_id=user_id,
         name=name,
-        replies_sent=replies_sent,
-        outreach_emails=outreach_emails,
-        kits_generated=kits_generated,
-        time_saved=time_saved,
-        plan_info=plan_display_info,
         ai_enabled=ai_enabled,
         generate_leases=generate_leases,
+        emails_sent=emails_sent,
+        time_saved=time_saved,
+        estimated_saved=estimated_saved,
+        kits_generated=kits_generated,
         show_reconnect=show_reconnect,
-        revenue=0,
-        revenue_change=0,
-        emails_sent=replies_sent  # For backward compatibility
+        revenue=revenue,
+        revenue_change=revenue_change,
+        email_mode=email_mode,
+        needs_mode_selection=needs_mode_selection
     )
 #--------------------------------------------------------------------------------------------------------------
 @app.route("/dashboard/leads")
@@ -1092,100 +740,53 @@ def dashboard_home():
     user_id = request.args.get("user_id")
     if not user_id:
         return "Missing user_id", 401
-    
-    # Get basic profile
-    profile_resp = supabase.table("profiles") \
-        .select("full_name, ai_enabled, email, generate_leases, plan_name, display_name, current_month_emails") \
-        .eq("id", user_id) \
-        .single() \
-        .execute()
-    
-    if not profile_resp.data:
-        return "Profile not found", 404
-    
-    profile = profile_resp.data
-    full_name = profile.get("full_name", "")
-    display_name = profile.get("display_name", "")
-    ai_enabled = profile.get("ai_enabled", True)
+
+    # (Same logic as /dashboard for HTMX partial)
+    profile_resp = (
+        supabase.table("profiles")
+                .select("display_name, ai_enabled, email, generate_leases, email_mode")
+                .eq("id", user_id)
+                .single()
+                .execute()
+    )
+    if profile_resp.data is None:
+        return "Profile query error", 500
+
+    profile         = profile_resp.data
+    full_name       = profile.get("display_name", "")
+    ai_enabled      = profile.get("ai_enabled", True)
     generate_leases = profile.get("generate_leases", False)
+    email_mode = profile.get("email_mode")  # Get email_mode
+
+    # FIXED: Count emails sent BY this user (using sent_by_account)
+    today     = date.today().isoformat()
+    sent_rows = (
+        supabase.table("emails")
+                .select("sent_at, sent_by_account, original_user_id")
+                .eq("sent_by_account", user_id)  # Emails sent BY this user's account
+                .eq("status", "sent")
+                .execute()
+                .data
+        or []
+    )
+    # Count total emails sent by this user's account (all time)
+    emails_sent_total = len(sent_rows)
     
-    # FIXED: Count emails sent - query with user_id field, not original_user_id
-    replies_result = supabase.table("emails") \
-        .select("id", count="exact") \
-        .eq("user_id", user_id) \
-        .eq("status", "sent") \
-        .execute()
-    replies_sent = replies_result.count or 0
+    # Count today's emails specifically
+    emails_sent_today = sum(1 for e in sent_rows if e.get("sent_at", "").startswith(today))
     
-    # FIXED: Also count "drafted" emails as sent (for lease agreements)
-    drafted_result = supabase.table("emails") \
-        .select("id", count="exact") \
-        .eq("user_id", user_id) \
-        .eq("status", "drafted") \
-        .execute()
-    replies_sent += drafted_result.count or 0
-    
-    # Get outreach emails
-    leads_result = supabase.table("leads") \
-        .select("id") \
-        .eq("user_id", user_id) \
-        .execute()
-    
-    lead_ids = [lead["id"] for lead in (leads_result.data or [])]
-    outreach_emails = 0
-    if lead_ids:
-        outreach_result = supabase.table("lead_follow_ups") \
-            .select("id", count="exact") \
-            .in_("lead_id", lead_ids) \
-            .eq("status", "sent") \
-            .execute()
-        outreach_emails = outreach_result.count or 0
-    
-    # Count kits
-    kits_result = supabase.table("transactions") \
-        .select("id", count="exact") \
-        .eq("user_id", user_id) \
-        .eq("kit_generated", True) \
-        .execute()
-    kits_generated = kits_result.count or 0
-    
-    # Calculate time saved
-    time_saved = replies_sent * 5.5 + kits_generated * 15
-    
-    # Get plan info
-    plan_info_data = rate_limiter.get_plan_info(user_id)
-    
-    # Build plan info structure for template
-    plan_info = {
-        'plan_name': plan_info_data.get('plan_name', 'starter'),
-        'is_trial': plan_info_data.get('is_trial', False),
-        'trial_days_left': rate_limiter.get_trial_days_left(user_id),
-        'features': {
-            'document_generation': plan_info_data.get('document_generation', False),
-            'ai_replies': True,
-            'outreach_emails': True,
-            'multiple_accounts': plan_info_data.get('connected_accounts', 1) > 1,
-            'unlimited_kits': plan_info_data.get('document_generation', False)
-        },
-        'usage': {
-            'replies_sent': plan_info_data.get(', current_month_emails', 0),
-            'outreach': plan_info_data.get('current_cold_emails', 0),
-            'kits': 0,  # Separate counter
-            'limits': {
-                'monthly_emails': plan_info_data.get('monthly_emails', 500),
-                'cold_emails': plan_info_data.get('cold_emails', 200),
-                'connected_accounts': plan_info_data.get('connected_accounts', 1)
-            }
-        }
-    }
-    
-    # Check Gmail connection
-    show_reconnect = False
-    token_rows = supabase.table("gmail_tokens") \
-        .select("credentials") \
-        .eq("user_id", user_id) \
-        .execute().data or []
-    
+    # Use total for time saved calculation
+    time_saved = emails_sent_total * 5.5
+
+    token_rows = (
+        supabase.table("gmail_tokens")
+                .select("credentials")
+                .eq("user_id", user_id)
+                .execute()
+                .data
+        or []
+    )
+    show_reconnect = True
     if token_rows:
         creds_data = token_rows[0]["credentials"]
         try:
@@ -1200,24 +801,407 @@ def dashboard_home():
             show_reconnect = creds.expired
         except Exception:
             pass
-    
+            
+    # 4) Count "kits generated" for this user
+    kit_rows = (
+        supabase
+        .table("transactions")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("kit_generated", True)
+        .execute()
+        .data
+        or []
+    )
+    kits_generated = len(kit_rows)
+
+    # 5) Compute extra estimated time saved
+    PER_KIT_SAVE_MINUTES = 15
+    estimated_saved = kits_generated * PER_KIT_SAVE_MINUTES
+
     return render_template(
         "partials/home.html",
-        name=display_name,
+        name=full_name,
         user_id=user_id,
-        replies_sent=replies_sent,
-        outreach_emails=outreach_emails,
-        kits_generated=kits_generated,
+        emails_sent=emails_sent_total,  # Use total count for display
         time_saved=time_saved,
-        plan_info=plan_info,
+        estimated_saved=estimated_saved,
+        kits_generated=kits_generated,
         ai_enabled=ai_enabled,
         show_reconnect=show_reconnect,
-        generate_leases=generate_leases
+        generate_leases=generate_leases,
+        email_mode=email_mode
     )
 #----------------------------------------------------------------------
+@app.route("/reconnect_gmail")
+def reconnect_gmail():
+    """Handles both initial connection and reconnection to Gmail"""
+    user_id = request.args.get("user_id")
+    if not user_id:
+        return "Missing user ID", 400
+
+    # Validate user_id format before proceeding
+    if not is_valid_uuid(user_id):
+        app.logger.warning(f"Invalid user_id format: {user_id}")
+        return "Invalid user ID format", 400
+
+    flow = Flow.from_client_config(
+        {
+            "web": {
+                "client_id": os.environ["GOOGLE_CLIENT_ID"],
+ 
+                "client_secret": os.environ["GOOGLE_CLIENT_SECRET"],
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [os.environ["REDIRECT_URI"]]
+            }
+        },
+        scopes=[
+            "https://www.googleapis.com/auth/gmail.send",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "openid"
+        ]
+    )
+    flow.redirect_uri = os.environ["REDIRECT_URI"]
+    authorization_url, _ = flow.authorization_url(
+        access_type="offline",
+        include_granted_scopes="true",
+        prompt="consent",
+        state=user_id
+    )
+    return redirect(authorization_url)
+  
 
 #------------------------------------------ 
 
+
+#------------------------------------------
+# Update your send_email function to require valid connection
+#@app.route("/send", methods=["POST"])
+#def send_email():
+#    data = request.get_json()
+#    user_id = data["user_id"]
+#    
+#    # Check email connection before proceeding
+#    require_valid_email_connection(user_id)
+#    
+#    # Rest of your send logic...
+#    to = data["to"]
+#    subject = data["subject"]
+#    body = data["body"]
+#
+#    # else: your existing Gmail-API‐based fetch
+#    return fetch_via_gmail_api(user_id)
+
+# Add this route to update the connection status in the database
+#@app.route("/update_connection_status", methods=["POST"])
+#def update_connection_status():
+#    user_id = request.form.get("user_id")
+#    status = request.form.get("status")  # "valid" or "invalid"
+#    
+#    if not user_id or not status:
+#        return jsonify({"status": "error", "message": "Missing parameters"}), 400
+#    
+#    # Update the connection status in the database
+#    supabase.table("profiles").update({
+#        "email_connection_status": status,
+#        "connection_checked_at": datetime.now(timezone.utc).isoformat()
+#    }).eq("id", user_id).execute()
+#    
+#    return jsonify({"status": "success"})
+#-----------------------------------------------------------------------------
+#polling gmail
+@app.route("/connect_gmail2")
+def connect_gmail2():
+    """
+    Initiates Gmail OAuth flow.
+    """
+    user_id = request.args.get("user_id")
+    if not user_id or not is_valid_uuid(user_id):
+        app.logger.error(f"Missing or invalid user_id in connect_gmail: {user_id}")
+        return "Missing or invalid user ID", 400
+
+    flow = Flow.from_client_config(
+        {
+            "web": {
+                "client_id": os.environ["GOOGLE_CLIENT_ID2"],
+                "client_secret": os.environ["GOOGLE_CLIENT_SECRET2"],
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [os.environ["REDIRECT_URI2"]]
+            }
+        },
+        scopes=[
+            "https://www.googleapis.com/auth/gmail.readonly",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "openid"
+        ]
+    )
+    flow.redirect_uri = os.environ["REDIRECT_URI2"]
+
+    # ✅ now user_id is safely defined
+    authorization_url, _ = flow.authorization_url(
+        access_type="offline",
+        include_granted_scopes="true",
+        prompt="consent",
+        state=user_id
+    )
+
+    return redirect(authorization_url)
+
+
+
+import uuid
+
+def is_valid_uuid(val: str) -> bool:
+    try:
+        uuid.UUID(str(val))
+        return True
+    except ValueError:
+        return False
+
+
+@app.route("/oauth2callback2")
+def oauth2callback2():
+    """Handles OAuth2 callback from Google"""
+    try:
+        # Extract state parameter containing user_id
+        user_id = request.args.get("state")
+        if not user_id:
+            app.logger.error("OAuth2 callback missing state parameter")
+            return "<h1>Authentication Failed</h1><p>Missing state parameter</p>", 400
+
+        # ✅ Validate UUID format before querying Supabase
+        if not is_valid_uuid(user_id):
+            app.logger.error(f"Invalid user_id format in state: {user_id}")
+            return "<h1>Authentication Failed</h1><p>Invalid user ID format</p>", 400
+
+        # Check if user exists in Supabase
+        try:
+            user_check = supabase.table("profiles").select("id").eq("id", user_id).execute()
+            if not user_check.data:
+                app.logger.error(f"User not found: {user_id}")
+                return "<h1>Authentication Failed</h1><p>User not found</p>", 400
+        except Exception as e:
+            app.logger.error(f"Error checking user: {str(e)}")
+            return "<h1>Authentication Failed</h1><p>Error validating user</p>", 500
+
+        # Continue OAuth flow
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": os.environ["GOOGLE_CLIENT_ID2"],
+                    "client_secret": os.environ["GOOGLE_CLIENT_SECRET2"],
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [os.environ["REDIRECT_URI2"]]
+                }
+            },
+            scopes=[
+                "https://www.googleapis.com/auth/gmail.readonly",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "openid"
+            ],
+            state=user_id
+        )
+        flow.redirect_uri = os.environ["REDIRECT_URI2"]
+        flow.fetch_token(authorization_response=request.url)
+        credentials = flow.credentials
+
+        # Verify ID token
+        id_info = id_token.verify_oauth2_token(
+            credentials.id_token,
+            grequests.Request(),
+            os.environ["GOOGLE_CLIENT_ID2"]
+        )
+        email = id_info.get("email")
+        if not email:
+            raise ValueError("No email found in Google ID token")
+
+        # Upsert Gmail tokens
+        creds_payload = {
+            "user_id": user_id,
+            "user_email": email,
+            "credentials": {
+                "token": credentials.token,
+                "refresh_token": credentials.refresh_token,
+                "token_uri": credentials.token_uri,
+                "client_id": credentials.client_id,
+                "client_secret": credentials.client_secret,
+                "scopes": credentials.scopes
+            }
+        }
+
+        try:
+            supabase.table("gmail_tokens2").upsert(creds_payload).execute()
+        except Exception as db_error:
+            app.logger.error(f"Database error during token upsert: {str(db_error)}")
+            if "uuid" in str(db_error).lower() and "format" in str(db_error).lower():
+                app.logger.warning(f"Non-UUID user_id detected: {user_id}")
+                return "<h1>Authentication Failed</h1><p>User ID format issue. Please contact support.</p>", 400
+            else:
+                raise db_error
+
+        # Update user profile
+        full_name = id_info.get("name") or email.split("@")[0]
+        supabase.table("profiles").update({
+            "email": email,
+            "full_name": full_name,
+            "ai_enabled": True
+        }).eq("id", user_id).execute()
+
+        return redirect(f"/dashboard?user_id={user_id}")
+
+    except Exception as e:
+        app.logger.error(f"OAuth2 Callback Error: {str(e)}", exc_info=True)
+        return f"<h1>Authentication Failed</h1><p>{str(e)}</p>", 500
+#-----------------------------------------------------------------------
+@app.route("/connect_gmail")
+def connect_gmail():
+    """
+    Initiates Gmail OAuth flow.
+    """
+    user_id = request.args.get("user_id")
+    if not user_id or not is_valid_uuid(user_id):
+        app.logger.error(f"Missing or invalid user_id in connect_gmail: {user_id}")
+        return "Missing or invalid user ID", 400
+
+    flow = Flow.from_client_config(
+        {
+            "web": {
+                "client_id": os.environ["GOOGLE_CLIENT_ID"],
+                "client_secret": os.environ["GOOGLE_CLIENT_SECRET"],
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [os.environ["REDIRECT_URI"]]
+            }
+        },
+        scopes=[
+            "https://www.googleapis.com/auth/gmail.send",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "openid"
+        ]
+    )
+    flow.redirect_uri = os.environ["REDIRECT_URI"]
+
+    # ✅ now user_id is safely defined
+    authorization_url, _ = flow.authorization_url(
+        access_type="offline",
+        include_granted_scopes="true",
+        prompt="consent",
+        state=user_id
+    )
+
+    return redirect(authorization_url)
+
+
+
+import uuid
+
+def is_valid_uuid(val: str) -> bool:
+    try:
+        uuid.UUID(str(val))
+        return True
+    except ValueError:
+        return False
+
+
+@app.route("/oauth2callback")
+def oauth2callback():
+    """Handles OAuth2 callback from Google"""
+    try:
+        # Extract state parameter containing user_id
+        user_id = request.args.get("state")
+        if not user_id:
+            app.logger.error("OAuth2 callback missing state parameter")
+            return "<h1>Authentication Failed</h1><p>Missing state parameter</p>", 400
+
+        # ✅ Validate UUID format before querying Supabase
+        if not is_valid_uuid(user_id):
+            app.logger.error(f"Invalid user_id format in state: {user_id}")
+            return "<h1>Authentication Failed</h1><p>Invalid user ID format</p>", 400
+
+        # Check if user exists in Supabase
+        try:
+            user_check = supabase.table("profiles").select("id").eq("id", user_id).execute()
+            if not user_check.data:
+                app.logger.error(f"User not found: {user_id}")
+                return "<h1>Authentication Failed</h1><p>User not found</p>", 400
+        except Exception as e:
+            app.logger.error(f"Error checking user: {str(e)}")
+            return "<h1>Authentication Failed</h1><p>Error validating user</p>", 500
+
+        # Continue OAuth flow
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": os.environ["GOOGLE_CLIENT_ID"],
+                    "client_secret": os.environ["GOOGLE_CLIENT_SECRET"],
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [os.environ["REDIRECT_URI"]]
+                }
+            },
+            scopes=[
+                "https://www.googleapis.com/auth/gmail.send",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "openid"
+            ],
+            state=user_id
+        )
+        flow.redirect_uri = os.environ["REDIRECT_URI"]
+        flow.fetch_token(authorization_response=request.url)
+        credentials = flow.credentials
+
+        # Verify ID token
+        id_info = id_token.verify_oauth2_token(
+            credentials.id_token,
+            grequests.Request(),
+            os.environ["GOOGLE_CLIENT_ID"]
+        )
+        email = id_info.get("email")
+        if not email:
+            raise ValueError("No email found in Google ID token")
+
+        # Upsert Gmail tokens
+        creds_payload = {
+            "user_id": user_id,
+            "user_email": email,
+            "credentials": {
+                "token": credentials.token,
+                "refresh_token": credentials.refresh_token,
+                "token_uri": credentials.token_uri,
+                "client_id": credentials.client_id,
+                "client_secret": credentials.client_secret,
+                "scopes": credentials.scopes
+            }
+        }
+
+        try:
+            supabase.table("gmail_tokens").upsert(creds_payload).execute()
+        except Exception as db_error:
+            app.logger.error(f"Database error during token upsert: {str(db_error)}")
+            if "uuid" in str(db_error).lower() and "format" in str(db_error).lower():
+                app.logger.warning(f"Non-UUID user_id detected: {user_id}")
+                return "<h1>Authentication Failed</h1><p>User ID format issue. Please contact support.</p>", 400
+            else:
+                raise db_error
+
+        # Update user profile
+        full_name = id_info.get("name") or email.split("@")[0]
+        supabase.table("profiles").update({
+            "email": email,
+            "full_name": full_name,
+            "ai_enabled": True
+        }).eq("id", user_id).execute()
+
+        return redirect(f"/dashboard?user_id={user_id}")
+
+    except Exception as e:
+        app.logger.error(f"OAuth2 Callback Error: {str(e)}", exc_info=True)
+        return f"<h1>Authentication Failed</h1><p>{str(e)}</p>", 500
+
+      
 @app.route("/complete_profile", methods=["GET", "POST"])
 def complete_profile():
     user_id = request.args.get("user_id")
@@ -1388,8 +1372,9 @@ def debug_env():
     }
 
 from datetime import datetime
+
 @app.route("/process", methods=["GET"])
-@check_plan_limit('emails')
+@check_rate_limit('emails')
 def trigger_process():
     token = request.args.get("token")
     if token != os.environ.get("PROCESS_SECRET_TOKEN"):
@@ -1417,42 +1402,20 @@ def trigger_process():
             .eq("id", "global") \
             .execute()
 
-
-    user_id = None
-    # First, fetch emails to get user IDs
-    ready = (
+    # ── Build per-user daily email count ──
+    today_iso = datetime.utcnow().date().isoformat()
+    sent_rows = (
         supabase.table("emails")
-        .select("id, user_id, sender_email, recipient_email, processed_content, subject")
-        .eq("status", "ready_to_send")
-        .execute()
-        .data or []
+            .select("recipient_email, sent_at")
+            .eq("status", "sent")
+            .execute()
+            .data or []
     )
-    
-    if not ready:
-        return "", 204
-        
-    # Get user_id from first email
-    user_id = ready[0].get("user_id")
-    if not user_id:
-        app.logger.error("No user_id found in ready emails")
-        return jsonify({"error": "No user_id found"}), 400
-    
-    # ── Check rate limit BEFORE processing ──
-    allowed, remaining, message = rate_limiter.check_rate_limit(user_id, 'emails', len(ready))
-    
-    if not allowed:
-        app.logger.warning(f"Rate limit exceeded for user {user_id}: {message}")
-        # Update all emails to rate_limited status
-        email_ids = [rec["id"] for rec in ready]
-        supabase.table("emails").update({
-            "status": "rate_limited",
-            "error_message": f"Plan limit exceeded: {message}"
-        }).in_("id", email_ids).execute()
-        return jsonify({"error": "Rate limit exceeded", "message": message}), 429
-            
-
-
-
+    emails_sent_today = {}
+    for r in sent_rows:
+        if r.get("sent_at", "").startswith(today_iso):
+            inbox = r["recipient_email"]
+            emails_sent_today[inbox] = emails_sent_today.get(inbox, 0) + 1
 
     # ── 1) Fetch 3 queues ──
     gen = supabase.table("emails").select("id").eq("status", "processing").execute().data or []
@@ -1467,13 +1430,26 @@ def trigger_process():
 
     # ── 2) Run AI Generation ──
     if gen:
-        ids = [r["id"] for r in gen]
-        if call_edge("/functions/v1/clever-service/generate-response", {"email_ids": ids}):
-            all_processed.extend(ids)
-        else:
+        ip = request.remote_addr
+        now = datetime.now()
+        if (now - demo_rate_limits[ip]['emails']['last_reset']).days >= 1:
+            demo_rate_limits[ip]['emails']['remaining'] = 20
+            demo_rate_limits[ip]['emails']['last_reset'] = now
+
+        if demo_rate_limits[ip]['emails']['remaining'] <= 0:
+            ids = [r["id"] for r in gen]
             supabase.table("emails") \
-                .update({"status": "error", "error_message": "generate-response failed"}) \
+                .update({"status": "error", "error_message": "Rate limit exceeded"}) \
                 .in_("id", ids).execute()
+        else:
+            demo_rate_limits[ip]['emails']['remaining'] -= 1
+            ids = [r["id"] for r in gen]
+            if call_edge("/functions/v1/clever-service/generate-response", {"email_ids": ids}):
+                all_processed.extend(ids)
+            else:
+                supabase.table("emails") \
+                    .update({"status": "error", "error_message": "generate-response failed"}) \
+                    .in_("id", ids).execute()
 
     # ── 3) Personalize Template ──
     if per:
@@ -1510,26 +1486,23 @@ def trigger_process():
         .data or []
     )
 
-    # ── 6) SEND via SMTP ──
+    # ── 6) SEND via SMTP (KEY FIX SECTION) ──
     for rec in ready:
         em_id = rec["id"]
         sender = rec["sender_email"]
-        inbox = rec["recipient_email"]
+        inbox = rec["recipient_email"]          # <── THIS is the "from" email account
         subject = rec.get("subject", "Your Email")
 
-        # Load SMTP credentials for THIS inbox
-        if user_id:
-            allowed, remaining, message = rate_limiter.check_rate_limit(user_id, 'emails', 1)
-            if not allowed:
-                app.logger.warning(f"Rate limit exceeded for user {user_id}: {message}")
-                supabase.table("emails").update({
-                    "status": "rate_limited",
-                    "error_message": f"Plan limit exceeded: {message}"
-                }).eq("id", em_id).execute()
-                failed.append(em_id)
-                continue  # Skip this email, move to next
+        # Daily limit applies per inbox
+        if emails_sent_today.get(inbox, 0) >= 20:
+            supabase.table("emails").update({
+                "status": "error",
+                "error_message": "Daily email limit reached"
+            }).eq("id", em_id).execute()
+            failed.append(em_id)
+            continue
 
-        # Load SMTP credentials for THIS inbox
+        # ─── Load SMTP credentials for THIS inbox ───
         prof = supabase.table("profiles") \
             .select("smtp_email, smtp_enc_password, smtp_host, smtp_port, display_name, signature, generate_leases") \
             .eq("smtp_email", inbox) \
@@ -1542,6 +1515,7 @@ def trigger_process():
             }).eq("id", em_id).execute()
             failed.append(em_id)
             continue
+
         # Decrypt password
         try:
             smtp_password = fernet.decrypt(prof["smtp_enc_password"].encode()).decode()
@@ -1584,16 +1558,15 @@ def trigger_process():
             supabase.table("emails").update({
                 "status": status_to,
                 "sent_at": datetime.utcnow().isoformat(),
-                "recipient_email": inbox,
-                "emails_sent": user_id
+                "recipient_email": inbox    # Track which inbox sent the reply
             }).eq("id", em_id).execute()
-            
-            rate_limiter._increment_usage(user_id, 'emails', 1)
-            
+
             if status_to == "sent":
                 sent.append(em_id)
             else:
                 drafted.append(em_id)
+
+            emails_sent_today[inbox] = emails_sent_today.get(inbox, 0) + 1
 
         except Exception as e:
             supabase.table("emails").update({
@@ -1623,16 +1596,11 @@ def mark_ready(txn_id):
     return "", 204
 
 @app.route("/autopilot/batch", methods=["POST"])
-@check_plan_limit('kits', amount=1)  # Each kit counts as a lead
-@require_feature('document_generation')
+@check_rate_limit('kits')
 def batch_autopilot():
-    user_id = _require_user()
-    
-    if not rate_limiter.check_document_generation(user_id):
-        return jsonify({
-            "error": "Document generation not available",
-            "message": "Upgrade to Professional or Elite plan for document generation"
-        }), 403
+    # Decrement kit count
+#    ip = request.remote_addr
+ #   demo_rate_limits[ip]['kits'] -= 1
     
     txns = supabase.table("transactions").select("*").eq("ready_for_kit", True).eq("kit_generated", False).execute().data or []
     results = []
@@ -1762,16 +1730,12 @@ from io import TextIOWrapper
 from openpyxl import load_workbook
 
 @app.route("/import_leads", methods=["GET", "POST"])
-@check_plan_limit('leads')
+@check_rate_limit('leads')
 def import_leads():
     user_id = _require_user()
     
     if request.method == "GET":
-        # Get plan info to show limits
-        plan_info = rate_limiter.get_plan_info(user_id)
-        return render_template("import_leads.html", 
-                             user_id=user_id, 
-                             plan_info=plan_info)
+        return render_template("import_leads.html", user_id=user_id)
     
     # Handle POST request
     try:
@@ -2082,25 +2046,92 @@ def process_follow_ups():
         
         results = {"processed": [], "failed": []}
         
+        # Get today's date for daily limit check
+        today_str = datetime.utcnow().date().isoformat()
+        
         for follow_up in due_follow_ups:
             try:
                 # Generate content using AI
                 content = generate_follow_up_content(follow_up["lead_id"], follow_up["sequence_step"])
                 if content:
-                    # Get user_id from lead
+                    # Get user_id and lead info
                     user_id = follow_up["leads"]["user_id"]
                     lead_email = follow_up["leads"]["email"]
                     
-                    # Send using Gmail API
-                    subject = f"Follow-up: {follow_up['leads'].get('first_name', '')} {follow_up['leads'].get('last_name', '')}"
-                    success, message = send_email_gmail(
-                        user_id,
-                        lead_email,
-                        subject,
-                        content
-                    )
+                    # Get user's SMTP credentials
+                    user_profile = supabase.table("profiles") \
+                        .select("smtp_email, smtp_enc_password, smtp_host, smtp_port, display_name") \
+                        .eq("id", user_id) \
+                        .single().execute().data
                     
-                    if success:
+                    if not user_profile or not user_profile.get("smtp_email"):
+                        supabase.table("lead_follow_ups") \
+                            .update({
+                                "status": "failed", 
+                                "error_message": "No SMTP account configured for user"
+                            }) \
+                            .eq("id", follow_up["id"]) \
+                            .execute()
+                        results["failed"].append(follow_up["id"])
+                        continue
+                    
+                    # Check daily sending limit for this inbox
+                    today_sent = supabase.table("emails") \
+                        .select("id") \
+                        .eq("recipient_email", user_profile["smtp_email"]) \
+                        .eq("status", "sent") \
+                        .gte("sent_at", f"{today_str}T00:00:00Z") \
+                        .lte("sent_at", f"{today_str}T23:59:59Z") \
+                        .execute().data
+                    
+                    if len(today_sent) >= 20:  # Daily limit per inbox
+                        supabase.table("lead_follow_ups") \
+                            .update({
+                                "status": "failed", 
+                                "error_message": "Daily email limit reached for this inbox"
+                            }) \
+                            .eq("id", follow_up["id"]) \
+                            .execute()
+                        results["failed"].append(follow_up["id"])
+                        continue
+                    
+                    # Decrypt SMTP password
+                    try:
+                        smtp_password = fernet.decrypt(user_profile["smtp_enc_password"].encode()).decode()
+                    except Exception as e:
+                        supabase.table("lead_follow_ups") \
+                            .update({
+                                "status": "failed", 
+                                "error_message": f"SMTP password decryption failed: {str(e)}"
+                            }) \
+                            .eq("id", follow_up["id"]) \
+                            .execute()
+                        results["failed"].append(follow_up["id"])
+                        continue
+                    
+                    # Prepare email content
+                    subject = f"Follow-up: {follow_up['leads'].get('first_name', '')} {follow_up['leads'].get('last_name', '')}"
+                    
+                    # Build HTML body
+                    body_html = content.replace("\n", "<br>")
+                    if user_profile.get("display_name"):
+                        # Replace [Your Name] placeholder if exists
+                        body_html = body_html.replace("[Your Name]", user_profile["display_name"])
+                    
+                    final_html = f"<html><body><p>{body_html}</p></body></html>"
+                    
+                    # Send using SMTP
+                    try:
+                        send_email_smtp(
+                            from_email=user_profile["smtp_email"],
+                            from_password=smtp_password,
+                            to_email=lead_email,
+                            subject=subject,
+                            body=final_html,
+                            smtp_host=user_profile.get("smtp_host", "smtp.gmail.com"),
+                            smtp_port=int(user_profile.get("smtp_port", 465))
+                        )
+                        
                         # Update status
                         supabase.table("lead_follow_ups") \
                             .update({
@@ -2111,15 +2142,18 @@ def process_follow_ups():
                             .eq("id", follow_up["id"]) \
                             .execute()
                         results["processed"].append(follow_up["id"])
-                    else:
+                
+                        
+                    except Exception as e:
                         supabase.table("lead_follow_ups") \
                             .update({
                                 "status": "failed", 
-                                "error_message": message
+                                "error_message": f"SMTP send failed: {str(e)}"
                             }) \
                             .eq("id", follow_up["id"]) \
                             .execute()
                         results["failed"].append(follow_up["id"])
+                        
                 else:
                     supabase.table("lead_follow_ups") \
                         .update({"status": "failed", "error_message": "Failed to generate content"}) \
@@ -2129,6 +2163,13 @@ def process_follow_ups():
                     
             except Exception as e:
                 app.logger.error(f"Error processing follow-up {follow_up['id']}: {str(e)}")
+                supabase.table("lead_follow_ups") \
+                    .update({
+                        "status": "failed", 
+                        "error_message": f"Processing error: {str(e)}"
+                    }) \
+                    .eq("id", follow_up["id"]) \
+                    .execute()
                 results["failed"].append(follow_up["id"])
         
         return jsonify(results), 200
@@ -2137,7 +2178,228 @@ def process_follow_ups():
         app.logger.error(f"Error in process_follow_ups: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+#----------------------------------------------------------------------------------------------------------------------------------------
+# Add to app.py
 
+@app.route("/api/generate-complete-kit", methods=["POST"])
+def generate_complete_kit():
+    """Generate a complete closing kit with all document types"""
+    data = request.get_json()
+    ip = request.remote_addr
+    
+    # Check rate limits
+    if (ip not in demo_rate_limits or 
+        'kits' not in demo_rate_limits[ip] or 
+        demo_rate_limits[ip]['kits'] <= 0):
+        
+        return jsonify({"error": "Closing kit limit exceeded"}), 429
+    
+    try:
+        # Decrement the limit
+        demo_rate_limits[ip]['kits'] -= 1
+        
+        # Generate all document types
+        docs = []
+        templates = [
+            ("loi_template.docx", "LOI"),
+            ("psa_template.docx", "PSA"),
+            ("purchase_offer_template.docx", "PURCHASE_OFFER"),
+            ("agency_disclosure_template.docx", "AGENCY_DISCLOSURE"),
+            ("real_estate_purchase_template.docx", "REAL_ESTATE_PURCHASE"),
+            ("lease_template.docx", "LEASE"),
+            ("seller_disclosure_template.docx", "SELLER_DISCLOSURE"),
+        ]
+        
+        # Create temporary directory for documents
+        import tempfile
+        import uuid
+        tmpdir = tempfile.mkdtemp()
+        
+        for template_name, prefix in templates:
+            try:
+                tpl = DocxTemplate(f"templates/transaction_autopilot/{template_name}")
+                
+                # Map form data to template variables
+                template_data = map_form_data_to_template(data, prefix.lower())
+                tpl.render(template_data)
+                
+                out_name = f"{prefix}_{data.get('id', 'demo')}_{uuid.uuid4().hex[:6]}.docx"
+                out_path = os.path.join(tmpdir, out_name)
+                tpl.save(out_path)
+                docs.append(out_path)
+            except Exception as e:
+                app.logger.error(f"Error generating {template_name}: {str(e)}")
+                continue
+        
+        # Bundle into ZIP
+        zip_io = BytesIO()
+        with zipfile.ZipFile(zip_io, "w") as zf:
+            for doc_path in docs:
+                zf.write(doc_path, arcname=os.path.basename(doc_path))
+        
+        zip_io.seek(0)
+        
+        # Clean up temporary files
+        for doc_path in docs:
+            try:
+                os.remove(doc_path)
+            except:
+                pass
+                
+        try:
+            os.rmdir(tmpdir)
+        except:
+            pass
+        
+        # Return the ZIP file
+        return send_file(
+            zip_io,
+            as_attachment=True,
+            download_name=f"complete_closing_kit_{data.get('id', 'demo')}.zip",
+            mimetype="application/zip"
+        )
+        
+    except Exception as e:
+        app.logger.error(f"Error generating closing kit: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+def map_form_data_to_template(form_data, doc_type):
+    """Map form data to appropriate template variables based on document type"""
+    mapped_data = form_data.copy()
+    
+    # Add common mappings
+    mapped_data['transaction_id'] = form_data.get('id', '')
+    mapped_data['current_date'] = datetime.now().strftime('%B %d, %Y')
+    
+    # Document-specific mappings
+    if doc_type == 'loi':
+        mapped_data['letter_date'] = datetime.now().strftime('%B %d, %Y')
+        mapped_data['buyer_signature'] = form_data.get('buyer_signature', '')
+        mapped_data['seller_signature'] = form_data.get('seller_signature', '')
+    
+    elif doc_type == 'psa':
+        mapped_data['effective_date'] = form_data.get('agreement_date', '')
+        mapped_data['closing_date'] = form_data.get('closing_date', '')
+        mapped_data['purchase_price'] = f"${float(form_data.get('purchase_price', 0)):,.2f}"
+    
+    elif doc_type == 'lease':
+        mapped_data['lease_term'] = form_data.get('rent_type', '')
+        mapped_data['monthly_rent'] = f"${float(form_data.get('agreed_rent', 0)):,.2f}"
+        mapped_data['security_deposit'] = f"${float(form_data.get('deposit_amount', 0)):,.2f}"
+    
+    return mapped_data
+
+# Add a route to check rate limit status
+@app.route("/rate_limit_status")
+def rate_limit_status():
+    ip = request.remote_addr
+    now = datetime.now()
+    
+    # Check and reset limits if needed (same logic as decorator)
+    for resource in ['emails', 'kits', 'leads']:
+        if resource == 'emails':
+            if (now - demo_rate_limits[ip][resource]['last_reset']).days >= 1:
+                demo_rate_limits[ip][resource]['remaining'] = 20
+                demo_rate_limits[ip][resource]['last_reset'] = now
+        else:
+            if (now - demo_rate_limits[ip][resource]['last_reset']).days >= 30:
+                if resource == 'kits':
+                    demo_rate_limits[ip][resource]['remaining'] = 20
+                else:
+                    demo_rate_limits[ip][resource]['remaining'] = 25
+                demo_rate_limits[ip][resource]['last_reset'] = now
+    
+    return jsonify({
+        'emails_remaining': demo_rate_limits[ip]['emails']['remaining'],
+        'kits_remaining': demo_rate_limits[ip]['kits']['remaining'],
+        'leads_remaining': demo_rate_limits[ip]['leads']['remaining'],
+        'emails_reset': (demo_rate_limits[ip]['emails']['last_reset'] + timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S'),
+        'kits_reset': (demo_rate_limits[ip]['kits']['last_reset'] + timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S'),
+        'leads_reset': (demo_rate_limits[ip]['leads']['last_reset'] + timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S')
+    })
+#-----------------------------------------------------------------------------------------------------------------------------------------
+# Add a new route to test Gmail connection
+@app.route("/test_gmail_connection", methods=["POST"])
+def test_gmail_connection():
+    user_id = _require_user()
+    
+    try:
+        service = get_gmail_service(user_id)
+        if not service:
+            return jsonify({"success": False, "message": "Gmail service not available"})
+        
+        # Test by getting user profile
+        profile = service.users().getProfile(userId='me').execute()
+        email_address = profile.get('emailAddress')
+        
+        return jsonify({
+            "success": True, 
+            "message": f"Gmail connection successful for {email_address}"
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Gmail connection test failed for user {user_id}: {str(e)}")
+        return jsonify({"success": False, "message": str(e)})
+
+#---------------------------------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------
+#show forwarding status:
+@app.route("/dashboard/email_forwarding")
+def email_forwarding_settings():
+    user_id = _require_user()
+    
+    # Get user profile with forwarding status
+    profile = supabase.table("profiles") \
+        .select("email, forwarding_verified, forwarding_verified_at") \
+        .eq("id", user_id) \
+        .single() \
+        .execute().data or {}
+    
+    # Your polling account email (replace with actual)
+    polling_email = "replyzeai.inbound@gmail.com"
+    
+    return render_template(
+        "partials/email_forwarding.html",
+        profile=profile,
+        user_id=user_id,
+        polling_email=polling_email
+    )
+
+
+#------------------------------------------------------------------------------------------------------
+
+@app.route("/check_forwarding_status")
+def check_forwarding_status():
+    """Check if user has email forwarding enabled"""
+    user_id = _require_user()
+    
+    try:
+        # Get user profile with forwarding status
+        profile = supabase.table("profiles") \
+            .select("forwarding_verified, forwarding_verified_at, email") \
+            .eq("id", user_id) \
+            .single() \
+            .execute().data or {}
+        
+        if profile.get("forwarding_verified"):
+            return jsonify({
+                "status": "connected",
+                "message": f"Forwarding verified on {profile.get('forwarding_verified_at', '')[:10]}",
+                "email": profile.get("email", "")
+            })
+        else:
+            return jsonify({
+                "status": "not_connected", 
+                "message": "Email forwarding not set up",
+                "email": profile.get("email", "")
+            })
+            
+    except Exception as e:
+        app.logger.error(f"Error checking forwarding status: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": "Error checking forwarding status"
+        }), 500
 
 #-------------------------------------------------
 #---------the manual dash--------------------
@@ -2249,10 +2511,12 @@ def generate_follow_up_content(lead_id, sequence_step):
         app.logger.info(f"Processing follow-up for: {lead['first_name']} {lead['last_name']} at {lead['email']}")
         
         # Get comprehensive communication history
+        # FIXED: Use OR filter correctly with Supabase syntax
+        email_filter = f"or=(recipient_email.eq.{lead['email']},sender_email.eq.{lead['email']})"
         previous_emails = supabase.table("emails") \
             .select("subject, original_content, processed_content, sent_at, status") \
-            .eq("sender_email", lead["email"]) \
-            .or_(f"recipient_email.eq.{lead['email']},sender_email.eq.{lead['email']}") \
+            .filter("recipient_email", "eq", lead['email']) \
+            .or_(f"sender_email.eq.{lead['email']}") \
             .order("sent_at", desc=True) \
             .limit(10) \
             .execute().data or []
@@ -2492,353 +2756,55 @@ def generate_manual_followups():
 
 
 
-
-
-#-----------------------------------------------------------------------------
-# Add to app.py
-@app.route("/detect_email_settings", methods=["POST"])
-def detect_email_settings():
-    """Detect email provider settings based on domain"""
-    email = request.form.get("email")
-    
-    if not email or '@' not in email:
-        return jsonify({"error": "Invalid email address"}), 400
-    
-    domain = email.split('@')[1].lower()
-    
-    # Common email provider settings
-    provider_settings = {
-        'gmail.com': {
-            'smtp_host': 'smtp.gmail.com',
-            'smtp_port': 465,
-            'imap_host': 'imap.gmail.com',
-            'imap_port': 993
-        },
-        'outlook.com': {
-            'smtp_host': 'smtp.office365.com',
-            'smtp_port': 587,
-            'imap_host': 'outlook.office365.com',
-            'imap_port': 993
-        },
-        'yahoo.com': {
-            'smtp_host': 'smtp.mail.yahoo.com',
-            'smtp_port': 465,
-            'imap_host': 'imap.mail.yahoo.com',
-            'imap_port': 993
-        },
-        'icloud.com': {
-            'smtp_host': 'smtp.mail.me.com',
-            'smtp_port': 587,
-            'imap_host': 'imap.mail.me.com',
-            'imap_port': 993
-        },
-        # Add more providers as needed
-    }
-    
-    # Find matching domain or use generic settings
-    settings = None
-    for key, value in provider_settings.items():
-        if domain == key or domain.endswith(f'.{key}'):
-            settings = value
-            break
-    
-    if not settings:
-        # Generic settings for unknown domains
-        settings = {
-            'smtp_host': 'smtp.' + domain,
-            'smtp_port': 465,
-            'imap_host': 'imap.' + domain,
-            'imap_port': 993
-        }
-    
-    return jsonify({
-        "email": email,
-        "smtp_host": settings['smtp_host'],
-        "smtp_port": settings['smtp_port'],
-        "imap_host": settings['imap_host'],
-        "imap_port": settings['imap_port']
-    })
-    
-from urllib.parse import unquote
-             
-@app.route('/partials/connect_smtp_form', methods=['GET', 'POST'])
-def connect_smtp_form():
-    if request.method == 'POST':
-        # Handle POST request (if needed)
-        pass
-    
-    # Handle GET request
-    user_id = request.args.get('user_id')
-    
-    # Get and decode the email parameter
-    email_param = request.args.get('email', '')
-    email = unquote(email_param) if email_param else ''
-    
-    # Initialize with default values
-    smtp_host = "smtp.gmail.com"
-    imap_host = "imap.gmail.com"
-    smtp_port = 587
-    imap_port = 993
-    
-    # Try to get detected settings from the request
-    settings_param = request.args.get('settings')
-    print(f"Raw settings parameter: {settings_param}")  # Debug
-    
-    if settings_param:
-        try:
-            # URL decode the settings parameter first
-            decoded_settings = unquote(settings_param)
-            print(f"Decoded settings: {decoded_settings}")  # Debug
+#-------------------------------------------------------------
+#--------------------manual /auto--------------------------------------
+@app.route("/set_email_mode", methods=["POST"])
+def set_email_mode():
+    """Set user's preferred email mode (auto or manual)"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
             
-            settings = json.loads(decoded_settings)
-            smtp_host = settings.get('smtp_host', smtp_host)
-            imap_host = settings.get('imap_host', imap_host)
-            smtp_port = settings.get('smtp_port', smtp_port)
-            imap_port = settings.get('imap_port', imap_port)
-            print(f"Using detected settings: {settings}")  # For debugging
-        except (json.JSONDecodeError, TypeError) as e:
-            print(f"Error parsing settings: {e}")  # For debugging
-            # If JSON parsing fails, fall back to defaults
-            pass
-    
-    print(f"Final values - Email: {email}, SMTP: {smtp_host}:{smtp_port}, IMAP: {imap_host}:{imap_port}")  # For debugging
-    
-    return render_template('partials/connect_smtp_form.html', 
-                         user_id=user_id, 
-                         email=email,
-                         smtp_host=smtp_host,
-                         imap_host=imap_host,
-                         smtp_port=smtp_port,
-                         imap_port=imap_port)
-    
+        user_id = data.get("user_id")
+        mode = data.get("mode")
+        
+        if not user_id:
+            return jsonify({"error": "Missing user_id"}), 401
+            
+        if mode not in ["auto", "manual"]:
+            return jsonify({"error": "Invalid mode"}), 400
+        
+        # Update user's email mode preference
+        supabase.table("profiles").update({
+            "email_mode": mode
+        }).eq("id", user_id).execute()
+        
+        return jsonify({"success": True, "mode": mode})
+    except Exception as e:
+        app.logger.error(f"Error setting email mode: {str(e)}")
+        return jsonify({"error": "Failed to set email mode"}), 500
 
-    
-@app.route("/connect_smtp", methods=["POST"])
-def connect_smtp():
-    user_id = _require_user()
-    
-    # Check connected accounts limit
-    plan = rate_limiter.get_user_plan(user_id)
-    account_limit = plan.get('connected_accounts', 1)
-    
-    if account_limit < 100:  # Not elite plan
-        # Count current connected accounts (check if SMTP is configured)
-        result = supabase.table("profiles") \
-            .select("smtp_enc_password") \
+@app.route("/get_email_mode")
+def get_email_mode():
+    """Get user's current email mode"""
+    try:
+        user_id = request.args.get("user_id")
+        if not user_id:
+            return jsonify({"error": "Missing user_id"}), 401
+            
+        profile = supabase.table("profiles") \
+            .select("email_mode") \
             .eq("id", user_id) \
             .single() \
-            .execute()
+            .execute().data
         
-        current_accounts = 1 if result.data and result.data.get('smtp_enc_password') else 0
-        
-        if current_accounts >= account_limit:
-            return jsonify({
-                "error": "Account limit reached",
-                "message": f"Your {plan['name']} plan allows {account_limit} connected email account(s)",
-                "current": current_accounts,
-                "limit": account_limit,
-                "upgrade_required": account_limit == 1
-            }), 403
-            
-    """Handle SMTP connection setup"""
-    try:
-        # Get form data
-        user_id = request.form.get("user_id")
-        email = request.form.get("smtp_email")
-        app_password = request.form.get("smtp_password")
-        smtp_host = request.form.get("smtp_host")
-        smtp_port = request.form.get("smtp_port")
-        imap_host = request.form.get("imap_host")
-        imap_port = request.form.get("imap_port")
-        
-        if not all([user_id, email, app_password, smtp_host, smtp_port]):
-            return jsonify({"error": "Missing required fields"}), 400
-        
-        # Encrypt the app password
-        encrypted_password = fernet.encrypt(app_password.encode()).decode()
-        
-        # Update user profile with SMTP settings
-        update_data = {
-            "smtp_email": email,
-            "smtp_enc_password": encrypted_password,
-            "smtp_host": smtp_host,
-            "smtp_port": int(smtp_port),
-            "email": email,  # Also update the main email
-            "forwarding_verified": True,  # Mark as manually connected
-            "forwarding_verified_at": datetime.now(timezone.utc).isoformat()
-        }
-        
-        # Add IMAP settings if provided
-        if imap_host:
-            update_data["imap_host"] = imap_host
-        if imap_port:
-            update_data["imap_port"] = int(imap_port)
-        
-        # Update the profile
-        supabase.table("profiles").update(update_data).eq("id", user_id).execute()
-        
-        
-        app.logger.info(f"SMTP settings saved for user {user_id}, email: {email}")
-        
-        return jsonify({
-            "success": True,
-            "message": "SMTP settings saved successfully",
-            "redirect_url": f"/dashboard?user_id={user_id}"
-        })
-        
+        return jsonify({"mode": profile.get("email_mode", "auto")})
     except Exception as e:
-        app.logger.error(f"Error saving SMTP settings: {str(e)}", exc_info=True)
-        return jsonify({"error": f"Failed to save settings: {str(e)}"}), 500
-        
-        
-        
-        
-        
-#---------------------------------------------------------------------------------------
-# --- Plan Management Routes ---
-@app.route("/api/plan/status", methods=["GET"])
-def get_plan_status():
-    """Get current plan status and usage"""
-    user_id = _require_user()
-    plan_info = rate_limiter.get_plan_info(user_id)
-    return jsonify(plan_info)
+        app.logger.error(f"Error getting email mode: {str(e)}")
+        return jsonify({"mode": "auto"})  # Default to auto
 
-@app.route("/api/plan/upgrade", methods=["POST"])
-def upgrade_plan():
-    """Handle plan upgrades"""
-    user_id = _require_user()
-    data = request.get_json()
-    new_plan = data.get("plan_name")
-    start_trial = data.get("start_trial", False)
-    
-    if not new_plan or new_plan not in PLANS:
-        return jsonify({"error": "Invalid plan name"}), 400
-    
-    success, message = rate_limiter.update_user_plan(user_id, new_plan, start_trial)
-    
-    if success:
-        return jsonify({
-            "success": True,
-            "message": message,
-            "plan": PLANS[new_plan]
-        })
-    else:
-        return jsonify({"error": message}), 500
 
-@app.route("/api/plan/trial/start", methods=["POST"])
-def start_trial():
-    """Start free trial for a specific plan"""
-    user_id = _require_user()
-    data = request.get_json()
-    trial_plan = data.get("plan_name", "professional")
-    
-    if trial_plan not in ['starter', 'professional', 'elite']:
-        return jsonify({"error": "Invalid trial plan"}), 400
-    
-    # Check if user already has an active trial
-    try:
-        result = supabase.table("profiles") \
-            .select("trial_ends_at, subscription_status") \
-            .eq("id", user_id) \
-            .single() \
-            .execute()
-        
-        if result.data:
-            trial_ends_at = result.data.get('trial_ends_at')
-            if trial_ends_at:
-                trial_ends = datetime.fromisoformat(trial_ends_at.replace('Z', '+00:00'))
-                if datetime.now(timezone.utc) < trial_ends:
-                    return jsonify({
-                        "error": "Trial already active",
-                        "message": "You already have an active trial",
-                        "trial_ends_at": trial_ends_at
-                    }), 400
-    except:
-        pass
-    
-    success, message = rate_limiter.update_user_plan(user_id, trial_plan, start_trial=True)
-    
-    if success:
-        plan_info = rate_limiter.get_plan_info(user_id)
-        return jsonify({
-            "success": True,
-            "message": f"Started 14-day free trial of {PLANS[trial_plan]['name']} plan",
-            "trial_ends_at": plan_info.get('trial_ends_at'),
-            "plan": PLANS[trial_plan]
-        })
-    else:
-        return jsonify({"error": message}), 500
-        
-        
-        
-# --- Plan Info Partial for Dashboard ---
-@app.route("/dashboard/plan_info")
-def dashboard_plan_info():
-    """HTMX endpoint to get plan info partial"""
-    user_id = _require_user()
-    plan_info = rate_limiter.get_plan_info(user_id)
-    return render_template("partials/plan_info.html", plan_info=plan_info, user_id=user_id)
-
-# --- Helper to Initialize Trial for New Users ---
-def initialize_user_plan(user_id, plan_name="professional", start_trial=True):
-    """Initialize plan for new user"""
-    try:
-        if start_trial:
-            success, message = rate_limiter.update_user_plan(user_id, plan_name, start_trial=True)
-            if success:
-                app.logger.info(f"Initialized {plan_name} trial for user {user_id}")
-                return True
-        else:
-            success, message = rate_limiter.update_user_plan(user_id, plan_name, start_trial=False)
-            if success:
-                app.logger.info(f"Initialized {plan_name} plan for user {user_id}")
-                return True
-    except Exception as e:
-        app.logger.error(f"Error initializing user plan: {str(e)}")
-    
-    return False
-
-    
-    
-def send_email_smtp(from_email, from_password, to_email, subject, body, smtp_host="smtp.gmail.com", smtp_port=465):
-    """
-    Send an email using SMTP
-    """
-    try:
-        # Create message
-        msg = MIMEMultipart()
-        msg['From'] = from_email
-        msg['To'] = to_email
-        msg['Subject'] = subject
-        
-        # Add HTML body
-        msg.attach(MIMEText(body, 'html'))
-        
-        # Create secure connection
-        context = ssl.create_default_context()
-        
-        if smtp_port == 465:
-            # SSL connection
-            server = smtplib.SMTP_SSL(smtp_host, smtp_port, context=context)
-            server.login(from_email, from_password)
-        else:
-            # TLS connection (usually port 587)
-            server = smtplib.SMTP(smtp_host, smtp_port)
-            server.starttls(context=context)
-            server.login(from_email, from_password)
-        
-        # Send email
-        server.send_message(msg)
-        server.quit()
-        
-        app.logger.info(f"Email sent from {from_email} to {to_email}")
-        return True
-        
-    except Exception as e:
-        app.logger.error(f"SMTP send failed: {str(e)}")
-        raise
-    
-    
 # ── Final entry point ──
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
