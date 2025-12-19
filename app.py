@@ -1373,8 +1373,8 @@ def debug_env():
 
 from datetime import datetime
 
+# Remove the demo rate limiting decorator and replace with proper plan-based checking
 @app.route("/process", methods=["GET"])
-@check_rate_limit('emails')
 def trigger_process():
     token = request.args.get("token")
     if token != os.environ.get("PROCESS_SECRET_TOKEN"):
@@ -1391,189 +1391,211 @@ def trigger_process():
 
     if last_date != today_str:
         app.logger.info("🔄 New day detected – clearing emails table")
-
         SUPABASE_SERVICE.table("emails") \
             .delete() \
             .neq("id", "00000000-0000-0000-0000-000000000000") \
             .execute()
-
         SUPABASE_SERVICE.table("rate_limit_reset") \
             .update({"last_reset": datetime.now(timezone.utc).isoformat()}) \
             .eq("id", "global") \
             .execute()
 
-    # ── Build per-user daily email count ──
-    today_iso = datetime.utcnow().date().isoformat()
-    sent_rows = (
-        supabase.table("emails")
-            .select("recipient_email, sent_at")
-            .eq("status", "sent")
-            .execute()
-            .data or []
-    )
-    emails_sent_today = {}
-    for r in sent_rows:
-        if r.get("sent_at", "").startswith(today_iso):
-            inbox = r["recipient_email"]
-            emails_sent_today[inbox] = emails_sent_today.get(inbox, 0) + 1
-
-    # ── 1) Fetch 3 queues ──
-    gen = supabase.table("emails").select("id").eq("status", "processing").execute().data or []
-    per = supabase.table("emails").select("id").eq("status", "ready_to_personalize").execute().data or []
-    prop = supabase.table("emails").select("id").eq("status", "awaiting_proposal").execute().data or []
-
-    if not (gen or per or prop):
-        app.logger.info("⚡ No emails to process — returning 204")
-        return "", 204
-
-    all_processed, sent, drafted, failed = [], [], [], []
-
-    # ── 2) Run AI Generation ──
-    if gen:
-        ip = request.remote_addr
-        now = datetime.now()
-        if (now - demo_rate_limits[ip]['emails']['last_reset']).days >= 1:
-            demo_rate_limits[ip]['emails']['remaining'] = 20
-            demo_rate_limits[ip]['emails']['last_reset'] = now
-
-        if demo_rate_limits[ip]['emails']['remaining'] <= 0:
-            ids = [r["id"] for r in gen]
-            supabase.table("emails") \
-                .update({"status": "error", "error_message": "Rate limit exceeded"}) \
-                .in_("id", ids).execute()
-        else:
-            demo_rate_limits[ip]['emails']['remaining'] -= 1
-            ids = [r["id"] for r in gen]
-            if call_edge("/functions/v1/clever-service/generate-response", {"email_ids": ids}):
-                all_processed.extend(ids)
-            else:
-                supabase.table("emails") \
-                    .update({"status": "error", "error_message": "generate-response failed"}) \
-                    .in_("id", ids).execute()
-
-    # ── 3) Personalize Template ──
-    if per:
-        for row in per:
-            eid = row["id"]
-            if call_edge("/functions/v1/clever-service/personalize-template", {"email_ids": [eid]}):
-                supabase.table("emails").update({"status": "awaiting_proposal"}).eq("id", eid).execute()
-                all_processed.append(eid)
-            else:
-                supabase.table("emails").update({
-                    "status": "error",
-                    "error_message": "personalize-template failed"
-                }).eq("id", eid).execute()
-
-    # ── 4) Generate Proposal ──
-    if prop:
-        for row in prop:
-            eid = row["id"]
-            if call_edge("/functions/v1/clever-service/generate-proposal", {"email_ids": [eid]}):
-                supabase.table("emails").update({"status": "ready_to_send"}).eq("id", eid).execute()
-                all_processed.append(eid)
-            else:
-                supabase.table("emails").update({
-                    "status": "error",
-                    "error_message": "generate-proposal failed"
-                }).eq("id", eid).execute()
-
-    # ── 5) Fetch ready_to_send emails (include recipient_email!) ──
+    # ── 1) Fetch ready_to_send emails ──
     ready = (
         supabase.table("emails")
-        .select("id, sender_email, recipient_email, processed_content, subject")
+        .select("id, user_id, sender_email, recipient_email, processed_content, subject")
         .eq("status", "ready_to_send")
         .execute()
         .data or []
     )
+    
+    if not ready:
+        # Also check other queues
+        gen = supabase.table("emails").select("id, user_id").eq("status", "processing").execute().data or []
+        per = supabase.table("emails").select("id, user_id").eq("status", "ready_to_personalize").execute().data or []
+        prop = supabase.table("emails").select("id, user_id").eq("status", "awaiting_proposal").execute().data or []
+        
+        if not (gen or per or prop):
+            app.logger.info("⚡ No emails to process — returning 204")
+            return "", 204
+    
+    all_processed, sent, drafted, failed = [], [], [], []
+    
+    # ── 2) Process AI queues with rate limiting ──
+    queues = [
+        ("processing", "generate-response"),
+        ("ready_to_personalize", "personalize-template"),
+        ("awaiting_proposal", "generate-proposal")
+    ]
+    
+    for queue_status, endpoint in queues:
+        emails = supabase.table("emails").select("id, user_id").eq("status", queue_status).execute().data or []
+        
+        if emails:
+            # Group by user_id
+            emails_by_user = defaultdict(list)
+            for email in emails:
+                user_id = email.get("user_id")
+                if user_id:
+                    emails_by_user[user_id].append(email["id"])
+            
+            for user_id, email_ids in emails_by_user.items():
+                # Check rate limit for this batch
+                allowed, remaining, message = rate_limiter.check_rate_limit(
+                    user_id, 
+                    'emails', 
+                    len(email_ids)
+                )
+                
+                if not allowed:
+                    app.logger.warning(f"Rate limit exceeded for user {user_id} in {queue_status}: {message}")
+                    supabase.table("emails").update({
+                        "status": "rate_limited",
+                        "error_message": f"Plan limit exceeded: {message}"
+                    }).in_("id", email_ids).execute()
+                    failed.extend(email_ids)
+                else:
+                    # Call edge function for this batch
+                    if call_edge(f"/functions/v1/clever-service/{endpoint}", {"email_ids": email_ids}):
+                        if endpoint == "generate-proposal":
+                            # These become ready_to_send
+                            supabase.table("emails").update({"status": "ready_to_send"}).in_("id", email_ids).execute()
+                        elif endpoint == "personalize-template":
+                            # These become awaiting_proposal
+                            supabase.table("emails").update({"status": "awaiting_proposal"}).in_("id", email_ids).execute()
+                        # generate-response automatically updates status
+                        all_processed.extend(email_ids)
+                    else:
+                        supabase.table("emails").update({
+                            "status": "error",
+                            "error_message": f"{endpoint} failed"
+                        }).in_("id", email_ids).execute()
+                        failed.extend(email_ids)
 
-    # ── 6) SEND via SMTP (KEY FIX SECTION) ──
+    # ── 3) Fetch ready_to_send emails again (including newly generated ones) ──
+    ready = (
+        supabase.table("emails")
+        .select("id, user_id, sender_email, recipient_email, processed_content, subject")
+        .eq("status", "ready_to_send")
+        .execute()
+        .data or []
+    )
+    
+    if not ready:
+        return jsonify({
+            "processed": all_processed,
+            "sent": sent,
+            "drafted": drafted,
+            "failed": failed,
+            "message": "Only AI processing completed, no emails ready to send"
+        }), 200
+
+    # Group ready emails by user_id for rate limiting
+    ready_by_user = defaultdict(list)
     for rec in ready:
-        em_id = rec["id"]
-        sender = rec["sender_email"]
-        inbox = rec["recipient_email"]          # <── THIS is the "from" email account
-        subject = rec.get("subject", "Your Email")
+        user_id = rec.get("user_id")
+        if user_id:
+            ready_by_user[user_id].append(rec)
 
-        # Daily limit applies per inbox
-        if emails_sent_today.get(inbox, 0) >= 20:
-            supabase.table("emails").update({
-                "status": "error",
-                "error_message": "Daily email limit reached"
-            }).eq("id", em_id).execute()
-            failed.append(em_id)
-            continue
+    # ── 4) SEND via SMTP with rate limiting ──
+    for user_id, user_emails in ready_by_user.items():
+        # Check rate limit for this user's batch of emails
+        allowed, remaining, message = rate_limiter.check_rate_limit(
+            user_id, 
+            'emails', 
+            len(user_emails)
+        )
+        
+        if not allowed:
+            app.logger.warning(f"Rate limit exceeded for user {user_id}: {message}")
+            # Mark all emails as rate_limited for this user
+            for rec in user_emails:
+                supabase.table("emails").update({
+                    "status": "rate_limited",
+                    "error_message": f"Plan limit exceeded: {message}"
+                }).eq("id", rec["id"]).execute()
+                failed.append(rec["id"])
+            continue  # Skip processing for this user
 
-        # ─── Load SMTP credentials for THIS inbox ───
-        prof = supabase.table("profiles") \
-            .select("smtp_email, smtp_enc_password, smtp_host, smtp_port, display_name, signature, generate_leases") \
-            .eq("smtp_email", inbox) \
-            .single().execute().data
+        # Process each email for this user
+        for rec in user_emails:
+            em_id = rec["id"]
+            sender = rec["sender_email"]
+            inbox = rec["recipient_email"]
+            subject = rec.get("subject", "Your Email")
 
-        if not prof:
-            supabase.table("emails").update({
-                "status": "error",
-                "error_message": f"No SMTP account matches recipient_email {inbox}"
-            }).eq("id", em_id).execute()
-            failed.append(em_id)
-            continue
+            # Load SMTP credentials for THIS inbox
+            prof = supabase.table("profiles") \
+                .select("smtp_email, smtp_enc_password, smtp_host, smtp_port, display_name, signature, generate_leases") \
+                .eq("smtp_email", inbox) \
+                .single().execute().data
 
-        # Decrypt password
-        try:
-            smtp_password = fernet.decrypt(prof["smtp_enc_password"].encode()).decode()
-        except Exception as e:
-            supabase.table("emails").update({
-                "status": "error",
-                "error_message": f"SMTP decrypt failed: {str(e)}"
-            }).eq("id", em_id).execute()
-            failed.append(em_id)
-            continue
+            if not prof:
+                supabase.table("emails").update({
+                    "status": "error",
+                    "error_message": f"No SMTP account matches recipient_email {inbox}"
+                }).eq("id", em_id).execute()
+                failed.append(em_id)
+                continue
+            
+            # Decrypt password
+            try:
+                smtp_password = fernet.decrypt(prof["smtp_enc_password"].encode()).decode()
+            except Exception as e:
+                supabase.table("emails").update({
+                    "status": "error",
+                    "error_message": f"SMTP decrypt failed: {str(e)}"
+                }).eq("id", em_id).execute()
+                failed.append(em_id)
+                continue
 
-        # Build HTML body
-        body_html = (rec.get("processed_content") or "").replace("\n", "<br>")
-        if prof.get("signature"):
-            body_html += f"<br><br>{prof['signature']}"
-
-        if prof.get("display_name"):
-            body_html = body_html.replace("[Your Name]", prof["display_name"])
-
-        final_html = f"<html><body><p>{body_html}</p></body></html>"
-
-        # Subject logic
-        lease_flag = prof.get("generate_leases", False)
-        final_subject = "Lease Agreement Draft" if lease_flag else f"RE: {subject}"
-
-        # ─── SEND EMAIL ───
-        try:
-            send_email_smtp(
-                from_email=inbox,
-                from_password=smtp_password,
-                to_email=sender,
-                subject=final_subject,
-                body=final_html,
-                smtp_host=prof.get("smtp_host", "smtp.gmail.com"),
-                smtp_port=int(prof.get("smtp_port", 465))
-            )
-
-            status_to = "drafted" if lease_flag else "sent"
-
-            supabase.table("emails").update({
-                "status": status_to,
-                "sent_at": datetime.utcnow().isoformat(),
-                "recipient_email": inbox    # Track which inbox sent the reply
-            }).eq("id", em_id).execute()
-
-            if status_to == "sent":
-                sent.append(em_id)
-            else:
-                drafted.append(em_id)
-
-            emails_sent_today[inbox] = emails_sent_today.get(inbox, 0) + 1
-
-        except Exception as e:
-            supabase.table("emails").update({
-                "status": "error",
-                "error_message": f"SMTP send failed: {str(e)}"
-            }).eq("id", em_id).execute()
-            failed.append(em_id)
+            # Build HTML body
+            body_html = (rec.get("processed_content") or "").replace("\n", "<br>")
+            if prof.get("signature"):
+                body_html += f"<br><br>{prof['signature']}"
+            if prof.get("display_name"):
+                body_html = body_html.replace("[Your Name]", prof["display_name"])
+            final_html = f"<html><body><p>{body_html}</p></body></html>"
+            
+            # Subject logic
+            lease_flag = prof.get("generate_leases", False)
+            final_subject = "Lease Agreement Draft" if lease_flag else f"RE: {subject}"
+            
+            # ─── SEND EMAIL ───
+            try:
+                send_email_smtp(
+                    from_email=inbox,
+                    from_password=smtp_password,
+                    to_email=sender,
+                    subject=final_subject,
+                    body=final_html,
+                    smtp_host=prof.get("smtp_host", "smtp.gmail.com"),
+                    smtp_port=int(prof.get("smtp_port", 465))
+                )
+                
+                status_to = "drafted" if lease_flag else "sent"
+                
+                supabase.table("emails").update({
+                    "status": status_to,
+                    "sent_at": datetime.utcnow().isoformat(),
+                    "recipient_email": inbox
+                }).eq("id", em_id).execute()
+                
+                # Increment usage AFTER successful send
+                rate_limiter._increment_usage(user_id, 'emails', 1)
+                
+                if status_to == "sent":
+                    sent.append(em_id)
+                else:
+                    drafted.append(em_id)
+                all_processed.append(em_id)
+                
+            except Exception as e:
+                supabase.table("emails").update({
+                    "status": "error",
+                    "error_message": f"SMTP send failed: {str(e)}"
+                }).eq("id", em_id).execute()
+                failed.append(em_id)
 
     return jsonify({
         "processed": all_processed,
