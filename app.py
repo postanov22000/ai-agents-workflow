@@ -2511,10 +2511,12 @@ def generate_follow_up_content(lead_id, sequence_step):
         app.logger.info(f"Processing follow-up for: {lead['first_name']} {lead['last_name']} at {lead['email']}")
         
         # Get comprehensive communication history
+        # FIXED: Use OR filter correctly with Supabase syntax
+        email_filter = f"or=(recipient_email.eq.{lead['email']},sender_email.eq.{lead['email']})"
         previous_emails = supabase.table("emails") \
             .select("subject, original_content, processed_content, sent_at, status") \
-            .eq("sender_email", lead["email"]) \
-            .or_(f"recipient_email.eq.{lead['email']},sender_email.eq.{lead['email']}") \
+            .filter("recipient_email", "eq", lead['email']) \
+            .or_(f"sender_email.eq.{lead['email']}") \
             .order("sent_at", desc=True) \
             .limit(10) \
             .execute().data or []
