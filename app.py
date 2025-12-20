@@ -2408,6 +2408,9 @@ def process_follow_ups():
                         
                         # Send using SMTP
                         try:
+                            rate_limiter._increment_usage(user_id, 'cold_emails', 1)
+                            # DEBUG: Check if increment worked
+                            app.logger.info(f"Increment usage called for user {user_id}")
                             send_email_smtp(
                                 from_email=user_profile["smtp_email"],
                                 from_password=smtp_password,
@@ -2429,9 +2432,7 @@ def process_follow_ups():
                                 .execute()
                             
                             # Increment usage counter
-                            rate_limiter._increment_usage(user_id, 'cold_emails', 1)
-                            # DEBUG: Check if increment worked
-                            app.logger.info(f"Increment usage called for user {user_id}")
+                            
                             
                             results["processed"].append(follow_up["id"])
                             
