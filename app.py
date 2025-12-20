@@ -2429,7 +2429,9 @@ def process_follow_ups():
                                 .execute()
                             
                             # Increment usage counter
-                            rate_limiter._increment_usage(user_id, 'emails', 1)
+                            rate_limiter._increment_usage(user_id, 'cold_emails', 1)
+                            # DEBUG: Check if increment worked
+                            app.logger.info(f"Increment usage called for user {user_id}")
                             
                             results["processed"].append(follow_up["id"])
                             
