@@ -2338,7 +2338,7 @@ def process_follow_ups():
             # Check rate limit for this user
             allowed, remaining, message = rate_limiter.check_rate_limit(
                 user_id, 
-                'emails',  # Using 'emails' resource for follow-ups
+                'cold_emails',  # Using 'emails' resource for follow-ups
                 len(user_follow_ups)
             )
             
