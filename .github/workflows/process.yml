@@ -39,6 +39,8 @@ jobs:
           GOOGLE_CLIENT_ID:          ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET:      ${{ secrets.GOOGLE_CLIENT_SECRET }}
           ENCRYPTION_KEY:            ${{ secrets.ENCRYPTION_KEY }}
+          ADMIN_INBOUND_EMAIL:       ${{ secrets.ADMIN_INBOUND_EMAIL }}
+          ADMIN_INBOUND_PASSWORD:    ${{ secrets.ADMIN_INBOUND_PASSWORD }}
         run: |
           python poll_imap_smtp.py
           echo "status=gmail" >> $GITHUB_OUTPUT
