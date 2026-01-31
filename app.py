@@ -3,9 +3,18 @@ import time
 import base64
 import requests
 import io
-from flask import abort, Flask, render_template, request, redirect, jsonify, make_response, url_for
+import json
+import smtplib
+import ssl
+import re
+import dns.resolver
+import csv
+from flask import abort, Flask, render_template, request, redirect, jsonify, make_response, url_for, send_file
 from datetime import date, datetime, timezone, timedelta
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 from supabase import create_client, Client
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request as GoogleRequest
@@ -17,23 +26,22 @@ from flask_cors import CORS
 from cryptography.fernet import Fernet
 from transaction_autopilot import bp as autopilot_bp
 from public import public_bp
-from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email import encoders
-import re
-import dns.resolver
-import csv
-from io import TextIOWrapper
+from io import TextIOWrapper, BytesIO
 from openpyxl import load_workbook
 from collections import defaultdict
 from functools import wraps
+from docxtpl import DocxTemplate
+import zipfile
 
 # ── single Flask app & blueprint registration ──
 app = Flask(__name__, template_folder="templates")
 CORS(app, resources={r"/connect-smtp": {"origins": "https://replyzeai.vercel.app"}})
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
 
-# Rate limiting storage
+# ── Env Vars for Admin Catch-All ──
+ADMIN_INBOUND_EMAIL = os.environ.get("ADMIN_INBOUND_EMAIL", "replyzeai.inbound@gmail.com")
+ADMIN_INBOUND_PASSWORD = os.environ.get("ADMIN_INBOUND_PASSWORD", "") 
+
 # Rate limiting storage - fix structure and initialization
 demo_rate_limits = defaultdict(lambda: {
     'emails': {'remaining': 20, 'last_reset': datetime.now()},
@@ -73,6 +81,7 @@ def check_rate_limit(resource):
             return f(*args, **kwargs)
         return decorated_function
     return decorator
+
 #----------------------------------------------------------------------------------
 # --- Gmail API Helper Functions ---
 
@@ -146,17 +155,10 @@ def send_email_gmail(user_id, to_email, subject, html_content, cc_emails=None, b
         return False, str(e)
 
 
-
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-
-
 def send_email_smtp(from_email, from_password, to_email, subject, body, smtp_host, smtp_port):
     """
     Sends an email using SMTP (SSL).
     """
-
     msg = MIMEMultipart("alternative")
     msg["From"] = from_email
     msg["To"] = to_email
@@ -164,11 +166,18 @@ def send_email_smtp(from_email, from_password, to_email, subject, body, smtp_hos
 
     msg.attach(MIMEText(body, "html"))
 
-    with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
-        server.login(from_email, from_password)
-        server.sendmail(from_email, to_email, msg.as_string())
-
-
+    # Use SSL for port 465, otherwise use starttls (logic can be expanded if needed)
+    if int(smtp_port) == 465:
+        with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+            server.login(from_email, from_password)
+            server.sendmail(from_email, to_email, msg.as_string())
+    else:
+        # Fallback for 587 or others
+        context = ssl.create_default_context()
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls(context=context)
+            server.login(from_email, from_password)
+            server.sendmail(from_email, to_email, msg.as_string())
 
 
 def create_draft_gmail(user_id, to_email, subject, html_content):
@@ -199,14 +208,8 @@ def create_draft_gmail(user_id, to_email, subject, html_content):
     except Exception as e:
         app.logger.error(f"Error creating draft via Gmail API: {str(e)}")
         return False, str(e)
-#--------------------------------------------------------------
-# Add these imports at the top
-import supabase
-from datetime import datetime, timedelta
-from collections import defaultdict
-from functools import wraps
-import json
 
+#--------------------------------------------------------------
 # Add PlanRateLimiter class definition
 class PlanRateLimiter:
     def __init__(self, supabase_client):
@@ -258,8 +261,6 @@ class PlanRateLimiter:
                 .eq("id", user_id) \
                 .single() \
                 .execute()
-            
-            app.logger.info(f"Profile result: {result.data}")
             
             if result.data:
                 profile = result.data
@@ -478,7 +479,16 @@ FOLLOW_UP_SEQUENCE = [
 ]
 
 #----------------------------------------------------------------------------
-
+# --- Helper Functions for Centralized Forwarding ---
+def normalize_display_name(display_name):
+    """Normalize display name to create a clean username for email alias"""
+    if not display_name:
+        return "user"
+    # Remove all non-alphanumeric characters and convert to lowercase (or keep case if preferred)
+    # Keeping case can be nice for readability (JohnDoe) but lowercase is safer for email.
+    # We will just strip spaces and special chars.
+    clean_name = re.sub(r'[^a-zA-Z0-9]', '', display_name)
+    return clean_name
 
 # ---------------------------------------------------------------------------
 def call_edge(endpoint_path: str, payload: dict, return_response: bool = False):
@@ -1039,7 +1049,7 @@ def dashboard_home():
                 token_uri=creds_data["token_uri"],
                 client_id=creds_data["client_id"],
                 client_secret=creds_data["client_secret"],
-                scopes=creds_data["scopes"],
+                scopes=cd["scopes"],
             )
             show_reconnect = creds.expired
         except Exception:
@@ -1767,56 +1777,101 @@ def trigger_process():
             inbox = rec["recipient_email"]
             subject = rec.get("subject", "Your Email")
 
-            # Load SMTP credentials for THIS inbox
-            prof = supabase.table("profiles") \
-                .select("smtp_email, smtp_enc_password, smtp_host, smtp_port, display_name, signature, generate_leases") \
-                .eq("smtp_email", inbox) \
-                .single().execute().data
-
-            if not prof:
-                supabase.table("emails").update({
-                    "status": "error",
-                    "error_message": f"No SMTP account matches recipient_email {inbox}"
-                }).eq("id", em_id).execute()
-                failed.append(em_id)
-                continue
+            # Default credentials placeholders
+            smtp_email = None
+            smtp_password = None
+            smtp_host = "smtp.gmail.com"
+            smtp_port = 465
+            user_signature = ""
+            user_display_name = ""
+            generate_leases = False
             
-            # Decrypt password
-            try:
-                smtp_password = fernet.decrypt(prof["smtp_enc_password"].encode()).decode()
-            except Exception as e:
-                supabase.table("emails").update({
-                    "status": "error",
-                    "error_message": f"SMTP decrypt failed: {str(e)}"
-                }).eq("id", em_id).execute()
-                failed.append(em_id)
-                continue
+            # --- CHECK IF USING ADMIN CATCH-ALL FORWARDING ---
+            # If inbox matches our admin catch-all pattern (e.g. replyzeai.inbound+something@...)
+            if "replyzeai.inbound" in inbox.lower():
+                # Use Admin Credentials from Environment
+                if not ADMIN_INBOUND_EMAIL or not ADMIN_INBOUND_PASSWORD:
+                    supabase.table("emails").update({
+                        "status": "error",
+                        "error_message": "Admin SMTP credentials not configured"
+                    }).eq("id", em_id).execute()
+                    failed.append(em_id)
+                    continue
 
-            # Build HTML body
+                # Fetch user profile purely for Signature/Name (using user_id from email record)
+                prof = supabase.table("profiles") \
+                    .select("display_name, signature, generate_leases") \
+                    .eq("id", user_id) \
+                    .single().execute().data
+                
+                if prof:
+                    user_display_name = prof.get("display_name", "")
+                    user_signature = prof.get("signature", "")
+                    generate_leases = prof.get("generate_leases", False)
+
+                # Set credentials to Admin
+                smtp_email = inbox # We send FROM the alias address (admin+user@gmail.com)
+                smtp_password = ADMIN_INBOUND_PASSWORD
+                # Note: smtp_email variable is used as "From" address. 
+                # Gmail allows sending as 'admin+alias' if authenticated as 'admin'.
+
+            else:
+                # --- STANDARD USER SMTP FLOW ---
+                prof = supabase.table("profiles") \
+                    .select("smtp_email, smtp_enc_password, smtp_host, smtp_port, display_name, signature, generate_leases") \
+                    .eq("smtp_email", inbox) \
+                    .single().execute().data
+
+                if not prof:
+                    supabase.table("emails").update({
+                        "status": "error",
+                        "error_message": f"No SMTP account matches recipient_email {inbox}"
+                    }).eq("id", em_id).execute()
+                    failed.append(em_id)
+                    continue
+                
+                # Decrypt password
+                try:
+                    smtp_password = fernet.decrypt(prof["smtp_enc_password"].encode()).decode()
+                except Exception as e:
+                    supabase.table("emails").update({
+                        "status": "error",
+                        "error_message": f"SMTP decrypt failed: {str(e)}"
+                    }).eq("id", em_id).execute()
+                    failed.append(em_id)
+                    continue
+
+                smtp_email = prof.get("smtp_email")
+                smtp_host = prof.get("smtp_host", "smtp.gmail.com")
+                smtp_port = int(prof.get("smtp_port", 465))
+                user_signature = prof.get("signature", "")
+                user_display_name = prof.get("display_name", "")
+                generate_leases = prof.get("generate_leases", False)
+
+            # --- PREPARE EMAIL CONTENT ---
             body_html = (rec.get("processed_content") or "").replace("\n", "<br>")
-            if prof.get("signature"):
-                body_html += f"<br><br>{prof['signature']}"
-            if prof.get("display_name"):
-                body_html = body_html.replace("[Your Name]", prof["display_name"])
+            if user_signature:
+                body_html += f"<br><br>{user_signature}"
+            if user_display_name:
+                body_html = body_html.replace("[Your Name]", user_display_name)
             final_html = f"<html><body><p>{body_html}</p></body></html>"
             
             # Subject logic
-            lease_flag = prof.get("generate_leases", False)
-            final_subject = "Lease Agreement Draft" if lease_flag else f"RE: {subject}"
+            final_subject = "Lease Agreement Draft" if generate_leases else f"RE: {subject}"
             
             # ─── SEND EMAIL ───
             try:
                 send_email_smtp(
-                    from_email=inbox,
+                    from_email=smtp_email, # This will be either user's email OR admin+alias
                     from_password=smtp_password,
                     to_email=sender,
                     subject=final_subject,
                     body=final_html,
-                    smtp_host=prof.get("smtp_host", "smtp.gmail.com"),
-                    smtp_port=int(prof.get("smtp_port", 465))
+                    smtp_host=smtp_host,
+                    smtp_port=smtp_port
                 )
                 
-                status_to = "drafted" if lease_flag else "sent"
+                status_to = "drafted" if generate_leases else "sent"
                 
                 supabase.table("emails").update({
                     "status": status_to,
@@ -2642,19 +2697,30 @@ def email_forwarding_settings():
     
     # Get user profile with forwarding status
     profile = supabase.table("profiles") \
-        .select("email, forwarding_verified, forwarding_verified_at") \
+        .select("email, display_name, forwarding_verified, forwarding_verified_at") \
         .eq("id", user_id) \
         .single() \
         .execute().data or {}
     
-    # Your polling account email (replace with actual)
-    polling_email = "replyzeai.inbound@gmail.com"
+    # Dynamically generate the user's specific catch-all address
+    # e.g., replyzeai.inbound+JohnDoe@gmail.com
+    username = normalize_display_name(profile.get("display_name", ""))
     
+    # Split the base admin email to insert the alias part
+    # Assuming ADMIN_INBOUND_EMAIL is like "name@gmail.com"
+    if "@" in ADMIN_INBOUND_EMAIL:
+        base, domain = ADMIN_INBOUND_EMAIL.split("@", 1)
+        # Create the plus-alias address
+        user_specific_forwarding_address = f"{base}+{username}@{domain}"
+    else:
+        # Fallback if config is weird
+        user_specific_forwarding_address = "Contact Support"
+
     return render_template(
         "partials/email_forwarding.html",
         profile=profile,
         user_id=user_id,
-        polling_email=polling_email
+        polling_email=user_specific_forwarding_address # Send the user-specific alias to the template
     )
 
 
