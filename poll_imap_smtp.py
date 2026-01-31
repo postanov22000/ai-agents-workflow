@@ -230,7 +230,12 @@ def poll_central_mailbox():
         )
 
         for msg in messages:
-            to_addr = msg.get("to", "").lower()
+            # IMPROVEMENT: Extract the clean email address from the "To" header
+            raw_to = msg.get("to", "").lower()
+            # This regex pulls 'email@domain.com' out of 'Name <email@domain.com>'
+            clean_to_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', raw_to)
+            to_addr = clean_to_match.group(0) if clean_to_match else raw_to
+            
             extracted_user_id = None
             
             # METHOD 1: Look for the +USER_ID tag
@@ -238,9 +243,8 @@ def poll_central_mailbox():
             if tag_match:
                 extracted_user_id = tag_match.group(1)
             
-            # METHOD 2: Match by the "To" email address (For Auto-Forwarding)
+            # METHOD 2: Match by the clean email address
             else:
-                # Look up the user who owns this 'smtp_email' in your database
                 user_record = supabase.table("profiles") \
                     .select("id") \
                     .eq("smtp_email", to_addr) \
@@ -251,10 +255,11 @@ def poll_central_mailbox():
                     logger.info(f"Matched auto-forwarded email {to_addr} to user {extracted_user_id}")
 
             if not extracted_user_id:
-                logger.info(f"Skipping email to {to_addr}: No user tag or matching profile found")
+                # Logging raw_to helps you see exactly what the script is seeing
+                logger.info(f"Skipping email to {to_addr} (Raw: {raw_to}): No user tag or matching profile found")
                 continue
 
-            # Process the email normally...
+            # Process the email (Insert into DB and Increment Usage)
             email_id = msg["id"]
             exists = supabase.table("emails").select("id").eq("gmail_id", email_id).execute().data
             if not exists:
@@ -269,12 +274,12 @@ def poll_central_mailbox():
                     "created_at": datetime.utcnow().isoformat()
                 }).execute()
                 
-                # Increment usage
                 supabase.rpc('increment_usage', {
                     'user_id': extracted_user_id,
                     'column_name': 'current_month_emails',
                     'amount': 1
                 }).execute()
+                logger.info(f"Successfully processed central email for user {extracted_user_id}")
 
     except Exception as e:
         logger.error(f"Central mailbox poll failed: {e}")
