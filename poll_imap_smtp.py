@@ -208,7 +208,77 @@ def process_follow_ups():
         logger.error(f"Error in process_follow_ups: {str(e)}")
 
 # Call this function in your main loop
+# Add these new Environment Variables to your GitHub Secrets/cPanel
+ADMIN_EMAIL = os.getenv("ADMIN_INBOUND_EMAIL") 
+ADMIN_PASS = os.getenv("ADMIN_INBOUND_PASSWORD")
+
+def poll_central_mailbox():
+    """Polls the central replyzeai.inbound@gmail.com account for tagged replies"""
+    if not ADMIN_EMAIL or not ADMIN_PASS:
+        logger.error("Admin inbound credentials not set")
+        return
+
+    logger.info(f"Polling central mailbox: {ADMIN_EMAIL}")
+    try:
+        # Fetch emails from the central account
+        messages = fetch_emails_imap(
+            ADMIN_EMAIL,
+            ADMIN_PASS,
+            folder="INBOX",
+            imap_host="imap.gmail.com",
+            imap_port=993
+        )
+
+        for msg in messages:
+            # 1. Extract USER_ID from the 'To' address (e.g., admin+USER_ID@gmail.com)
+            to_addr = msg.get("to", "")
+            match = re.search(r"\+(.*)@", to_addr)
+            
+            if not match:
+                logger.info(f"Skipping email to {to_addr}: No user tag found")
+                continue
+
+            extracted_user_id = match.group(1)
+
+            # 2. Check if already processed
+            email_id = msg["id"]
+            exists = supabase.table("emails").select("id").eq("gmail_id", email_id).execute().data
+            if exists:
+                continue
+
+            # 3. Insert into database for the correct user
+            supabase.table("emails").insert({
+                "user_id": extracted_user_id,
+                "sender_email": msg["from"],
+                "recipient_email": to_addr,
+                "subject": msg.get("subject", "(no subject)"),
+                "original_content": msg.get("body", ""),
+                "status": "processing",
+                "gmail_id": email_id,
+                "created_at": datetime.utcnow().isoformat()
+            }).execute()
+
+            # 4. Increment the user's email usage count
+            # This matches the logic in your app.py PlanRateLimiter
+            supabase.rpc('increment_usage', {
+                'user_id': extracted_user_id,
+                'column_name': 'current_month_emails',
+                'amount': 1
+            }).execute()
+
+            logger.info(f"Routed central email {email_id} to user {extracted_user_id}")
+
+    except Exception as e:
+        logger.error(f"Central mailbox poll failed: {e}")
+
+# Modified Main Loop
 if __name__ == "__main__":
-    poll_imap()
+    # 1. Poll individual user IMAPs (Keep this for users who connected their own SMTP)
+    poll_imap() 
+    
+    # 2. NEW: Poll the central mailbox for tagged replies
+    poll_central_mailbox() 
+    
+    # 3. Send outbound
     send_ready_via_smtp()
-    process_follow_ups()  # Add this line
+    process_follow_ups()
