@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from supabase import create_client, Client
 from fimap import fetch_emails_imap, send_email_smtp
 from datetime import datetime
