@@ -214,7 +214,6 @@ ADMIN_EMAIL = os.getenv("ADMIN_INBOUND_EMAIL")
 ADMIN_PASS = os.getenv("ADMIN_INBOUND_PASSWORD")
 
 def poll_central_mailbox():
-    """Polls the central mailbox and matches emails to users by tag OR email address"""
     if not ADMIN_EMAIL or not ADMIN_PASS:
         logger.error("Admin inbound credentials not set")
         return
@@ -230,12 +229,18 @@ def poll_central_mailbox():
         )
 
         for msg in messages:
-            # IMPROVEMENT: Extract the clean email address from the "To" header
-            raw_to = msg.get("to", "").lower()
-            # This regex pulls 'email@domain.com' out of 'Name <email@domain.com>'
+            # IMPROVEMENT: Check multiple headers to find the recipient
+            # We check 'delivered-to' first because it's usually the most accurate for forwarding
+            raw_to = (msg.get("delivered-to") or msg.get("to") or msg.get("x-original-to") or "").lower()
+            
+            # Extract clean email address
             clean_to_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', raw_to)
             to_addr = clean_to_match.group(0) if clean_to_match else raw_to
             
+            if not to_addr:
+                logger.info("Could not determine recipient address, skipping.")
+                continue
+
             extracted_user_id = None
             
             # METHOD 1: Look for the +USER_ID tag
@@ -243,7 +248,7 @@ def poll_central_mailbox():
             if tag_match:
                 extracted_user_id = tag_match.group(1)
             
-            # METHOD 2: Match by the clean email address
+            # METHOD 2: Match by clean email address in profiles
             else:
                 user_record = supabase.table("profiles") \
                     .select("id") \
@@ -255,7 +260,6 @@ def poll_central_mailbox():
                     logger.info(f"Matched auto-forwarded email {to_addr} to user {extracted_user_id}")
 
             if not extracted_user_id:
-                # Logging raw_to helps you see exactly what the script is seeing
                 logger.info(f"Skipping email to {to_addr} (Raw: {raw_to}): No user tag or matching profile found")
                 continue
 
