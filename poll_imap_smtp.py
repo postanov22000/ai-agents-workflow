@@ -231,8 +231,8 @@ def poll_central_mailbox():
         )
 
         for msg in messages:
-            # FIX: Use case-insensitive header fetching or check common variants
-            # Some servers use 'To', others 'to', others 'Delivered-To'
+            # 1. Extract the raw recipient from headers
+            # Delivered-To is most reliable for Gmail automatic forwarding
             raw_to = (
                 msg.get("delivered-to") or 
                 msg.get("Delivered-To") or 
@@ -240,7 +240,7 @@ def poll_central_mailbox():
                 msg.get("To") or ""
             ).lower()
             
-            # Use Regex to extract just the email address (handles "Name <email@site.com>")
+            # 2. Use Regex to clean the email (removes "Name <...>")
             clean_to_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', raw_to)
             to_addr = clean_to_match.group(0) if clean_to_match else ""
             
@@ -250,15 +250,16 @@ def poll_central_mailbox():
 
             extracted_user_id = None
             
-            # METHOD A: Look for sub-addressing tag (e.g., admin+USER_ID@gmail.com)
+            # METHOD A: Check for sub-addressing tag (e.g., admin+USER_ID@gmail.com)
             tag_match = re.search(r"\+(.*)@", to_addr)
             if tag_match:
-                extracted_user_id = tag_match.group(1)
-                logger.info(f"Found user tag: {extracted_user_id}")
+                raw_tag = tag_match.group(1)
+                # FIX: Delete everything to the right of the @ if it exists in the tag
+                extracted_user_id = raw_tag.split('@')[0]
+                logger.info(f"Found and cleaned user tag: {extracted_user_id}")
             
             # METHOD B: Match the 'To' address against the profiles table (Auto-Forwarding)
             else:
-                clean_addr = to_addr.strip().lower()
                 user_record = supabase.table("profiles") \
                     .select("id") \
                     .eq("smtp_email", to_addr) \
@@ -272,12 +273,12 @@ def poll_central_mailbox():
                 logger.info(f"Skipping email to {to_addr}: No user tag or matching profile found")
                 continue
 
-            # Check for duplicates using the Gmail ID
+            # 3. Prevent duplicate processing using the unique Gmail ID
             email_id = msg["id"]
             exists = supabase.table("emails").select("id").eq("gmail_id", email_id).execute().data
             
             if not exists:
-                # Insert into database for the correct user
+                # 4. Insert into 'emails' table for the correct user
                 supabase.table("emails").insert({
                     "user_id": extracted_user_id,
                     "sender_email": msg["from"],
@@ -289,7 +290,7 @@ def poll_central_mailbox():
                     "created_at": datetime.utcnow().isoformat()
                 }).execute()
                 
-                # Increment user usage (syncs with PlanRateLimiter logic)
+                # 5. Increment user usage
                 supabase.rpc('increment_usage', {
                     'user_id': extracted_user_id,
                     'column_name': 'current_month_emails',
