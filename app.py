@@ -1820,7 +1820,7 @@ def trigger_process():
                 prof = supabase.table("profiles") \
                     .select("smtp_email, smtp_enc_password, smtp_host, smtp_port, display_name, signature, generate_leases") \
                     .eq("smtp_email", inbox) \
-                    .single().execute().data
+                    .execute().data
 
                 if not prof:
                     supabase.table("emails").update({
