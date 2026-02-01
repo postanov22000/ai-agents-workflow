@@ -213,17 +213,8 @@ def process_follow_ups():
 ADMIN_EMAIL = os.getenv("ADMIN_INBOUND_EMAIL") 
 ADMIN_PASS = os.getenv("ADMIN_INBOUND_PASSWORD")
 
-def normalize_name(name):
-    """
-    Normalizes a display name to match the tag format used in emails 
-    (lowercase, alphanumeric only).
-    """
-    if not name:
-        return ""
-    return re.sub(r'[^a-zA-Z0-9]', '', name).lower()
-
 def poll_central_mailbox():
-    """Polls the central mailbox and matches emails to users by display_name tag"""
+    """Polls the central mailbox and matches emails to users by tag OR email address"""
     if not ADMIN_EMAIL or not ADMIN_PASS:
         logger.error("Admin inbound credentials not set")
         return
@@ -249,32 +240,33 @@ def poll_central_mailbox():
 
             extracted_user_id = None
             
-            # Extract the tag (e.g., 'johndoe' from 'myaddress+johndoe@gmail.com')
+            # --- NEW UNIVERSAL ID CLEANING ---
+            # Step 1: Check if there is a '+' tag (Method A)
             tag_match = re.search(r"\+(.*)@", to_addr)
-            
             if tag_match:
-                display_name_tag = tag_match.group(1).split('@')[0].lower()
-                logger.info(f"Searching for profile with display_name tag: {display_name_tag}")
-
-                # Lookup user_id by display_name
-                # Note: We fetch all profiles to do a normalized comparison
-                profiles = supabase.table("profiles").select("id, display_name").execute().data or []
-                
-                for p in profiles:
-                    if normalize_name(p.get("display_name")) == display_name_tag:
-                        extracted_user_id = p["id"]
-                        logger.info(f"Matched tag '{display_name_tag}' to user_id: {extracted_user_id}")
-                        break
+                extracted_user_id = tag_match.group(1).split('@')[0]
+                logger.info(f"Found user via + tag: {extracted_user_id}")
             
-            # Fallback: Match by full email address if no tag or no tag match found
-            if not extracted_user_id:
-                user_record = supabase.table("profiles").select("id").eq("smtp_email", to_addr).execute().data
-                if user_record:
-                    extracted_user_id = user_record[0]["id"]
-                    logger.info(f"Matched full email to user: {extracted_user_id}")
+            # Step 2: If no '+' tag, check if the email prefix itself is a User ID
+            else:
+                # This takes '0083c4c7-c6ef-420f-9c01-10ec09f8e353' from '0083c4c7...@gmail.com'
+                possible_id = to_addr.split('@')[0]
+                
+                # Check if this prefix exists as a User ID in your profiles table
+                user_by_id = supabase.table("profiles").select("id").eq("id", possible_id).execute().data
+                
+                if user_by_id:
+                    extracted_user_id = possible_id
+                    logger.info(f"Matched email prefix as User ID: {extracted_user_id}")
+                else:
+                    # Method B: Final fallback - match the full email address
+                    user_record = supabase.table("profiles").select("id").eq("smtp_email", to_addr).execute().data
+                    if user_record:
+                        extracted_user_id = user_record[0]["id"]
+                        logger.info(f"Matched full email to user: {extracted_user_id}")
 
             if not extracted_user_id:
-                logger.info(f"Skipping email to {to_addr}: No valid display_name tag or profile match")
+                logger.info(f"Skipping email to {to_addr}: No valid ID or profile match")
                 continue
 
             # 3. Duplicate check and Insert
@@ -292,7 +284,6 @@ def poll_central_mailbox():
                     "created_at": datetime.utcnow().isoformat()
                 }).execute()
                 
-                # Update usage stats
                 supabase.rpc('increment_usage', {
                     'user_id': extracted_user_id,
                     'column_name': 'current_month_emails',
