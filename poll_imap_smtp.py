@@ -214,7 +214,7 @@ ADMIN_EMAIL = os.getenv("ADMIN_INBOUND_EMAIL")
 ADMIN_PASS = os.getenv("ADMIN_INBOUND_PASSWORD")
 
 def poll_central_mailbox():
-    """Polls the central mailbox and matches emails to users by display_name in +tag"""
+    """Polls the central mailbox and matches emails to users by various methods"""
     if not ADMIN_EMAIL or not ADMIN_PASS:
         logger.error("Admin inbound credentials not set")
         return
@@ -230,60 +230,83 @@ def poll_central_mailbox():
         )
 
         for msg in messages:
-            # 1. Get raw recipient and clean "Name <email@site.com>" format
+            # Try multiple methods to identify the user
+            user_id = None
+            to_addr = ""
+            
+            # Method 1: Check for +tag in recipient (original email)
             raw_to = (msg.get("delivered-to") or msg.get("to") or "").lower()
             clean_to_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', raw_to)
             to_addr = clean_to_match.group(0) if clean_to_match else ""
             
-            if not to_addr:
-                continue
-
-            # 2. Extract display_name from +tag (e.g., myaddress+JohnDoe@gmail.com)
-            display_name_from_tag = None
-            tag_match = re.search(r"\+(.*?)@", to_addr)  # Non-greedy match
-            if tag_match:
-                display_name_from_tag = tag_match.group(1)
-                logger.info(f"Extracted display_name from +tag: {display_name_from_tag}")
+            if to_addr:
+                # Check for +tag
+                tag_match = re.search(r"\+(.*?)@", to_addr)
+                if tag_match:
+                    display_name_from_tag = tag_match.group(1)
+                    user_id = find_user_by_display_name(display_name_from_tag)
+                    if user_id:
+                        logger.info(f"Found user via +tag: {display_name_from_tag} -> {user_id}")
             
-            if not display_name_from_tag:
-                logger.info(f"Skipping email to {to_addr}: No +tag found")
-                continue
-
-            # 3. Find user by display_name (case-insensitive)
-            # First, get all profiles to find matching display_name
-            all_profiles = supabase.table("profiles").select("id, display_name").execute().data or []
-            
-            user_id = None
-            for profile in all_profiles:
-                profile_display_name = profile.get("display_name", "")
-                if profile_display_name:
-                    # Normalize both for comparison
-                    normalized_profile = normalize_display_name(profile_display_name)
-                    normalized_tag = normalize_display_name(display_name_from_tag)
-                    
-                    # Case-insensitive comparison
-                    if normalized_profile and normalized_tag and normalized_profile.lower() == normalized_tag.lower():
-                        user_id = profile["id"]
-                        logger.info(f"Matched display_name '{display_name_from_tag}' to user: {user_id}")
+            # Method 2: Check email body for forwarding patterns
+            if not user_id and msg.get("body"):
+                body = msg["body"].lower()
+                
+                # Look for common forwarding patterns
+                patterns = [
+                    r"forwarded message.*?from:\s*([\w\.-]+@[\w\.-]+\.\w+)",
+                    r"begin forwarded message.*?from:\s*([\w\.-]+@[\w\.-]+\.\w+)",
+                    r"original message.*?from:\s*([\w\.-]+@[\w\.-]+\.\w+)",
+                ]
+                
+                original_sender = None
+                for pattern in patterns:
+                    match = re.search(pattern, body, re.IGNORECASE | re.DOTALL)
+                    if match:
+                        original_sender = match.group(1).lower()
                         break
-
+                
+                # Also check for "On [date], [name] <email> wrote:" pattern
+                if not original_sender:
+                    date_name_pattern = r"on.*?\d{1,2}.*\d{4}.*?([\w\.-]+@[\w\.-]+\.\w+)"
+                    match = re.search(date_name_pattern, body, re.IGNORECASE)
+                    if match:
+                        original_sender = match.group(1).lower()
+                
+                if original_sender:
+                    logger.info(f"Found original sender in forwarded email: {original_sender}")
+                    
+                    # Try to find user by email (if they have smtp_email set)
+                    user_record = supabase.table("profiles").select("id, smtp_email").execute().data or []
+                    for profile in user_record:
+                        if profile.get("smtp_email", "").lower() == original_sender:
+                            user_id = profile["id"]
+                            logger.info(f"Matched forwarded email to user by smtp_email: {user_id}")
+                            break
+            
+            # Method 3: Check subject for known patterns
+            if not user_id and msg.get("subject"):
+                subject = msg.get("subject", "").lower()
+                # You could add patterns like "[Username] Inquiry" or similar
+            
             if not user_id:
-                logger.info(f"No user found with display_name matching: {display_name_from_tag}")
+                logger.info(f"Skipping email: Could not identify user for message from {msg.get('from', 'unknown')}")
                 continue
 
-            # 4. Duplicate check and Insert
+            # 5. Duplicate check and Insert
             email_id = msg["id"]
             exists = supabase.table("emails").select("id").eq("gmail_id", email_id).execute().data
             if not exists:
                 supabase.table("emails").insert({
                     "user_id": user_id,
                     "sender_email": msg["from"],
-                    "recipient_email": to_addr,  # This will be myaddress+displayname@gmail.com
+                    "recipient_email": to_addr or ADMIN_EMAIL,  # Use admin email if no specific to_addr
                     "subject": msg.get("subject", "(no subject)"),
                     "original_content": msg.get("body", ""),
                     "status": "processing",
                     "gmail_id": email_id,
-                    "created_at": datetime.utcnow().isoformat()
+                    "created_at": datetime.utcnow().isoformat(),
+                    "is_forwarded": True  # Mark as forwarded email
                 }).execute()
                 
                 # Increment usage
@@ -292,10 +315,33 @@ def poll_central_mailbox():
                     'column_name': 'current_month_emails',
                     'amount': 1
                 }).execute()
-                logger.info(f"Successfully processed email for user {user_id}")
+                logger.info(f"Successfully processed forwarded email for user {user_id}")
 
     except Exception as e:
         logger.error(f"Central mailbox poll failed: {e}")
+
+def find_user_by_display_name(display_name):
+    """Helper function to find user by display_name"""
+    if not display_name:
+        return None
+    
+    # Get all profiles
+    all_profiles = supabase.table("profiles").select("id, display_name").execute().data or []
+    
+    # Normalize the input display_name
+    normalized_input = re.sub(r'[^a-zA-Z0-9]', '', display_name).lower()
+    
+    for profile in all_profiles:
+        profile_display_name = profile.get("display_name", "")
+        if profile_display_name:
+            # Normalize profile display_name
+            normalized_profile = re.sub(r'[^a-zA-Z0-9]', '', profile_display_name).lower()
+            
+            # Check for match
+            if normalized_profile == normalized_input:
+                return profile["id"]
+    
+    return None
 # Modified Main Loop
 if __name__ == "__main__":
     # 1. Poll individual user IMAPs (Keep this for users who connected their own SMTP)
