@@ -69,27 +69,32 @@ def send_email_smtp(sender_email, password_or_token, recipient, subject, body, s
             server.login(sender_email, pwd)
             server.sendmail(sender_email, [recipient], msg.as_string())
 
-def fetch_emails_imap(email_address, password_or_token, folder="INBOX", imap_host=None, imap_port=None):
+def fetch_emails_imap(
+    email_address: str,
+    password_or_token: str,
+    folder: str = "INBOX",
+    imap_host: str = "imap.gmail.com",
+    imap_port: int = 993
+):
     try:
         pwd = cipher.decrypt(password_or_token.encode()).decode()
+        print(f"[fimap] Decrypted token for {email_address}")
     except (InvalidToken, ValueError):
         pwd = password_or_token
-
-    # Get settings if not provided
-    if not imap_host or not imap_port:
-        settings = get_email_settings(email_address)
-        imap_host = settings["imap_host"]
-        imap_port = settings["imap_port"]
 
     mail = imaplib.IMAP4_SSL(imap_host, imap_port)
     try:
         mail.login(email_address, pwd)
         mail.select(folder)
+        
         status, data = mail.search(None, 'UNSEEN')
+        
         messages = []
         for num in data[0].split():
             _, msg_data = mail.fetch(num, '(RFC822)')
             msg = email.message_from_bytes(msg_data[0][1])
+            
+            # THE CRITICAL FIX: Ensure all headers are captured here
             messages.append({
                 "from": msg.get("From"),
                 "to": msg.get("To"),
@@ -98,7 +103,11 @@ def fetch_emails_imap(email_address, password_or_token, folder="INBOX", imap_hos
                 "body": _get_body(msg),
                 "id": f"{email_address}_{num.decode()}"
             })
+        print(f"[fimap] Fetched {len(messages)} messages for {email_address}")
         return messages
+    except Exception as e:
+        print(f"[fimap] Error: {e}")
+        return []
     finally:
         mail.logout()
 
@@ -111,46 +120,3 @@ def _get_body(msg):
 
 
 
-def fetch_emails_imap(
-    email_address: str,
-    password_or_token: str,
-    folder: str = "INBOX",
-    imap_host: str = "imap.gmail.com",
-    imap_port: int = 993
-):
-    try:
-        pwd = cipher.decrypt(password_or_token.encode()).decode()
-        print(f"[fimap] decrypted token for IMAP {email_address}")
-    except (InvalidToken, ValueError):
-        pwd = password_or_token
-        print(f"[fimap] using plaintext password for IMAP {email_address}")
-
-    mail = imaplib.IMAP4_SSL(imap_host, imap_port)
-    try:
-        print(f"[fimap] Connecting to {imap_host}:{imap_port}")
-        mail.login(email_address, pwd)
-        print(f"[fimap] Logged in successfully")
-        mail.select(folder)
-        print(f"[fimap] Selected folder: {folder}")
-        
-        status, data = mail.search(None, 'UNSEEN')
-        print(f"[fimap] Search status: {status}, data: {data}")
-        
-        messages = []
-        for num in data[0].split():
-            print(f"[fimap] Processing message {num}")
-            _, msg_data = mail.fetch(num, '(RFC822)')
-            msg = email.message_from_bytes(msg_data[0][1])
-            messages.append({
-                "from": msg.get("From"),
-                "subject": msg.get("Subject"),
-                "body": _get_body(msg),
-                "id": num.decode()
-            })
-        print(f"[fimap] fetched {len(messages)} messages for {email_address}")
-        return messages
-    except Exception as e:
-        print(f"[fimap] Error: {e}")
-        return []
-    finally:
-        mail.logout()
