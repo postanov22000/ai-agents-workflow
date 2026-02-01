@@ -1635,7 +1635,6 @@ def trigger_process():
 
     # ── 0) DAILY RESET CHECK ──
     today_str = date.today().isoformat()
-    # Fetch global reset row safely without .single()
     rl_data = SUPABASE_SERVICE.table("rate_limit_reset").select("last_reset").eq("id", "global").execute().data
     rl_row = rl_data[0] if rl_data else {}
     last_date = rl_row.get("last_reset", "")[:10]
@@ -1648,7 +1647,6 @@ def trigger_process():
         }).eq("id", "global").execute()
 
     # ── 1) Initial Queue Check ──
-    # Check if there is anything at all to do
     ready = supabase.table("emails").select("id, user_id, sender_email, recipient_email, processed_content, subject").eq("status", "ready_to_send").execute().data or []
     
     if not ready:
@@ -1657,7 +1655,6 @@ def trigger_process():
         prop = supabase.table("emails").select("id").eq("status", "awaiting_proposal").execute().data or []
         
         if not (gen or per or prop):
-            app.logger.info("⚡ No emails to process — returning 204")
             return "", 204
     
     all_processed, sent, drafted, failed = [], [], [], []
@@ -1693,24 +1690,15 @@ def trigger_process():
                         supabase.table("emails").update({"status": "error", "error_message": f"{endpoint} failed"}).in_("id", email_ids).execute()
                         failed.extend(email_ids)
 
-    # ── 3) Fetch ready_to_send again (including newly generated ones) ──
+    # ── 3) Fetch ready_to_send ──
     ready = supabase.table("emails").select("id, user_id, sender_email, recipient_email, processed_content, subject").eq("status", "ready_to_send").execute().data or []
     
-    if not ready:
-        return jsonify({
-            "processed": all_processed, 
-            "sent": sent, 
-            "drafted": drafted, 
-            "failed": failed, 
-            "message": "AI steps finished, nothing ready to send yet"
-        }), 200
-
     ready_by_user = defaultdict(list)
     for rec in ready:
         if rec.get("user_id"): 
             ready_by_user[rec["user_id"]].append(rec)
 
-    # ── 4) SEND via SMTP ──
+    # ── 4) SEND via ADMIN SMTP ──
     for user_id, user_emails in ready_by_user.items():
         allowed, _, message = rate_limiter.check_rate_limit(user_id, 'emails', len(user_emails))
         if not allowed:
@@ -1720,34 +1708,21 @@ def trigger_process():
         for rec in user_emails:
             em_id, sender, inbox, subject = rec["id"], rec["sender_email"], rec["recipient_email"], rec.get("subject", "Your Email")
 
-            # Fetch profile SAFELY
             prof_data = supabase.table("profiles").select("*").eq("id", user_id).execute().data
             prof = prof_data[0] if prof_data else None
 
             if not prof:
-                app.logger.error(f"No profile found for user {user_id}")
                 supabase.table("emails").update({"status": "error", "error_message": "Profile not found"}).eq("id", em_id).execute()
                 failed.append(em_id)
                 continue
 
-            # Determine SMTP Settings (Logic to handle custom ID@gmail.com routing)
-            is_admin_route = "replyzeai.inbound" in inbox.lower() or "@gmail.com" in inbox.lower()
-            
             try:
-                if is_admin_route:
-                    smtp_email = inbox # We send FROM the address the poller identified
-                    smtp_password = os.environ.get("ADMIN_INBOUND_PASSWORD")
-                    smtp_host = "smtp.gmail.com"
-                    smtp_port = 465
-                else:
-                    smtp_email = prof.get("smtp_email")
-                    # Decrypt user's custom SMTP password
-                    enc_pass = prof.get("smtp_enc_password")
-                    if not enc_pass:
-                        raise ValueError("SMTP password not configured in profile")
-                    smtp_password = fernet.decrypt(enc_pass.encode()).decode()
-                    smtp_host = prof.get("smtp_host", "smtp.gmail.com")
-                    smtp_port = int(prof.get("smtp_port", 465))
+                # MANDATORY ADMIN ROUTING: Use the 'recipient_email' (the alias) as the 'from' address
+                # and use your master admin password for authentication.
+                smtp_email = inbox 
+                smtp_password = os.environ.get("ADMIN_INBOUND_PASSWORD")
+                smtp_host = "smtp.gmail.com"
+                smtp_port = 465
 
                 # Content Preparation
                 body_html = (rec.get("processed_content") or "").replace("\n", "<br>")
@@ -1758,7 +1733,8 @@ def trigger_process():
                 
                 final_subject = "Lease Agreement" if prof.get("generate_leases") else f"RE: {subject}"
                 
-                # Execute SMTP Send
+                # Execute SMTP Send (from fimap.py)
+                from fimap import send_email_smtp
                 send_email_smtp(
                     from_email=smtp_email,
                     from_password=smtp_password,
@@ -1769,7 +1745,7 @@ def trigger_process():
                     smtp_port=smtp_port
                 )
 
-                # Update Status and Usage
+                # Update Status
                 status_to = "drafted" if prof.get("generate_leases") else "sent"
                 supabase.table("emails").update({
                     "status": status_to, 
@@ -1784,18 +1760,10 @@ def trigger_process():
 
             except Exception as e:
                 app.logger.error(f"Failed to send email {em_id}: {str(e)}")
-                supabase.table("emails").update({
-                    "status": "error", 
-                    "error_message": str(e)
-                }).eq("id", em_id).execute()
+                supabase.table("emails").update({"status": "error", "error_message": str(e)}).eq("id", em_id).execute()
                 failed.append(em_id)
 
-    return jsonify({
-        "processed": all_processed, 
-        "sent": sent, 
-        "drafted": drafted, 
-        "failed": failed
-    }), 200
+    return jsonify({"processed": all_processed, "sent": sent, "drafted": drafted, "failed": failed}), 200
 
 
 #---------------------------------------------------------------------------------------------------------------------------
