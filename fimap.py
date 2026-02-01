@@ -92,9 +92,11 @@ def fetch_emails_imap(email_address, password_or_token, folder="INBOX", imap_hos
             msg = email.message_from_bytes(msg_data[0][1])
             messages.append({
                 "from": msg.get("From"),
+                "to": msg.get("To"),
+                "delivered-to": msg.get("Delivered-To"),
                 "subject": msg.get("Subject"),
                 "body": _get_body(msg),
-                "id": num.decode()
+                "id": f"{email_address}_{num.decode()}"
             })
         return messages
     finally:
