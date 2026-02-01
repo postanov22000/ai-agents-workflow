@@ -214,7 +214,7 @@ ADMIN_EMAIL = os.getenv("ADMIN_INBOUND_EMAIL")
 ADMIN_PASS = os.getenv("ADMIN_INBOUND_PASSWORD")
 
 def poll_central_mailbox():
-    """Polls the central mailbox and matches emails to users by tag OR email address"""
+    """Polls the central mailbox and matches emails to users by display_name in +tag"""
     if not ADMIN_EMAIL or not ADMIN_PASS:
         logger.error("Admin inbound credentials not set")
         return
@@ -238,45 +238,47 @@ def poll_central_mailbox():
             if not to_addr:
                 continue
 
-            extracted_user_id = None
-            
-            # --- NEW UNIVERSAL ID CLEANING ---
-            # Step 1: Check if there is a '+' tag (Method A)
-            tag_match = re.search(r"\+(.*)@", to_addr)
+            # 2. Extract display_name from +tag (e.g., myaddress+JohnDoe@gmail.com)
+            display_name_from_tag = None
+            tag_match = re.search(r"\+(.*?)@", to_addr)  # Non-greedy match
             if tag_match:
-                extracted_user_id = tag_match.group(1).split('@')[0]
-                logger.info(f"Found user via + tag: {extracted_user_id}")
+                display_name_from_tag = tag_match.group(1)
+                logger.info(f"Extracted display_name from +tag: {display_name_from_tag}")
             
-            # Step 2: If no '+' tag, check if the email prefix itself is a User ID
-            else:
-                # This takes '0083c4c7-c6ef-420f-9c01-10ec09f8e353' from '0083c4c7...@gmail.com'
-                possible_id = to_addr.split('@')[0]
-                
-                # Check if this prefix exists as a User ID in your profiles table
-                user_by_id = supabase.table("profiles").select("id").eq("id", possible_id).execute().data
-                
-                if user_by_id:
-                    extracted_user_id = possible_id
-                    logger.info(f"Matched email prefix as User ID: {extracted_user_id}")
-                else:
-                    # Method B: Final fallback - match the full email address
-                    user_record = supabase.table("profiles").select("id").eq("smtp_email", to_addr).execute().data
-                    if user_record:
-                        extracted_user_id = user_record[0]["id"]
-                        logger.info(f"Matched full email to user: {extracted_user_id}")
-
-            if not extracted_user_id:
-                logger.info(f"Skipping email to {to_addr}: No valid ID or profile match")
+            if not display_name_from_tag:
+                logger.info(f"Skipping email to {to_addr}: No +tag found")
                 continue
 
-            # 3. Duplicate check and Insert
+            # 3. Find user by display_name (case-insensitive)
+            # First, get all profiles to find matching display_name
+            all_profiles = supabase.table("profiles").select("id, display_name").execute().data or []
+            
+            user_id = None
+            for profile in all_profiles:
+                profile_display_name = profile.get("display_name", "")
+                if profile_display_name:
+                    # Normalize both for comparison
+                    normalized_profile = normalize_display_name(profile_display_name)
+                    normalized_tag = normalize_display_name(display_name_from_tag)
+                    
+                    # Case-insensitive comparison
+                    if normalized_profile and normalized_tag and normalized_profile.lower() == normalized_tag.lower():
+                        user_id = profile["id"]
+                        logger.info(f"Matched display_name '{display_name_from_tag}' to user: {user_id}")
+                        break
+
+            if not user_id:
+                logger.info(f"No user found with display_name matching: {display_name_from_tag}")
+                continue
+
+            # 4. Duplicate check and Insert
             email_id = msg["id"]
             exists = supabase.table("emails").select("id").eq("gmail_id", email_id).execute().data
             if not exists:
                 supabase.table("emails").insert({
-                    "user_id": extracted_user_id,
+                    "user_id": user_id,
                     "sender_email": msg["from"],
-                    "recipient_email": to_addr,
+                    "recipient_email": to_addr,  # This will be myaddress+displayname@gmail.com
                     "subject": msg.get("subject", "(no subject)"),
                     "original_content": msg.get("body", ""),
                     "status": "processing",
@@ -284,12 +286,13 @@ def poll_central_mailbox():
                     "created_at": datetime.utcnow().isoformat()
                 }).execute()
                 
+                # Increment usage
                 supabase.rpc('increment_usage', {
-                    'user_id': extracted_user_id,
+                    'user_id': user_id,
                     'column_name': 'current_month_emails',
                     'amount': 1
                 }).execute()
-                logger.info(f"Successfully processed email for {extracted_user_id}")
+                logger.info(f"Successfully processed email for user {user_id}")
 
     except Exception as e:
         logger.error(f"Central mailbox poll failed: {e}")
