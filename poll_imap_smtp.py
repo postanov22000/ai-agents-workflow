@@ -221,7 +221,6 @@ def poll_central_mailbox():
 
     logger.info(f"Polling central mailbox: {ADMIN_EMAIL}")
     try:
-        # Fetch UNSEEN emails from the central Gmail account
         messages = fetch_emails_imap(
             ADMIN_EMAIL,
             ADMIN_PASS,
@@ -231,54 +230,49 @@ def poll_central_mailbox():
         )
 
         for msg in messages:
-            # 1. Extract the raw recipient from headers
-            # Delivered-To is most reliable for Gmail automatic forwarding
-            raw_to = (
-                msg.get("delivered-to") or 
-                msg.get("Delivered-To") or 
-                msg.get("to") or 
-                msg.get("To") or ""
-            ).lower()
-            
-            # 2. Use Regex to clean the email (removes "Name <...>")
+            # 1. Get raw recipient and clean "Name <email@site.com>" format
+            raw_to = (msg.get("delivered-to") or msg.get("to") or "").lower()
             clean_to_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', raw_to)
             to_addr = clean_to_match.group(0) if clean_to_match else ""
             
             if not to_addr:
-                logger.warning(f"Could not determine recipient for msg ID {msg.get('id')}. Raw To: {raw_to}")
                 continue
 
             extracted_user_id = None
             
-            # METHOD A: Check for sub-addressing tag (e.g., admin+USER_ID@gmail.com)
+            # --- NEW UNIVERSAL ID CLEANING ---
+            # Step 1: Check if there is a '+' tag (Method A)
             tag_match = re.search(r"\+(.*)@", to_addr)
             if tag_match:
-                raw_tag = tag_match.group(1)
-                # FIX: Delete everything to the right of the @ if it exists in the tag
-                extracted_user_id = raw_tag.split('@')[0]
-                logger.info(f"Found and cleaned user tag: {extracted_user_id}")
+                extracted_user_id = tag_match.group(1).split('@')[0]
+                logger.info(f"Found user via + tag: {extracted_user_id}")
             
-            # METHOD B: Match the 'To' address against the profiles table (Auto-Forwarding)
+            # Step 2: If no '+' tag, check if the email prefix itself is a User ID
             else:
-                user_record = supabase.table("profiles") \
-                    .select("id") \
-                    .eq("smtp_email", to_addr) \
-                    .execute().data
+                # This takes '0083c4c7-c6ef-420f-9c01-10ec09f8e353' from '0083c4c7...@gmail.com'
+                possible_id = to_addr.split('@')[0]
                 
-                if user_record:
-                    extracted_user_id = user_record[0]["id"]
-                    logger.info(f"Matched auto-forwarded email {to_addr} to user {extracted_user_id}")
+                # Check if this prefix exists as a User ID in your profiles table
+                user_by_id = supabase.table("profiles").select("id").eq("id", possible_id).execute().data
+                
+                if user_by_id:
+                    extracted_user_id = possible_id
+                    logger.info(f"Matched email prefix as User ID: {extracted_user_id}")
+                else:
+                    # Method B: Final fallback - match the full email address
+                    user_record = supabase.table("profiles").select("id").eq("smtp_email", to_addr).execute().data
+                    if user_record:
+                        extracted_user_id = user_record[0]["id"]
+                        logger.info(f"Matched full email to user: {extracted_user_id}")
 
             if not extracted_user_id:
-                logger.info(f"Skipping email to {to_addr}: No user tag or matching profile found")
+                logger.info(f"Skipping email to {to_addr}: No valid ID or profile match")
                 continue
 
-            # 3. Prevent duplicate processing using the unique Gmail ID
+            # 3. Duplicate check and Insert
             email_id = msg["id"]
             exists = supabase.table("emails").select("id").eq("gmail_id", email_id).execute().data
-            
             if not exists:
-                # 4. Insert into 'emails' table for the correct user
                 supabase.table("emails").insert({
                     "user_id": extracted_user_id,
                     "sender_email": msg["from"],
@@ -290,18 +284,15 @@ def poll_central_mailbox():
                     "created_at": datetime.utcnow().isoformat()
                 }).execute()
                 
-                # 5. Increment user usage
                 supabase.rpc('increment_usage', {
                     'user_id': extracted_user_id,
                     'column_name': 'current_month_emails',
                     'amount': 1
                 }).execute()
-                
-                logger.info(f"Successfully routed email {email_id} to user {extracted_user_id}")
+                logger.info(f"Successfully processed email for {extracted_user_id}")
 
     except Exception as e:
         logger.error(f"Central mailbox poll failed: {e}")
-
 # Modified Main Loop
 if __name__ == "__main__":
     # 1. Poll individual user IMAPs (Keep this for users who connected their own SMTP)
