@@ -1660,7 +1660,7 @@ def trigger_process():
     
     all_processed, sent, drafted, failed = [], [], [], []
     
-    # ── 2) Process AI queues ──
+    # ── 2) Process AI queues (Logic fully preserved from original app.py) ──
     queues = [
         ("processing", "generate-response"),
         ("ready_to_personalize", "personalize-template"),
@@ -1699,7 +1699,7 @@ def trigger_process():
         if rec.get("user_id"): 
             ready_by_user[rec["user_id"]].append(rec)
 
-    # ── 4) SEND via ADMIN INBOX (The Only Part Switched) ──
+    # ── 4) SEND via ADMIN INBOX (Updated for Network Reachability) ──
     for user_id, user_emails in ready_by_user.items():
         allowed, _, message = rate_limiter.check_rate_limit(user_id, 'emails', len(user_emails))
         if not allowed:
@@ -1718,13 +1718,15 @@ def trigger_process():
                 continue
 
             try:
-                # ROUTING: Use the alias found by poller as 'from' and authenticate via Admin Inbound Key
+                # Use Admin Credentials as instructed
                 smtp_email = inbox 
                 smtp_password = os.environ.get("ADMIN_INBOUND_PASSWORD")
+                
+                # SWITCHED TO PORT 587 TO FIX "NETWORK UNREACHABLE"
                 smtp_host = "smtp.gmail.com"
-                smtp_port = 465
+                smtp_port = 587 
 
-                # Content Preparation logic preserved
+                # Body formatting logic preserved
                 body_html = (rec.get("processed_content") or "").replace("\n", "<br>")
                 if prof.get("signature"): 
                     body_html += f"<br><br>{prof['signature']}"
@@ -1745,7 +1747,7 @@ def trigger_process():
                     smtp_port=smtp_port
                 )
 
-                # Update Status logic preserved
+                # Database Status Updates preserved
                 status_to = "drafted" if prof.get("generate_leases") else "sent"
                 supabase.table("emails").update({
                     "status": status_to, 
@@ -1764,7 +1766,6 @@ def trigger_process():
                 failed.append(em_id)
 
     return jsonify({"processed": all_processed, "sent": sent, "drafted": drafted, "failed": failed}), 200
-
 
 #---------------------------------------------------------------------------------------------------------------------------
 
