@@ -483,11 +483,16 @@ FOLLOW_UP_SEQUENCE = [
 def normalize_display_name(display_name):
     """Normalize display name to create a clean username for email alias"""
     if not display_name:
-        return "user"
-    # Remove all non-alphanumeric characters and convert to lowercase (or keep case if preferred)
-    # Keeping case can be nice for readability (JohnDoe) but lowercase is safer for email.
-    # We will just strip spaces and special chars.
+        return ""
+    
+    # Remove all non-alphanumeric characters, keep letters and numbers only
+    # Also replace spaces with nothing (not hyphens/underscores for Gmail +alias)
     clean_name = re.sub(r'[^a-zA-Z0-9]', '', display_name)
+    
+    # If the name is empty after cleaning, return empty
+    if not clean_name:
+        return ""
+    
     return clean_name
 
 # ---------------------------------------------------------------------------
@@ -2558,32 +2563,35 @@ def test_gmail_connection():
 def email_forwarding_settings():
     user_id = _require_user()
     
-    # Get user profile with forwarding status
+    # Get user profile
     profile = supabase.table("profiles") \
         .select("email, display_name, forwarding_verified, forwarding_verified_at") \
         .eq("id", user_id) \
         .single() \
         .execute().data or {}
     
-    # Dynamically generate the user's specific catch-all address
-    # e.g., replyzeai.inbound+JohnDoe@gmail.com
-    username = normalize_display_name(profile.get("display_name", ""))
+    # Create the forwarding email with display_name
+    display_name = profile.get("display_name", "")
+    user_specific_forwarding_address = ""
     
-    # Split the base admin email to insert the alias part
-    # Assuming ADMIN_INBOUND_EMAIL is like "name@gmail.com"
-    if "@" in ADMIN_INBOUND_EMAIL:
-        base, domain = ADMIN_INBOUND_EMAIL.split("@", 1)
-        # Create the plus-alias address
-        user_specific_forwarding_address = f"{base}+{username}@{domain}"
+    if display_name:
+        normalized_name = normalize_display_name(display_name)
+        
+        if "@" in ADMIN_INBOUND_EMAIL:
+            base, domain = ADMIN_INBOUND_EMAIL.split("@", 1)
+            # Create: myaddress+displayname@gmail.com
+            user_specific_forwarding_address = f"{base}+{normalized_name}@{domain}"
+        else:
+            user_specific_forwarding_address = "Contact Support"
     else:
-        # Fallback if config is weird
-        user_specific_forwarding_address = "Contact Support"
+        user_specific_forwarding_address = "Display name not set"
 
     return render_template(
         "partials/email_forwarding.html",
         profile=profile,
         user_id=user_id,
-        polling_email=user_specific_forwarding_address # Send the user-specific alias to the template
+        polling_email=user_specific_forwarding_address,
+        display_name=display_name
     )
 
 
