@@ -1635,7 +1635,7 @@ def trigger_process():
 
     # ── 0) DAILY RESET CHECK ──
     today_str = date.today().isoformat()
-    # Safe fetch for global reset row
+    # Fetch global reset row safely without .single()
     rl_data = SUPABASE_SERVICE.table("rate_limit_reset").select("last_reset").eq("id", "global").execute().data
     rl_row = rl_data[0] if rl_data else {}
     last_date = rl_row.get("last_reset", "")[:10]
@@ -1643,12 +1643,14 @@ def trigger_process():
     if last_date != today_str:
         app.logger.info("🔄 New day detected – clearing emails table")
         SUPABASE_SERVICE.table("emails").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
-        SUPABASE_SERVICE.table("rate_limit_reset").update({"last_reset": datetime.now(timezone.utc).isoformat()}).eq("id", "global").execute()
+        SUPABASE_SERVICE.table("rate_limit_reset").update({
+            "last_reset": datetime.now(timezone.utc).isoformat()
+        }).eq("id", "global").execute()
 
-    # ── 1) Fetch ready_to_send emails ──
+    # ── 1) Initial Queue Check ──
+    # Check if there is anything at all to do
     ready = supabase.table("emails").select("id, user_id, sender_email, recipient_email, processed_content, subject").eq("status", "ready_to_send").execute().data or []
     
-    # Check if anything else is in progress if nothing is ready to send
     if not ready:
         gen = supabase.table("emails").select("id").eq("status", "processing").execute().data or []
         per = supabase.table("emails").select("id").eq("status", "ready_to_personalize").execute().data or []
@@ -1672,7 +1674,8 @@ def trigger_process():
         if emails:
             emails_by_user = defaultdict(list)
             for e in emails:
-                if e.get("user_id"): emails_by_user[e["user_id"]].append(e["id"])
+                if e.get("user_id"): 
+                    emails_by_user[e["user_id"]].append(e["id"])
             
             for user_id, email_ids in emails_by_user.items():
                 allowed, remaining, message = rate_limiter.check_rate_limit(user_id, 'emails', len(email_ids))
@@ -1690,15 +1693,22 @@ def trigger_process():
                         supabase.table("emails").update({"status": "error", "error_message": f"{endpoint} failed"}).in_("id", email_ids).execute()
                         failed.extend(email_ids)
 
-    # ── 3) Fetch ready_to_send again ──
+    # ── 3) Fetch ready_to_send again (including newly generated ones) ──
     ready = supabase.table("emails").select("id, user_id, sender_email, recipient_email, processed_content, subject").eq("status", "ready_to_send").execute().data or []
     
     if not ready:
-        return jsonify({"processed": all_processed, "sent": sent, "drafted": drafted, "failed": failed, "message": "AI processed, none to send"}), 200
+        return jsonify({
+            "processed": all_processed, 
+            "sent": sent, 
+            "drafted": drafted, 
+            "failed": failed, 
+            "message": "AI steps finished, nothing ready to send yet"
+        }), 200
 
     ready_by_user = defaultdict(list)
     for rec in ready:
-        if rec.get("user_id"): ready_by_user[rec["user_id"]].append(rec)
+        if rec.get("user_id"): 
+            ready_by_user[rec["user_id"]].append(rec)
 
     # ── 4) SEND via SMTP ──
     for user_id, user_emails in ready_by_user.items():
@@ -1710,37 +1720,45 @@ def trigger_process():
         for rec in user_emails:
             em_id, sender, inbox, subject = rec["id"], rec["sender_email"], rec["recipient_email"], rec.get("subject", "Your Email")
 
-            # Fetch profile SAFELY (No .single())
+            # Fetch profile SAFELY
             prof_data = supabase.table("profiles").select("*").eq("id", user_id).execute().data
             prof = prof_data[0] if prof_data else None
 
             if not prof:
+                app.logger.error(f"No profile found for user {user_id}")
                 supabase.table("emails").update({"status": "error", "error_message": "Profile not found"}).eq("id", em_id).execute()
                 failed.append(em_id)
                 continue
 
-            # Determine SMTP Settings
-            is_admin_route = "replyzeai.inbound" in inbox.lower() or "@gmail.com" in inbox.lower() # Catching the ID@gmail format
+            # Determine SMTP Settings (Logic to handle custom ID@gmail.com routing)
+            is_admin_route = "replyzeai.inbound" in inbox.lower() or "@gmail.com" in inbox.lower()
             
             try:
                 if is_admin_route:
-                    smtp_email = inbox # Send as the alias
+                    smtp_email = inbox # We send FROM the address the poller identified
                     smtp_password = os.environ.get("ADMIN_INBOUND_PASSWORD")
                     smtp_host = "smtp.gmail.com"
                     smtp_port = 465
                 else:
                     smtp_email = prof.get("smtp_email")
-                    smtp_password = fernet.decrypt(prof["smtp_enc_password"].encode()).decode()
+                    # Decrypt user's custom SMTP password
+                    enc_pass = prof.get("smtp_enc_password")
+                    if not enc_pass:
+                        raise ValueError("SMTP password not configured in profile")
+                    smtp_password = fernet.decrypt(enc_pass.encode()).decode()
                     smtp_host = prof.get("smtp_host", "smtp.gmail.com")
                     smtp_port = int(prof.get("smtp_port", 465))
 
-                # Content Prep
+                # Content Preparation
                 body_html = (rec.get("processed_content") or "").replace("\n", "<br>")
-                if prof.get("signature"): body_html += f"<br><br>{prof['signature']}"
-                if prof.get("display_name"): body_html = body_html.replace("[Your Name]", prof["display_name"])
+                if prof.get("signature"): 
+                    body_html += f"<br><br>{prof['signature']}"
+                if prof.get("display_name"): 
+                    body_html = body_html.replace("[Your Name]", prof["display_name"])
                 
                 final_subject = "Lease Agreement" if prof.get("generate_leases") else f"RE: {subject}"
                 
+                # Execute SMTP Send
                 send_email_smtp(
                     from_email=smtp_email,
                     from_password=smtp_password,
@@ -1751,8 +1769,13 @@ def trigger_process():
                     smtp_port=smtp_port
                 )
 
+                # Update Status and Usage
                 status_to = "drafted" if prof.get("generate_leases") else "sent"
-                supabase.table("emails").update({"status": status_to, "sent_at": datetime.utcnow().isoformat()}).eq("id", em_id).execute()
+                supabase.table("emails").update({
+                    "status": status_to, 
+                    "sent_at": datetime.utcnow().isoformat()
+                }).eq("id", em_id).execute()
+                
                 rate_limiter._increment_usage(user_id, 'emails', 1)
                 
                 if status_to == "sent": sent.append(em_id)
@@ -1760,11 +1783,19 @@ def trigger_process():
                 all_processed.append(em_id)
 
             except Exception as e:
-                app.logger.error(f"Failed to send {em_id}: {str(e)}")
-                supabase.table("emails").update({"status": "error", "error_message": str(e)}).eq("id", em_id).execute()
+                app.logger.error(f"Failed to send email {em_id}: {str(e)}")
+                supabase.table("emails").update({
+                    "status": "error", 
+                    "error_message": str(e)
+                }).eq("id", em_id).execute()
                 failed.append(em_id)
 
-    return jsonify({"processed": all_processed, "sent": sent, "drafted": drafted, "failed": failed}), 200
+    return jsonify({
+        "processed": all_processed, 
+        "sent": sent, 
+        "drafted": drafted, 
+        "failed": failed
+    }), 200
 
 
 #---------------------------------------------------------------------------------------------------------------------------
