@@ -213,6 +213,27 @@ def process_follow_ups():
 ADMIN_EMAIL = os.getenv("ADMIN_INBOUND_EMAIL") 
 ADMIN_PASS = os.getenv("ADMIN_INBOUND_PASSWORD")
 
+import os
+import logging
+import re
+import uuid  # <--- NEW IMPORT
+from supabase import create_client, Client
+from fimap import fetch_emails_imap, send_email_smtp
+from datetime import datetime
+from cryptography.fernet import Fernet
+
+# ... (Previous setup code remains the same) ...
+
+# --- NEW HELPER FUNCTION ---
+def normalize_name_tag(name):
+    """
+    Converts 'John Doe' to 'johndoe' for matching.
+    Removes non-alphanumeric chars and lowers case.
+    """
+    if not name:
+        return ""
+    return re.sub(r'[^a-z0-9]', '', name.lower())
+
 def poll_central_mailbox():
     """Polls the central mailbox and matches emails to users by tag OR email address"""
     if not ADMIN_EMAIL or not ADMIN_PASS:
@@ -229,8 +250,15 @@ def poll_central_mailbox():
             imap_port=993
         )
 
+        # Cache profiles to avoid hammering DB inside the loop if volume is high
+        # In production, use a more efficient lookup or indexed 'username' column
+        all_profiles = supabase.table("profiles").select("id, display_name, smtp_email").execute().data or []
+        
+        # Create a lookup dictionary: 'johndoe' -> 'user_uuid'
+        name_map = {normalize_name_tag(p['display_name']): p['id'] for p in all_profiles if p.get('display_name')}
+
         for msg in messages:
-            # 1. Get raw recipient and clean "Name <email@site.com>" format
+            # 1. Get raw recipient
             raw_to = (msg.get("delivered-to") or msg.get("to") or "").lower()
             clean_to_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', raw_to)
             to_addr = clean_to_match.group(0) if clean_to_match else ""
@@ -240,30 +268,46 @@ def poll_central_mailbox():
 
             extracted_user_id = None
             
-            # --- NEW UNIVERSAL ID CLEANING ---
-            # Step 1: Check if there is a '+' tag (Method A)
+            # --- UPDATED ID CLEANING ---
             tag_match = re.search(r"\+(.*)@", to_addr)
-            if tag_match:
-                extracted_user_id = tag_match.group(1).split('@')[0]
-                logger.info(f"Found user via + tag: {extracted_user_id}")
             
-            # Step 2: If no '+' tag, check if the email prefix itself is a User ID
-            else:
-                # This takes '0083c4c7-c6ef-420f-9c01-10ec09f8e353' from '0083c4c7...@gmail.com'
+            if tag_match:
+                tag_content = tag_match.group(1)
+                
+                # A. Check if it's a UUID (Legacy support)
+                try:
+                    uuid.UUID(tag_content)
+                    extracted_user_id = tag_content
+                    logger.info(f"Matched User via UUID tag: {extracted_user_id}")
+                except ValueError:
+                    # B. Not a UUID, assume it is a Display Name (e.g. +johndoe)
+                    normalized_tag = normalize_name_tag(tag_content)
+                    extracted_user_id = name_map.get(normalized_tag)
+                    
+                    if extracted_user_id:
+                        logger.info(f"Matched User via Name tag '{tag_content}': {extracted_user_id}")
+                    else:
+                        logger.warning(f"Tag '{tag_content}' found but no matching display_name found.")
+
+            # Step 2: Fallback (Prefix check or direct email match)
+            if not extracted_user_id:
                 possible_id = to_addr.split('@')[0]
-                
-                # Check if this prefix exists as a User ID in your profiles table
-                user_by_id = supabase.table("profiles").select("id").eq("id", possible_id).execute().data
-                
-                if user_by_id:
-                    extracted_user_id = possible_id
-                    logger.info(f"Matched email prefix as User ID: {extracted_user_id}")
-                else:
-                    # Method B: Final fallback - match the full email address
-                    user_record = supabase.table("profiles").select("id").eq("smtp_email", to_addr).execute().data
-                    if user_record:
-                        extracted_user_id = user_record[0]["id"]
-                        logger.info(f"Matched full email to user: {extracted_user_id}")
+                # Check if prefix is UUID
+                try:
+                    uuid.UUID(possible_id)
+                    # Check if this UUID exists
+                    if any(p['id'] == possible_id for p in all_profiles):
+                        extracted_user_id = possible_id
+                        logger.info(f"Matched email prefix as User ID: {extracted_user_id}")
+                except ValueError:
+                    pass
+
+            if not extracted_user_id:
+                # Direct match on personal SMTP email
+                match = next((p for p in all_profiles if p.get('smtp_email') == to_addr), None)
+                if match:
+                    extracted_user_id = match['id']
+                    logger.info(f"Matched full email to user: {extracted_user_id}")
 
             if not extracted_user_id:
                 logger.info(f"Skipping email to {to_addr}: No valid ID or profile match")
@@ -293,6 +337,8 @@ def poll_central_mailbox():
 
     except Exception as e:
         logger.error(f"Central mailbox poll failed: {e}")
+
+# ... (Rest of main execution block remains the same)
 # Modified Main Loop
 if __name__ == "__main__":
     # 1. Poll individual user IMAPs (Keep this for users who connected their own SMTP)
