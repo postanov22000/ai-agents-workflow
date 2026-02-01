@@ -39,35 +39,35 @@ def get_email_settings(email):
         "imap_port": 993
     })
 
-def send_email_smtp(sender_email, password_or_token, recipient, subject, body, smtp_host=None, smtp_port=None):
+def send_email_smtp(from_email, from_password, to_email, subject, body, smtp_host=None, smtp_port=None):
+    """
+    Sends an email using SMTP. 
+    Matches the arguments called in app.py.
+    """
     try:
-        pwd = cipher.decrypt(password_or_token.encode()).decode()
-    except (InvalidToken, ValueError):
-        pwd = password_or_token
+        # Attempt to decrypt the password if it's encrypted
+        pwd = cipher.decrypt(from_password.encode()).decode()
+    except Exception:
+        pwd = from_password
 
-    # Get settings if not provided
-    if not smtp_host or not smtp_port:
-        settings = get_email_settings(sender_email)
-        smtp_host = settings["smtp_host"]
-        smtp_port = settings["smtp_port"]
+    # Default to Gmail if not provided
+    host = smtp_host or "smtp.gmail.com"
+    port = smtp_port or 465
 
-    is_html = "<" in body and ">" in body
-    subtype = "html" if is_html else "plain"
-    msg = MIMEText(body, subtype)
+    msg = MIMEText(body, "html")
     msg["Subject"] = subject
-    msg["From"] = sender_email
-    msg["To"] = recipient
+    msg["From"] = from_email
+    msg["To"] = to_email
 
-    # Use SSL for ports 465, TLS for 587
-    if smtp_port == 465:
-        with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
-            server.login(sender_email, pwd)
-            server.sendmail(sender_email, [recipient], msg.as_string())
+    if port == 465:
+        with smtplib.SMTP_SSL(host, port, timeout=15) as server:
+            server.login(from_email, pwd)
+            server.sendmail(from_email, [to_email], msg.as_string())
     else:
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
+        with smtplib.SMTP(host, port, timeout=15) as server:
             server.starttls()
-            server.login(sender_email, pwd)
-            server.sendmail(sender_email, [recipient], msg.as_string())
+            server.login(from_email, pwd)
+            server.sendmail(from_email, [to_email], msg.as_string())
 
 def fetch_emails_imap(
     email_address: str,
