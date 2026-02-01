@@ -258,6 +258,7 @@ def poll_central_mailbox():
             
             # METHOD B: Match the 'To' address against the profiles table (Auto-Forwarding)
             else:
+                clean_addr = to_addr.strip().lower()
                 user_record = supabase.table("profiles") \
                     .select("id") \
                     .eq("smtp_email", to_addr) \
