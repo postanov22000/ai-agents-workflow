@@ -229,31 +229,22 @@ def poll_central_mailbox():
         )
 
         for msg in messages:
-            # IMPROVEMENT: Check multiple headers to find the recipient
-            # We check 'delivered-to' first because it's usually the most accurate for forwarding
-            raw_to = (msg.get("delivered-to") or msg.get("to") or msg.get("x-original-to") or "").lower()
+            # Check delivered-to (forwarding) first, then standard To
+            raw_to = (msg.get("delivered-to") or msg.get("to") or "").lower()
             
-            # Extract clean email address
+            # Extract clean email address from "Name <email@domain.com>"
             clean_to_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', raw_to)
-            to_addr = clean_to_match.group(0) if clean_to_match else raw_to
+            to_addr = clean_to_match.group(0) if clean_to_match else ""
             
             if not to_addr:
-                logger.info("Could not determine recipient address, skipping.")
+                logger.warning("Still could not find a recipient address in headers.")
                 continue
 
-            extracted_user_id = None
-            
-            # METHOD 1: Look for the +USER_ID tag
-            tag_match = re.search(r"\+(.*)@", to_addr)
-            if tag_match:
-                extracted_user_id = tag_match.group(1)
-            
-            # METHOD 2: Match by clean email address in profiles
-            else:
-                user_record = supabase.table("profiles") \
-                    .select("id") \
-                    .eq("smtp_email", to_addr) \
-                    .execute().data
+            # Look up the user in Supabase by this email
+            user_record = supabase.table("profiles") \
+                .select("id") \
+                .eq("smtp_email", to_addr) \
+                .execute().data
                 
                 if user_record:
                     extracted_user_id = user_record[0]["id"]
