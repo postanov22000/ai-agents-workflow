@@ -1817,10 +1817,8 @@ def trigger_process():
 
             else:
                 # --- STANDARD USER SMTP FLOW ---
-                prof = supabase.table("profiles") \
-                    .select("smtp_email, smtp_enc_password, smtp_host, smtp_port, display_name, signature, generate_leases") \
-                    .eq("smtp_email", inbox) \
-                    .execute().data
+                response = supabase.table("profiles").select("*").eq("id", user_id).execute()
+                profile = response.data[0] if response.data else None
 
                 if not prof:
                     supabase.table("emails").update({
