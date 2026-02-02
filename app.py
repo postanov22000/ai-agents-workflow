@@ -2881,6 +2881,24 @@ def get_email_mode():
         app.logger.error(f"Error getting email mode: {str(e)}")
         return jsonify({"mode": "auto"})  # Default to auto
 
+def get_status_for_step(step_number):
+    if step_number in [1, 2]:
+        return "contacted"
+    elif step_number == 3:
+        return "proposal"
+    elif step_number >= 5:
+        return "closed"
+    return None # Keep current status if no match
+
+# In your email sending loop:
+for lead in leads_to_email:
+    success = send_email(lead)
+    if success:
+        new_status = get_status_for_step(lead.sequence_step)
+        if new_status:
+            # Update the lead status in Supabase/Database
+            supabase.table("leads").update({"status": new_status}).eq("id", lead.id).execute()
+
 
 # ── Final entry point ──
 if __name__ == "__main__":
