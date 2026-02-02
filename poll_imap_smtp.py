@@ -222,11 +222,8 @@ def poll_central_mailbox():
 
         for msg in messages:
             logger.debug(f"Processing message ID: {msg.get('id')}")
-            logger.debug(f"Raw 'to' field: {msg.get('to')}")
-            logger.debug(f"Raw 'delivered-to' field: {msg.get('delivered-to')}")
-
-            # 1. Try to get recipient from different headers
-            # Priority: X-Forwarded-To > Delivered-To > To
+            
+            # 1. Get recipient email
             raw_recipient = (
                 msg.get("x-forwarded-to") or 
                 msg.get("delivered-to") or 
@@ -236,8 +233,7 @@ def poll_central_mailbox():
             
             logger.debug(f"Raw recipient from headers: {raw_recipient}")
             
-            # 2. Extract email address from the raw recipient
-            # Handle formats like: "Sophia <sophia@gmail.com>", "sophia@gmail.com", etc.
+            # Extract email address
             email_match = re.search(r'[\w\.+-]+@[\w\.-]+\.\w+', raw_recipient)
             if not email_match:
                 logger.info(f"No valid email found in recipient header: {raw_recipient}")
@@ -248,86 +244,60 @@ def poll_central_mailbox():
 
             extracted_user_id = None
             
-            # --- IMPROVED MATCHING LOGIC ---
+            # --- UPDATED MATCHING LOGIC ---
             
-            # CASE 1: Check if this is a forwarded email with +tag format
-            # Look for the original recipient in X-Original-To or Received headers
-            original_to = msg.get("x-original-to") or ""
-            if not original_to:
-                # Try to parse from Received headers
-                received_headers = msg.get("received", [])
-                if isinstance(received_headers, list):
-                    for header in received_headers:
-                        if "for <" in header:
-                            match = re.search(r'for <([^>]+)>', header)
-                            if match:
-                                original_to = match.group(1)
-                                break
-            
-            logger.debug(f"Original-to header: {original_to}")
-            
-            # If we have original_to with +tag, extract user from it
-            if original_to and "+" in original_to:
-                # Extract the tag part: admin+sophia@gmail.com -> sophia
-                tag_match = re.search(r'\+(.*?)@', original_to)
+            # CASE 1: Extract from +tag in email address (e.g., replyzeai.inbound+sophia@gmail.com)
+            # Split by '+' and take the part after '+' but before '@'
+            if "+" in recipient_email:
+                # Pattern: extract what's between '+' and '@'
+                tag_match = re.search(r'\+(.+?)(?:@|$)', recipient_email)
                 if tag_match:
-                    possible_id = tag_match.group(1)
-                    logger.info(f"Found +tag in original-to: {possible_id}")
+                    tag_value = tag_match.group(1)
+                    logger.info(f"Found +tag in email: {tag_value}")
                     
-                    # Check if this is a UUID
-                    if len(possible_id) > 30:  # UUID-like
-                        user_by_id = supabase.table("profiles").select("id").eq("id", possible_id).execute().data
+                    # Clean the tag - remove domain part if it's still there
+                    tag_value = tag_value.split('@')[0]
+                    
+                    # Check if tag is a UUID
+                    if len(tag_value) > 30 and '-' in tag_value:  # UUID format
+                        logger.info(f"Checking if tag '{tag_value}' is a valid UUID")
+                        user_by_id = supabase.table("profiles").select("id").eq("id", tag_value).execute().data
                         if user_by_id:
-                            extracted_user_id = possible_id
-                            logger.info(f"Matched +tag as UUID: {extracted_user_id}")
+                            extracted_user_id = tag_value
+                            logger.info(f"✅ Matched +tag as UUID: {extracted_user_id}")
                     else:
-                        # Check if this matches a display name
-                        normalized_tag = re.sub(r'[^a-z0-9]', '', possible_id.lower())
+                        # Try to match by display name (normalized)
+                        normalized_tag = re.sub(r'[^a-z0-9]', '', tag_value.lower())
+                        logger.info(f"Looking for display name match for tag: {normalized_tag}")
                         
-                        # Get all profiles to check display names
+                        # Get all profiles
                         profiles = supabase.table("profiles").select("id, display_name").execute().data or []
                         for profile in profiles:
                             if profile.get("display_name"):
                                 normalized_name = re.sub(r'[^a-z0-9]', '', profile["display_name"].lower())
                                 if normalized_name == normalized_tag:
                                     extracted_user_id = profile["id"]
-                                    logger.info(f"Matched +tag '{possible_id}' to display name '{profile['display_name']}'")
+                                    logger.info(f"✅ Matched +tag '{tag_value}' to display name '{profile['display_name']}' (ID: {extracted_user_id})")
                                     break
+                        
+                        # If no display name match, try email prefix
+                        if not extracted_user_id:
+                            user_by_email = supabase.table("profiles").select("id").eq("smtp_email", f"{tag_value}@").like("smtp_email", f"{tag_value}@%").execute().data
+                            if user_by_email:
+                                extracted_user_id = user_by_email[0]["id"]
+                                logger.info(f"✅ Matched +tag '{tag_value}' to email prefix: {extracted_user_id}")
             
-            # CASE 2: If no +tag found, check if recipient_email itself is a user's SMTP email
+            # CASE 2: Direct email match (fallback - for emails without +tag)
             if not extracted_user_id:
-                logger.info(f"Checking if recipient email '{recipient_email}' matches a user's SMTP email")
+                logger.info(f"Checking direct email match for: {recipient_email}")
                 user_record = supabase.table("profiles").select("id").eq("smtp_email", recipient_email).execute().data
                 if user_record:
                     extracted_user_id = user_record[0]["id"]
-                    logger.info(f"Matched recipient email to user: {extracted_user_id}")
-            
-            # CASE 3: Extract from the local part before @ (fallback for direct emails)
-            if not extracted_user_id:
-                local_part = recipient_email.split('@')[0]
-                logger.info(f"Checking local part '{local_part}' as possible user ID")
-                
-                # Check if local part is a UUID
-                if len(local_part) > 30:  # UUID-like
-                    user_by_id = supabase.table("profiles").select("id").eq("id", local_part).execute().data
-                    if user_by_id:
-                        extracted_user_id = local_part
-                        logger.info(f"Matched local part as UUID: {extracted_user_id}")
-                else:
-                    # Check if local part matches a display name
-                    normalized_local = re.sub(r'[^a-z0-9]', '', local_part.lower())
-                    
-                    profiles = supabase.table("profiles").select("id, display_name").execute().data or []
-                    for profile in profiles:
-                        if profile.get("display_name"):
-                            normalized_name = re.sub(r'[^a-z0-9]', '', profile["display_name"].lower())
-                            if normalized_name == normalized_local:
-                                extracted_user_id = profile["id"]
-                                logger.info(f"Matched local part '{local_part}' to display name '{profile['display_name']}'")
-                                break
+                    logger.info(f"✅ Direct email match: {extracted_user_id}")
 
             if not extracted_user_id:
-                logger.info(f"Skipping email to {recipient_email}: No user match found")
+                logger.warning(f"❌ Skipping email to {recipient_email}: No user match found")
+                logger.warning(f"Tag extraction attempted. Consider adding user with display name matching the tag.")
                 continue
 
             # 3. Duplicate check and Insert
@@ -340,13 +310,13 @@ def poll_central_mailbox():
                 continue
 
             try:
-                # Prepare insert data with required fields
+                # Prepare insert data
                 insert_data = {
                     "user_id": extracted_user_id,
-                    "sender_email": msg.get("from", ""),
+                    "sender_email": msg.get("from", "unknown@example.com"),
                     "recipient_email": recipient_email,
                     "subject": msg.get("subject", "(no subject)"),
-                    "original_content": msg.get("body", ""),
+                    "original_content": msg.get("body", "[No content]"),
                     "status": "processing",
                     "gmail_id": email_id,
                     "created_at": datetime.utcnow().isoformat()
@@ -356,27 +326,28 @@ def poll_central_mailbox():
                 
                 # Insert email
                 result = supabase.table("emails").insert(insert_data).execute()
-                logger.info(f"Email inserted successfully: {result}")
+                logger.info(f"✅ Email inserted successfully. Result: {result}")
                 
-                # Try to increment usage (but don't fail if this fails)
+                # Try to increment usage
                 try:
                     supabase.rpc('increment_usage', {
                         'user_id': extracted_user_id,
                         'column_name': 'current_month_emails',
                         'amount': 1
                     }).execute()
-                    logger.info(f"Incremented usage for user {extracted_user_id}")
+                    logger.info(f"✅ Incremented usage for user {extracted_user_id}")
                 except Exception as rpc_error:
-                    logger.warning(f"Failed to increment usage (email still inserted): {rpc_error}")
+                    logger.warning(f"⚠️ Failed to increment usage (email still inserted): {rpc_error}")
                     
             except Exception as insert_error:
-                logger.error(f"Failed to insert email: {insert_error}")
+                logger.error(f"❌ Failed to insert email: {insert_error}")
+                import traceback
+                traceback.print_exc()
 
     except Exception as e:
-        logger.error(f"Central mailbox poll failed: {e}")
+        logger.error(f"❌ Central mailbox poll failed: {e}")
         import traceback
         traceback.print_exc()
-
 if __name__ == "__main__":
     poll_imap() 
     poll_central_mailbox() 
