@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: '*/5 * * * *'    # Every 5 minutes
     - cron: '0 2 * * *'      # Daily at 02:00 UTC
+    - cron: '0 8 * * *'      # Daily at 08:00 UTC (for reminders)
   workflow_dispatch:
   repository_dispatch:
     types: [autopilot-trigger]
@@ -29,7 +30,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
 
       - name: Run imap
         id: poll-gmail
@@ -70,10 +70,6 @@ jobs:
           echo "Autopilot-all returned $HTTP"
           test "$HTTP" = "200" || test "$HTTP" = "204"
 
-
-
-
-    # Add this job after the trigger-processing job
   process-follow-ups:
     needs: poll-mail
     runs-on: ubuntu-latest
@@ -85,4 +81,18 @@ jobs:
         echo "Follow-up processing returned status: $HTTP"
         if [[ "$HTTP" != "200" && "$HTTP" != "204" ]]; then
           echo "::warning::Follow-up processing returned non-success status: $HTTP"
+        fi
+
+  # NEW: Send appointment reminders
+  send-reminders:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Send Appointment Reminders
+      run: |
+        HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
+          -X POST "${{ secrets.SUPABASE_URL }}/functions/v1/send-reminders" \
+          -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+        echo "Reminder service returned status: $HTTP"
+        if [[ "$HTTP" != "200" && "$HTTP" != "204" ]]; then
+          echo "::warning::Reminder service returned non-success status: $HTTP"
         fi
