@@ -101,6 +101,11 @@ def fetch_emails_imap(
                 "delivered-to": msg.get("Delivered-To"),
                 "subject": msg.get("Subject"),
                 "body": _get_body(msg),
+                "in-reply-to": msg.get("In-Reply-To", ""),
+                "references": msg.get("References", ""),
+                "message-id": msg.get("Message-ID", ""),
+                "delivered-to": msg.get("Delivered-To", ""),
+                "x-forwarded-to": msg.get("X-Forwarded-To", ""),
                 "id": f"{email_address}_{num.decode()}"
             })
         print(f"[fimap] Fetched {len(messages)} messages for {email_address}")
