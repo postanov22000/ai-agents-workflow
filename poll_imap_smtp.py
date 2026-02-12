@@ -230,37 +230,36 @@ def poll_central_mailbox():
                 logger.info(f"Skipping duplicate email {email_id}")
                 continue
             
-            # Get sender for matching
-            sender_email = msg.get("from", "").lower()
+            # Get sender - NORMALIZE THE EMAIL ADDRESS
+            raw_sender = msg.get("from", "").lower()
+            sender_match = re.search(r'[\w\.+-]+@[\w\.-]+\.\w+', raw_sender)
+            if not sender_match:
+                logger.warning(f"Could not extract valid email from sender: {raw_sender}")
+                continue
+            
+            sender_email = sender_match.group(0)
+            logger.info(f"Normalized sender email: {sender_email}")
             
             extracted_user_id = None
             is_reply = False
             
             # --- STRATEGY 1: Check if this is a REPLY to an existing conversation ---
-            # Look for In-Reply-To or References headers (conversation threading)
-            in_reply_to = msg.get("in-reply-to", "").strip()
-            references = msg.get("references", "").strip()
+            logger.info(f"Looking for existing conversation with sender: {sender_email}")
             
-            logger.info(f"Checking for conversation thread - In-Reply-To: {in_reply_to}, References: {references}")
+            # Find ANY email where this person was the sender
+            # This could be their initial inquiry OR a previous reply
+            existing_conversation = supabase.table("emails") \
+                .select("user_id, id, status") \
+                .eq("sender_email", sender_email) \
+                .order("created_at", desc=True) \
+                .limit(1) \
+                .execute().data
             
-            # Try to find existing conversation by sender email
-            if sender_email:
-                logger.info(f"Looking for existing conversation with sender: {sender_email}")
-                
-                # Find the most recent email FROM this user (where they were the sender)
-                # This is their original inquiry that we replied to
-                existing_conversation = supabase.table("emails") \
-                    .select("user_id, id") \
-                    .eq("sender_email", sender_email) \
-                    .order("created_at", desc=True) \
-                    .limit(1) \
-                    .execute().data
-                
-                if existing_conversation:
-                    extracted_user_id = existing_conversation[0]["user_id"]
-                    is_reply = True
-                    logger.info(f"✅ Found existing conversation! Matched to user_id: {extracted_user_id}")
-                    logger.info(f"This is a REPLY in an ongoing conversation")
+            if existing_conversation:
+                extracted_user_id = existing_conversation[0]["user_id"]
+                is_reply = True
+                logger.info(f"✅ Found existing conversation! Matched to user_id: {extracted_user_id}")
+                logger.info(f"This is a REPLY in an ongoing conversation")
             
             # --- STRATEGY 2: Extract from recipient email (original logic) ---
             if not extracted_user_id:
@@ -314,7 +313,7 @@ def poll_central_mailbox():
                             
                             # If no display name match, try email prefix
                             if not extracted_user_id:
-                                user_by_email = supabase.table("profiles").select("id").eq("smtp_email", f"{tag_value}@").like("smtp_email", f"{tag_value}@%").execute().data
+                                user_by_email = supabase.table("profiles").select("id").like("smtp_email", f"{tag_value}@%").execute().data
                                 if user_by_email:
                                     extracted_user_id = user_by_email[0]["id"]
                                     logger.info(f"✅ Matched +tag '{tag_value}' to email prefix: {extracted_user_id}")
@@ -336,19 +335,27 @@ def poll_central_mailbox():
             # Insert the email
             try:
                 # Determine recipient email - use the agent's email if we found them
+                recipient_email_final = None
                 if extracted_user_id:
-                    agent_profile = supabase.table("profiles").select("smtp_email").eq("id", extracted_user_id).single().execute().data
-                    recipient_email = agent_profile.get("smtp_email") if agent_profile else recipient_email
+                    agent_profile = supabase.table("profiles").select("smtp_email").eq("id", extracted_user_id).execute().data
+                    if agent_profile:
+                        recipient_email_final = agent_profile[0].get("smtp_email")
+                
+                if not recipient_email_final:
+                    # Fallback: extract from headers
+                    raw_recipient = msg.get("to", "")
+                    email_match = re.search(r'[\w\.+-]+@[\w\.-]+\.\w+', raw_recipient)
+                    recipient_email_final = email_match.group(0) if email_match else "unknown@example.com"
                 
                 insert_data = {
                     "user_id": extracted_user_id,
                     "sender_email": sender_email,
-                    "recipient_email": recipient_email,
+                    "recipient_email": recipient_email_final,
                     "subject": msg.get("subject", "(no subject)"),
                     "original_content": msg.get("body", "[No content]"),
                     "status": "processing",
                     "gmail_id": email_id,
-                    "is_follow_up": is_reply,  # Mark if this is a reply
+                    "is_follow_up": is_reply,
                     "created_at": datetime.utcnow().isoformat()
                 }
                 
