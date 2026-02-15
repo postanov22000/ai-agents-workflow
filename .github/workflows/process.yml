@@ -58,7 +58,7 @@ jobs:
             echo "::error::Processing failed with status: $HTTP"
             exit 1
           fi
-trigger-processing:
+trigger-processinggs:
     needs: trigger-processing
     runs-on: ubuntu-latest
     steps:
