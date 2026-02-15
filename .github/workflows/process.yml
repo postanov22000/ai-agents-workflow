@@ -58,22 +58,6 @@ jobs:
             echo "::error::Processing failed with status: $HTTP"
             exit 1
           fi
-
-  trigger-processinggg:
-    needs: poll-mail
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger secondary Processing Endpoint on Render
-        run: |
-          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
-            "https://replyzeai.com/app/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
-          echo "HTTP status: $HTTP"
-          if [[ "$HTTP" != "200" && "$HTTP" != "204" && "$HTTP" != "429" ]]; then
-            echo "::error::Processing failed with status: $HTTP"
-            exit 1
-          fi
-  
-  
   run-autopilot:
     needs: trigger-processing
     runs-on: ubuntu-latest
@@ -111,3 +95,22 @@ jobs:
         if [[ "$HTTP" != "200" && "$HTTP" != "204" ]]; then
           echo "::warning::Reminder service returned non-success status: $HTTP"
         fi
+
+
+
+  trigger-processinggg:
+    needs: poll-mail
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger secondary Processing Endpoint on Render
+        run: |
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://replyzeai.com/app/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
+          echo "HTTP status: $HTTP"
+          if [[ "$HTTP" != "200" && "$HTTP" != "204" && "$HTTP" != "429" ]]; then
+            echo "::error::Processing failed with status: $HTTP"
+            exit 1
+          fi
+
+
+        
