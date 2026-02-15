@@ -99,7 +99,6 @@ jobs:
 
 
   trigger-processinggg:
-    needs: poll-mail
     runs-on: ubuntu-latest
     steps:
       - name: Trigger secondary Processing Endpoint on Render
