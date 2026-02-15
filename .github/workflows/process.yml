@@ -59,11 +59,11 @@ jobs:
             exit 1
           fi
 
-  trigger-processing:
+  trigger-processinggg:
     needs: poll-mail
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Main Processing Endpoint on Render
+      - name: Trigger secondary Processing Endpoint on Render
         run: |
           HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
             "https://replyzeai.com/app/process?token=${{ secrets.PROCESS_SECRET_TOKEN }}")
